@@ -611,6 +611,11 @@ public sealed class RemsPublicFormController : ControllerBase
                 SourceEntityId = sourceRemsId,
                 FirstName = Clean(individual.FirstName) ?? string.Empty,
                 LastName = Clean(individual.LastName) ?? string.Empty,
+                // The particle onto the Person's own column, not just into the display name. That column
+                // is what Persons.ClientDisplayName composes the surname-first reading from, so without it
+                // a related client the firm later opens a request for reads "Smith John" on every list
+                // beside the father he was declared to be distinct from.
+                Suffix = Clean(individual.Suffix),
                 DisplayName = Clean(individual.DisplayName) ?? string.Empty,
                 PrimaryEmail = Clean(individual.Email),
                 MobileNumber = Clean(individual.Phone),
@@ -631,6 +636,7 @@ public sealed class RemsPublicFormController : ControllerBase
                 FilingType = individual.EffectiveFilingType,
                 FirstName = person.FirstName,
                 LastName = person.LastName,
+                Suffix = person.Suffix,
                 Email = person.PrimaryEmail,
                 PhoneNumber = person.MobileNumber,
                 IsMinor = individual.EffectiveIsMinor,
@@ -888,7 +894,7 @@ public sealed class RemsPublicFormController : ControllerBase
                 .Where(x => x is { HasAny: true })
                 .Select(x => new RemsReviewIndividual(
                     Clean(x.SourceKey), Clean(x.Type), x.EffectiveFilingType,
-                    Clean(x.FirstName), Clean(x.LastName), Clean(x.DisplayName),
+                    Clean(x.FirstName), Clean(x.LastName), Clean(x.Suffix), Clean(x.DisplayName),
                     Clean(x.Email), Clean(x.Phone), x.EffectiveIsMinor, x.EffectiveBillingPreference,
                     x.AsksBillingName ? Clean(x.BillingFirstName) : null,
                     x.AsksBillingName ? Clean(x.BillingLastName) : null))

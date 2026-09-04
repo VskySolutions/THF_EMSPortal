@@ -50,6 +50,24 @@ public class REMSAdditionalIndividual : AuditableEntity
 
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The generational particle on their name — Jr., Sr., II, III, IV. Asked for on the same card, in the
+    /// box after Last Name, exactly as the client themselves is asked.
+    /// <para>
+    /// A related client is a client: the Related Entities list names them beside the client they were
+    /// declared under, and "Smith John" tells a reader nothing about which John Smith is on this return
+    /// when the father and the son are both on file. Held in its own column rather than typed into
+    /// <see cref="LastName"/>, for the reason every other name on the platform holds it apart — a surname
+    /// of "Smith Jr." is somebody nobody finds by searching for their name.
+    /// </para>
+    /// <para>
+    /// Nullable, and blank on every row declared before the box existed. Nothing is inferred for those:
+    /// the particle is an answer the client gives, and a row that was never asked has none.
+    /// </para>
+    /// </summary>
+    public string? Suffix { get; set; }
+
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
 

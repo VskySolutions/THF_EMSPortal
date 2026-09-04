@@ -310,6 +310,10 @@ export const newAdditionalIndividual = (lastName = "") => ({
   filingType: "joint",
   firstName: "",
   lastName: s(lastName).trim(),
+  // NOT seeded from the client's own particle, unlike the surname above. A family shares a surname; it
+  // does not share a generational particle — the whole point of one is that the son is Jr. where the
+  // father is Sr., so copying the client's across would put the wrong answer in the box every time.
+  suffix: "",
   email: "",
   phone: "",
   isMinor: null,
@@ -325,6 +329,7 @@ const makeAdditionalIndividual = (row, i) => applyIndividualRules({
   filingType: s(row?.filingType) || "joint",
   firstName: s(row?.firstName),
   lastName: s(row?.lastName),
+  suffix: s(row?.suffix),
   email: s(row?.email),
   phone: s(row?.phone),
   isMinor: typeof row?.isMinor === "boolean" ? row.isMinor : null,
@@ -341,10 +346,15 @@ export const additionalIndividualHasData = (row) =>
 /**
  * What to call one of these people on a checklist, a review card or a validation message: the name they
  * gave, falling back to their relation and their position. "Individual 2" is a complaint a client has to
- * count blocks to act on; "Jane Smith" is one they can.
+ * count blocks to act on; "Smith Jane" is one they can.
+ *
+ * SURNAME FIRST, with the particle after it, because this is a CLIENT's label: the same person appears on
+ * the Related Entities list under exactly this reading, beside the client they were declared under. One
+ * person, one name, wherever the platform prints it.
  */
 export const individualLabel = (row, i = 0) => {
-  const name = [row?.firstName, row?.lastName].map((v) => s(v).trim()).filter(Boolean).join(" ");
+  const name = [row?.lastName, row?.firstName, row?.suffix]
+    .map((v) => s(v).trim()).filter(Boolean).join(" ");
   if (name) return name;
   const type = INDIVIDUAL_TYPES.find((o) => o.value === row?.type)?.label;
   return type ? `${type} ${i + 1}` : `Individual ${i + 1}`;
@@ -490,11 +500,15 @@ const outRole = (r) => {
 };
 
 /**
- * The client's name as one string: the two boxes joined for an individual, the single box otherwise.
- * Mirrors RemsFormPayloadV1.EffectiveClientName, which is what the server files them under.
+ * The client's name as one string: the two boxes joined SURNAME FIRST for an individual — "Smith John" —
+ * and the single box otherwise. Mirrors RemsFormPayloadV1.EffectiveClientName, which is what the server
+ * files them under, and the order every REMS list already reads a client in.
+ *
+ * The particle is not in it. It travels beside the name and is joined on where the name is READ, which is
+ * what lets AppNameWithSuffix draw it apart from the name it belongs to.
  */
 export function intakeClientName (payload) {
-  const joined = [payload.clientFirstName, payload.clientLastName]
+  const joined = [payload.clientLastName, payload.clientFirstName]
     .map((v) => s(v).trim()).filter(Boolean).join(" ");
   return joined || s(payload.clientName);
 }
@@ -554,6 +568,7 @@ export function buildIntakePayload (payload, industryGroup) {
           filingType: s(out.filingType),
           firstName: s(out.firstName),
           lastName: s(out.lastName),
+          suffix: s(out.suffix),
           email: s(out.email),
           phone: s(out.phone),
           isMinor: typeof out.isMinor === "boolean" ? out.isMinor : null,

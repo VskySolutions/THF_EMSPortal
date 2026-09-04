@@ -754,12 +754,17 @@ const nameReadonlyNote = computed(() => (props.clientLocked
     "client above to file a new one instead."));
 
 // The composed name the rest of the platform identifies this request by, kept in step with whichever
-// boxes are on screen. It is NOT the surname-first reading the client lists sort by — the database
-// composes that one from the parts — this is the name as it is written.
+// boxes are on screen. SURNAME FIRST for a person — "Smith John" — which is the same reading the client
+// lists sort by and the database composes onto Persons.ClientDisplayName. One client, one name, one
+// order: a request that called them "John Smith" here while every list called them "Smith John" was one
+// client under two names.
+//
+// The particle stays out of it, as it does on the server: it is carried beside the name in
+// clientNameSuffix and joined on where the name is READ.
 const composeClientName = () => {
   model.clientName = isOrganisationClient.value
     ? (model.clientCorporateName || "").trim()
-    : [model.clientFirstName, model.clientLastName]
+    : [model.clientLastName, model.clientFirstName]
       .map((p) => (p || "").trim()).filter(Boolean).join(" ");
   syncTypeToClient();
 };
@@ -840,8 +845,9 @@ const pickClient = (client) => {
   model.existingClientReferenceId = client.id;
   // The name in PARTS, straight off their record — the lookup returns them for exactly this. Composing
   // clientName from the parts rather than taking the search result's own string keeps one rule for how a
-  // name is built, whether it came from a picker or from two boxes: the picker's `name` is the
-  // surname-first READING, which is not what the request should be identified by.
+  // name is built, whether it came from a picker or from two boxes. The two now agree on the ORDER as
+  // well, but the picker's `name` has the particle already on the end of it, and this form carries that
+  // in a box of its own — taking the string whole would put "Jr." into the name and into the Suffix box.
   model.clientFirstName = client.firstName || "";
   model.clientLastName = client.lastName || "";
   model.clientCorporateName = client.corporateName || "";

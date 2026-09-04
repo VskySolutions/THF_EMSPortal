@@ -24,9 +24,10 @@ public sealed class RemsFormPayloadV1
 
     /// <summary>
     /// The client's name as one string. For a business or a government body this is the ENTITY name and
-    /// the only name asked for; for an individual it is <see cref="ClientFirstName"/> and
-    /// <see cref="ClientLastName"/> joined, written alongside them so that everything reading "the
-    /// client's name" — the materialised client, the entity, the thank-you page — keeps one field to read.
+    /// the only name asked for; for an individual it is <see cref="ClientLastName"/> and
+    /// <see cref="ClientFirstName"/> joined SURNAME FIRST, written alongside them so that everything
+    /// reading "the client's name" — the materialised client, the entity, the thank-you page — keeps one
+    /// field to read. See <see cref="EffectiveClientName"/> for why that order.
     /// </summary>
     public string? ClientName { get; set; }
 
@@ -34,7 +35,7 @@ public sealed class RemsFormPayloadV1
     /// The generational particle on an individual client's name — Jr., Sr., II, III, IV. Held beside the
     /// family name rather than typed into it, and deliberately NOT folded into
     /// <see cref="EffectiveClientName"/>: the name is what the client is filed and searched under, and
-    /// "John Smith Jr." matches no record when "John Smith" matches the man. Null for a business or
+    /// "Smith John Jr." matches no record when "Smith John" matches the man. Null for a business or
     /// government client, whose name is a company's and carries no such particle.
     /// </summary>
     public string? ClientSuffix { get; set; }
@@ -174,9 +175,28 @@ public sealed class RemsFormPayloadV1
     public List<RemsRelatedEntityPayload> RelatedEntities { get; set; } = new();
 
     /// <summary>
-    /// The client's name as it should read: the two boxes joined where an individual gave them, and the
-    /// single box otherwise. Derived rather than trusted, so a payload whose <see cref="ClientName"/>
-    /// disagrees with its parts is filed under the parts the client actually typed.
+    /// The client's name as it should read: the two boxes joined SURNAME FIRST where an individual gave
+    /// them — "Smith John" — and the single box otherwise. Derived rather than trusted, so a payload whose
+    /// <see cref="ClientName"/> disagrees with its parts is filed under the parts the client actually
+    /// typed.
+    /// <para>
+    /// SURNAME FIRST because a client is one thing wherever the platform names them, and the lists had
+    /// already settled the order: <c>Person.ClientDisplayName</c> composes "Smith John Jr." and every REMS
+    /// list displays, sorts and searches on it. This is the same client under the same name, so it reads
+    /// the same way — a request whose panel heading and approval packet said "John Smith" while every list
+    /// beside them said "Smith John" was the platform disagreeing with itself about one client's name.
+    /// </para>
+    /// <para>
+    /// Only what is written from HERE on. The names already stored on <c>REMSClient.Name</c> and
+    /// <c>REMSEntity.Name</c> keep the order they were submitted under — they are the record of a
+    /// submission, not a display cache — so an approval packet for an older request still reads
+    /// first-name-first. The surfaces that read the client through their Person, which is every list, were
+    /// never affected either way.
+    /// </para>
+    /// <para>
+    /// The particle is still NOT folded in — see <see cref="ClientSuffix"/>. It is joined on where the
+    /// name is READ, which is what lets every surface draw it apart from the name.
+    /// </para>
     /// </summary>
     [JsonIgnore]
     public string EffectiveClientName
@@ -185,7 +205,7 @@ public sealed class RemsFormPayloadV1
         {
             var joined = string.Join(
                 " ",
-                new[] { ClientFirstName, ClientLastName }
+                new[] { ClientLastName, ClientFirstName }
                     .Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part!.Trim()));
             return joined.Length > 0 ? joined : ClientName?.Trim() ?? string.Empty;
         }
@@ -547,6 +567,19 @@ public sealed class RemsAdditionalIndividualPayload
     public string? FilingType { get; set; }
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
+
+    /// <summary>
+    /// The generational particle on their name — Jr., Sr., II, III, IV. Asked for in the box after Last
+    /// Name, as the client themselves is asked, and for the same reason: a related client is named beside
+    /// the client they were declared under, and the particle is what tells a father from a son.
+    /// <para>
+    /// Optional and never inferred. It IS on the end of <see cref="DisplayName"/>, which is the name this
+    /// person is ADDRESSED by; the surname-first reading the Related Entities list shows them under is
+    /// composed from the parts, with the particle joined on where the name is read.
+    /// </para>
+    /// </summary>
+    public string? Suffix { get; set; }
+
     public string? Email { get; set; }
     public string? Phone { get; set; }
 
@@ -568,11 +601,19 @@ public sealed class RemsAdditionalIndividualPayload
         || !string.IsNullOrWhiteSpace(LastName) || !string.IsNullOrWhiteSpace(Email)
         || !string.IsNullOrWhiteSpace(Phone);
 
-    /// <summary>Their name, the two parts joined.</summary>
+    /// <summary>
+    /// Their name as it is ADDRESSED — the two parts in the order a name is written, with the particle
+    /// after them: "John Smith Jr." This is what the minted Person's <c>DisplayName</c> is set from, which
+    /// is the same shape the client's own Person carries.
+    /// <para>
+    /// NOT the order the Related Entities list shows them in. That one is surname-first and is composed
+    /// from the columns, exactly as it is for the client — see <c>Person.ClientDisplayName</c>.
+    /// </para>
+    /// </summary>
     [JsonIgnore]
     public string DisplayName => string.Join(
         " ",
-        new[] { FirstName, LastName }.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));
+        new[] { FirstName, LastName, Suffix }.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));
 
     private string TypeCode => Type?.Trim().ToLowerInvariant() ?? string.Empty;
 
@@ -731,6 +772,8 @@ public sealed record RemsReviewIndividual(
     string FilingType,
     string? FirstName,
     string? LastName,
+    /// <summary>The generational particle, reported as its own row — it is a box the client filled in.</summary>
+    string? Suffix,
     string? Name,
     string? Email,
     string? Phone,

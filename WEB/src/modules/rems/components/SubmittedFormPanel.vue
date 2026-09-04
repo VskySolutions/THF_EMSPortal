@@ -167,7 +167,10 @@ const val = (v) => (v == null || String(v).trim() === "" ? "—" : v);
 // below stay exactly as the client typed them: those report the answer, this names them.
 const clientName = computed(() => {
   const p = payload.value;
-  const joined = [p.clientFirstName, p.clientLastName]
+  // Surname first — "Smith John" — the order every REMS list reads a client in, and the one the server
+  // now files them under. An older submission whose stored `clientName` predates that order falls through
+  // to the branch below and reads as it was sent; the two PARTS are always composed the new way.
+  const joined = [p.clientLastName, p.clientFirstName]
     .filter((v) => v != null && String(v).trim() !== "")
     .map((v) => String(v).trim())
     .join(" ");

@@ -205,7 +205,18 @@ public sealed record RemsRelatedClientItem(
     Guid Id,
     Guid RemsId,
     RemsRelatedClientKind Kind,
+    /// <summary>
+    /// The name as it READS on the list: surname first for a person — "Smith Jane" — and the plain
+    /// declared name for a business. The same order the Client column beside it uses, because these are
+    /// clients too and one list should not name two of them two ways.
+    /// </summary>
     string Name,
+    /// <summary>
+    /// The generational particle, beside the name rather than inside it, so the list can draw it apart
+    /// from the name the way every other REMS surface does. Null for a business, and for a person
+    /// declared before the intake asked for one.
+    /// </summary>
+    string? Suffix,
     /// <summary>What they are to the client — <c>spouse</c>, <c>child</c>, <c>other</c>. Individuals only.</summary>
     string? Relation,
     /// <summary>How their return is filed — <c>joint</c> or <c>individual</c>. Individuals only.</summary>

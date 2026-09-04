@@ -134,6 +134,8 @@ internal sealed class RemsAdditionalIndividualConfiguration : IEntityTypeConfigu
         builder.Property(a => a.BillingPreference).IsRequired().HasMaxLength(32);
         builder.Property(a => a.FirstName).IsRequired().HasMaxLength(100);
         builder.Property(a => a.LastName).IsRequired().HasMaxLength(100);
+        // 16, the same cap the client's own suffix carries — it is the same box asking the same question.
+        builder.Property(a => a.Suffix).HasMaxLength(16);
         builder.Property(a => a.Email).HasMaxLength(256);
         builder.Property(a => a.PhoneNumber).HasMaxLength(32);
         builder.Property(a => a.BillingFirstName).HasMaxLength(100);

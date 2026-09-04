@@ -76,6 +76,8 @@ public sealed record RemsRelatedParentView(
 /// <summary>Somebody filed on the client's own return — read as part of the parent, never under it.</summary>
 public sealed record RemsRelatedJointFilerView(
     string Name,
+    /// <summary>Their generational particle, drawn apart from the name as it is everywhere else.</summary>
+    string? Suffix,
     /// <summary>What they are to the client — <c>spouse</c>, <c>child</c>, <c>other</c>.</summary>
     string? Relation);
 
@@ -86,7 +88,16 @@ public sealed record RemsRelatedClientView(
     /// <summary>Which table this row is in, and therefore which endpoint sets its status.</summary>
     string Kind,
     Guid Id,
+    /// <summary>
+    /// The name as it reads — surname first for a person, "Smith Jane", matching the Client column beside
+    /// it. A business is its declared name.
+    /// </summary>
     string Name,
+    /// <summary>
+    /// The generational particle, beside the name so the cell can draw it in bold at the end as every
+    /// other REMS surface does. Null for a business, and for a person declared before the box existed.
+    /// </summary>
+    string? Suffix,
     /// <summary>What they are to the client — <c>spouse</c>, <c>child</c>, <c>other</c>. Null for a business.</summary>
     string? Relation,
     /// <summary>Their email and phone as declared, for the tooltip. Nothing else on the row shows them.</summary>

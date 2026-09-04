@@ -728,12 +728,17 @@ export const remsApi = {
   // at it. Server-side throughout. Returns the standard paginated envelope. Rows:
   //   { remsId, remsNumber, clientName, clientNameSuffix, clientEmail, entityType,
   //     requestStatus, submittedOnUtc, relatedCount,
-  //     parent: { name, suffix, jointWith: { name, relation } | null },
-  //     relatedClients: [{ kind, id, name, relation, email, phoneNumber, status, reference, createdRemsId }],
+  //     parent: { name, suffix, jointWith: { name, suffix, relation } | null },
+  //     relatedClients: [{ kind, id, name, suffix, relation, email, phoneNumber, status, reference,
+  //                        createdRemsId }],
   //     createdBy, createdOnUtc, updatedBy, updatedOnUtc }.
   // `parent.jointWith` is a spouse filing JOINTLY — the same client, so they are named in the header
   // rather than given a row. `reference` is the request a row produced, or a derived "REMS-1042-C1", and
   // is null while the row is still Not Initiated and has produced nothing.
+  //
+  // Every `name` here — the parent's, the joint filer's, each related client's — reads SURNAME FIRST for a
+  // person ("Smith Jane") with the particle beside it in `suffix`, which is the one order a client is
+  // named in anywhere on the platform. A business is its plain declared name and carries no suffix.
   relatedEntities: (params) => api.get("/api/rems/related-entities", { params }).then(envelope),
   // Move one related client along — the ONLY write on that list, and the only thing that changes a status:
   // nothing in the workflow advances it. `kind` is the row's own ("individual" | "entity"), `status` a

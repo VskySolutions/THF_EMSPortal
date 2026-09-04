@@ -318,7 +318,12 @@ internal sealed class RemsRepository : IRemsRepository
                 || x.Rems.ClientPerson!.ClientDisplayName.Contains(t)
                 || x.Rems.ClientPerson!.FirstName.Contains(t)
                 || x.Rems.ClientPerson!.LastName.Contains(t)
-                || individuals.Any(a => a.REMSId == x.Rems.Id && (a.FirstName + " " + a.LastName).Contains(t))
+                // Against the related client's name as the list SHOWS it — "Smith Jane" — and against each
+                // half on its own, exactly as the parent's name above is matched: a reader types whichever
+                // half they have, and neither order should be the only one that finds the row.
+                || individuals.Any(a => a.REMSId == x.Rems.Id
+                    && ((a.LastName + " " + a.FirstName).Contains(t)
+                        || a.FirstName.Contains(t) || a.LastName.Contains(t)))
                 || entities.Any(a => a.REMSId == x.Rems.Id && a.FullName.Contains(t)));
         }
 
@@ -411,7 +416,15 @@ internal sealed class RemsRepository : IRemsRepository
                 a.Id,
                 a.REMSId,
                 RemsRelatedClientKind.Individual,
-                a.FirstName + " " + a.LastName,
+                // SURNAME FIRST, as the Client column beside it reads and as Persons.ClientDisplayName
+                // composes for the client themselves. A related client is a client, and a list that named
+                // the parent "Smith John" and the child "Jane Smith" was naming one family two ways.
+                //
+                // Composed here rather than read off the minted Person: this row is the record of what was
+                // DECLARED, and a Person edited afterwards must not rewrite the client's own answer — the
+                // same reason the name is duplicated onto these columns at all.
+                a.LastName + " " + a.FirstName,
+                a.Suffix,
                 a.RelationType,
                 a.FilingType,
                 a.Email,
@@ -434,8 +447,10 @@ internal sealed class RemsRepository : IRemsRepository
                 a.REMSId,
                 RemsRelatedClientKind.Entity,
                 a.FullName,
-                // The intake form does not ask how another business relates to the client, and it does not
-                // ask how its return is filed — both questions are about people. Null rather than invented.
+                // A company's name carries no generational particle, and the intake form does not ask how
+                // another business relates to the client or how its return is filed — all three questions
+                // are about people. Null rather than invented.
+                null,
                 null,
                 null,
                 a.EmailAddress,

@@ -99,7 +99,13 @@ public class REMS : AuditableEntity
     /// on the client's Person record, and the name the CLIENT typed, which is what <c>REMSClient.Name</c>
     /// and the main <c>REMSEntity.Name</c> hold. The intake form never asks for a suffix — it is the
     /// firm's own particle on the name, set at intake — so a surface showing the client's own version was
-    /// showing "John Smith" where every list beside it said "John Smith Jr.".
+    /// showing "Smith John" where every list beside it said "Smith John Jr.".
+    /// </para>
+    /// <para>
+    /// It joins the particle on and nothing else. It does not REORDER a name: a submission stored before
+    /// the client name became surname-first holds "John Smith" and comes back "John Smith Jr.", which is
+    /// the record of what was sent with the firm's particle on it. Submissions from here on are stored
+    /// surname-first and read "Smith John Jr." — see <c>RemsFormPayloadV1.EffectiveClientName</c>.
     /// </para>
     /// <para>
     /// A blank name falls back to <see cref="ClientDisplayName"/>; a name that already carries the suffix
@@ -120,8 +126,9 @@ public class REMS : AuditableEntity
             return trimmed;
         }
 
-        // ON THE END, not in front. That is where a generational particle is written — "John Smith Jr." —
-        // and it is the order the form asks in too: the suffix box sits to the right of Last Name.
+        // ON THE END, not in front. That is where a generational particle sits whichever order the name
+        // itself is in — "Smith John Jr." — and it is the order the form asks in too: the suffix box sits
+        // to the right of Last Name.
         return $"{trimmed} {suffix}";
     }
 

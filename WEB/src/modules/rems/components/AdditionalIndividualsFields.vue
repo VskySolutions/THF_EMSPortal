@@ -76,11 +76,49 @@
               :rules="nameRules('First Name')"
               :error="!!err(i, 'firstName')" :error-message="err(i, 'firstName')"
             />
+            <!-- Last Name and Suffix share a line the way they do on the client's own block: the particle
+                 goes after the family name it belongs to, and it gets a particle's width rather than a
+                 half-row of its own. On a phone the pair still shares its line — split apart they read as
+                 two questions instead of one answer. -->
             <app-text-field
-              v-model="row.lastName" label="Last Name" required class="col-12 col-sm-6"
+              v-model="row.lastName" label="Last Name" required class="col-8 col-sm-4"
               :rules="nameRules('Last Name')"
               :error="!!err(i, 'lastName')" :error-message="err(i, 'lastName')"
             />
+            <!-- Optional, and asked of everybody on the card rather than only of a child: the particle is
+                 what tells a father from a son, and either of them may be the one on this return. -->
+            <app-text-field
+              v-model="row.suffix" label="Suffix" class="col-4 col-sm-2" placeholder="Jr."
+              :error="!!err(i, 'suffix') || suffixTooLong(row)"
+              :error-message="err(i, 'suffix') || 'A suffix is at most 16 characters.'"
+            >
+              <template #append>
+                <q-btn
+                  flat dense round size="sm" icon="o_arrow_drop_down" color="grey-7"
+                  aria-label="Suffix suggestions"
+                >
+                  <q-menu anchor="bottom end" self="top end" auto-close>
+                    <q-list dense style="min-width: 150px;">
+                      <q-item
+                        v-for="opt in SUFFIX_OPTIONS" :key="opt.value"
+                        clickable :active="row.suffix === opt.value"
+                        active-class="bg-grey-2 text-primary"
+                        @click="row.suffix = opt.value"
+                      >
+                        <q-item-section>
+                          <q-item-label>{{ opt.label }}</q-item-label>
+                          <q-item-label caption>{{ opt.caption }}</q-item-label>
+                        </q-item-section>
+                      </q-item>
+                      <q-separator />
+                      <q-item clickable :disable="!row.suffix" @click="row.suffix = ''">
+                        <q-item-section class="text-grey-7">No suffix</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+              </template>
+            </app-text-field>
             <!-- The email is required; the phone is not. Everyone the firm prepares a return for needs an
                  address it can be reached at, and where a person has none of their own — a young child —
                  the client gives the one the firm should use for them, which is the answer the firm needs
@@ -153,6 +191,7 @@ import {
   individualAsksMinor, individualBillingLocked, individualFilingLocked, individualLabel,
   newAdditionalIndividual
 } from "modules/rems/useRemsIntakeForm";
+import { CLIENT_NAME_SUFFIXES } from "modules/rems/remsContactRoles";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
@@ -179,6 +218,13 @@ const YES_NO = [
   { label: "Yes", value: true },
   { label: "No", value: false }
 ];
+
+// The same shortlist the client's own Suffix box offers, so the two boxes suggest one vocabulary.
+const SUFFIX_OPTIONS = CLIENT_NAME_SUFFIXES;
+
+// Mirrors the client's own box and the column behind it. Checked here rather than left to the server so a
+// client who pastes a title into it is told before they reach Review.
+const suffixTooLong = (row) => (row?.suffix?.trim().length || 0) > 16;
 
 // The answer follows the LIST rather than holding a state of its own, so a payload that already carries
 // people opens on Yes and clearing the last card returns it to No.

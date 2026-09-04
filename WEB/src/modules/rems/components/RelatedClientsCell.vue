@@ -16,7 +16,7 @@
              which is the difference between "we have not set them up" and "there is nothing to set up". -->
         <span v-if="parent.jointWith" class="rcc__joint">
           <q-icon name="o_add" size="12px" class="rcc__joint-plus" />
-          {{ parent.jointWith.name }}
+          <app-name-with-suffix :name="parent.jointWith.name" :suffix="parent.jointWith.suffix" />
           <span v-if="relationLabel(parent.jointWith.relation)" class="rcc__relation">
             ({{ relationLabel(parent.jointWith.relation) }})
           </span>
@@ -42,7 +42,10 @@
            they relate to the client or to each other. -->
       <q-badge class="rcc__tag rcc__tag--child">{{ isIndividual ? "Child" : `Entity-${i + 1}` }}</q-badge>
       <span class="rcc__name">
-        {{ row.name }}
+        <!-- The particle after the name and in bold, as the parent above and the Client column beside it
+             draw theirs: a related client is told from their own father by that particle and nothing
+             else. A business carries none and reads as its plain name. -->
+        <app-name-with-suffix :name="row.name" :suffix="row.suffix" />
         <!-- The contact details the client gave for them. Nowhere else on this list shows them, and for
              a business they are the whole of what was declared besides the name. -->
         <q-tooltip v-if="contactHint(row)" :delay="300">{{ contactHint(row) }}</q-tooltip>

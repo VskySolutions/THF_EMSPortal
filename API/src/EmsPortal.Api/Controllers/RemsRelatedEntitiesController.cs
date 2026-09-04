@@ -288,7 +288,9 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         var parent = new RemsRelatedParentView(
             clientName,
             clientSuffix,
-            jointFiler is null ? null : new RemsRelatedJointFilerView(jointFiler.Name, jointFiler.Relation));
+            jointFiler is null
+                ? null
+                : new RemsRelatedJointFilerView(jointFiler.Name, jointFiler.Suffix, jointFiler.Relation));
 
         var children = new List<RemsRelatedClientView>();
         var ordinal = 0;
@@ -304,6 +306,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 row.Kind == RemsRelatedClientKind.Individual ? KindIndividual : KindEntity,
                 row.Id,
                 row.Name,
+                row.Suffix,
                 row.Relation,
                 row.Email,
                 row.PhoneNumber,
