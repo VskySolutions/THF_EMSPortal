@@ -3,12 +3,7 @@ using EmsPortal.Api.Models.Profile;
 
 namespace EmsPortal.Api.Validators.Persons;
 
-/// <summary>
-/// The self-service profile payload (and the admin's edit of somebody else's). Every field is optional —
-/// null means "leave it alone" — so the rules only fire on what was actually sent. The names are held to
-/// <see cref="PersonNames"/>, the same shape the People screens and the REMS intake form enforce: this
-/// endpoint writes the same Person columns they do, and a rule that stopped at one door is not a rule.
-/// </summary>
+/// <summary>The self-service profile payload (and the admin's edit of somebody else's).</summary>
 public sealed class UpdatePersonProfileRequestValidator : AbstractValidator<UpdatePersonProfileRequest>
 {
     public UpdatePersonProfileRequestValidator()

@@ -1,8 +1,7 @@
 <template>
   <div class="row" :class="`q-col-gutter-${gutter}`">
-    <!-- The standard address block, in the standard order: Country → State → City → Address Line 1 →
-         Address Line 2 → Zip. Everything except Address Line 2 is mandatory whenever the surrounding
-         form marks the block `required`. -->
+    <!-- The standard address block, in the standard order: Country → State → City → Address Line 1
+         → Address Line 2 → Zip. -->
     <app-select
       v-model="address.countryCode" :options="countryOptions" :label="label('Country')" :required="required"
       use-input :class="col('country')" :dense="dense" :disable="disable" :readonly="readonly"
@@ -61,20 +60,9 @@
       :error="!!postalMessage" :error-message="postalMessage" @blur="validatePostal"
     />
 
-    <!-- Who the post is addressed to. Opt-in, because most addresses in the app are a place and nothing
-         more — a home, an office. A form that DOES ask both halves asks them here rather than in a
-         section of its own: "where does the invoice go?" and "who is it addressed to?" are one question,
-         and a client with three places to invoice has three answers to it. Split across two sections
-         there was nothing saying which name belonged to which address.
-
-         `contactFirst` puts these boxes BEFORE the postal ones through the flex row's own ordering rather
-         than by repeating the markup — the fields are direct children of one flex row, so an order class
-         moves the whole block and leaves both orders reading from one copy. A form that leads with the
-         person is asking "who is the invoice for, and where does it go?", which is the order those two
-         are answered in. -->
+    <!-- Who the post is addressed to. -->
     <template v-if="contact">
-      <!-- Only where the host names the block. Three boxes called First Name, Last Name and Email Address
-           inside a card called Billing Information do not need a heading telling them what they are. -->
+      <!-- Only where the host names the block. -->
       <div v-if="contactLabel" class="col-12 section-subhead" :class="contactOrder">{{ contactLabel }}</div>
       <app-text-field
         v-model="address.firstName" :label="contactLabelFor('First Name')" :required="contactRequired"
@@ -99,8 +87,7 @@
       />
     </template>
 
-    <!-- Opt-in extras kept for the records that already capture them (profile / person). Not part of the
-         standard block, so a form has to ask for them. -->
+    <!-- Opt-in extras kept for the records that already capture them (profile / person). -->
     <template v-if="extended">
       <div class="col-12 section-subhead">Additional details</div>
       <app-text-field v-model="address.landmark" label="Landmark" class="col-12 col-sm-6" :dense="dense" :disable="disable" :readonly="readonly" />
@@ -112,23 +99,7 @@
 </template>
 
 <script setup>
-// THE address field-set. Every form in the app that captures an address renders this component, so the
-// fields, their order, the country → state → city dependency and the postal-code check are defined once.
-//
-// Binds a canonical address object via v-model — the same names the Address record and the profile /
-// person APIs use:
-//   { countryCode, countryName, stateCode, stateName, cityName, addressLine1, addressLine2, postalCode,
-//     landmark, buildingName, floorNumber, unitNumber,    // the four above only with `extended`
-//     firstName, lastName, email }                        // the addressee, only with `contact`
-// `suffix` and `phone` are in the stored shape and are round-tripped, but no form asks for them any more:
-// an invoice is addressed to a name and reached at an email, and the two extra boxes were the two nobody
-// filled in.
-// countryName / stateName are kept in sync from the selected ISO codes so callers can persist names.
-// Callers on a different wire shape (REMS stores a frozen legacy shape) map at their own boundary.
-//
-// Validation works two ways, because not every host is a q-form:
-//   * inside a q-form — `required` emits real rules, validated with the rest of the form;
-//   * outside one — the host calls the exposed validate(), or feeds server messages in via errors/prefix.
+// THE address field-set.
 import { ref, reactive, computed, watch } from "vue";
 import { State, City } from "country-state-city";
 import validator from "validator";
@@ -151,36 +122,24 @@ const props = defineProps({
   // Also capture the addressee — first name, last name, email. Off by default: an address is a place, and
   // only a form that genuinely asks "and who is it addressed to?" wants these.
   contact: { type: Boolean, default: false },
-  // The heading over that block. A prop because what the person AT the address is called depends on the
-  // form asking — "Addressed to" on an invoice, something else elsewhere. Empty renders no heading at
-  // all, for a card whose own title already says whose address this is.
+  // The heading over that block.
   contactLabel: { type: String, default: "Addressed to" },
   // Ask the addressee BEFORE the place. For a form whose question is "who is this invoice for, and where
   // does it go?" rather than "where is this address, and who is at it?".
   contactFirst: { type: Boolean, default: false },
-  // The addressee's three boxes are mandatory. Separate from `required`, which is about the postal lines:
-  // an entity's own address is required with no addressee at all, and a billing block is the other way
-  // round only in the sense that it needs both.
+  // The addressee's three boxes are mandatory.
   contactRequired: { type: Boolean, default: false },
   // Grid widths, per field, keyed by the canonical field names above — the one thing a host may change
   // about this field-set's LAYOUT. Anything not named keeps the default below.
-  //
-  // A prop rather than nine, and a prop rather than a fixed grid, because the same nine boxes are asked
-  // in two shapes: an address on its own, where the street line wants the room; and a billing block,
-  // whose widths are specified box by box so the addressee shares a line with the name it belongs to.
   cols: { type: Object, default: () => ({}) },
-  // The space between the boxes — a Quasar gutter size (xs / sm / md / lg / xl). A form that asks for one
-  // address can afford the standard md; a form that asks for three of them, one per card, is long enough
-  // that the gutters are what a client reads as "this is taking forever", so it asks for sm.
+  // The space between the boxes — a Quasar gutter size (xs / sm / md / lg / xl).
   gutter: { type: String, default: "md" },
   // Server-side messages for THIS address, keyed by the canonical field names above. A host whose API
   // reports them under other names re-keys first (see modules/rems/remsAddress).
   errors: { type: Object, default: () => ({}) }
 });
 
-// What each box is worth on the grid when the host says nothing. Every one of them starts at col-12, so
-// a phone gets one box per line whatever the host asks for above it — the breakpoint classes take over
-// from sm, which is where there is room for two.
+// What each box is worth on the grid when the host says nothing.
 const DEFAULT_COLS = {
   country: "col-12 col-sm-4",
   state: "col-12 col-sm-4",
@@ -216,9 +175,8 @@ const cityMode = computed(() => {
 const label = (text) => (props.required ? `${text} *` : text);
 const contactLabelFor = (text) => (props.contactRequired ? `${text} *` : text);
 
-// The addressee's own boxes, moved ahead of the postal ones by the flex row rather than by a second copy
-// of the markup. Everything else in the row keeps the default order, so within each group the source
-// order still decides.
+// The addressee's own boxes, moved ahead of the postal ones by the flex row rather than by a second copy of
+// the markup.
 const contactOrder = computed(() => (props.contactFirst ? "app-address__contact-first" : ""));
 
 // Rules are what a q-form validates; the same requirement is enforced for hosts without one by validate().

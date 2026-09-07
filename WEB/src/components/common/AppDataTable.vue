@@ -110,19 +110,12 @@ const props = defineProps({
   pagination: { type: Object, default: null },
   defaultSortBy: { type: String, default: "updatedOnUtc" },
   defaultDescending: { type: Boolean, default: true },
-  // Sort here instead of asking the server. ONLY for a table that already holds every row it will ever
-  // show and has no endpoint behind it — a dashboard panel, a members list inside a drawer. A paginated
-  // list must never set it: reordering one page of many is not sorting the list, it just looks like it.
+  // Sort here instead of asking the server.
   clientSort: { type: Boolean, default: false },
   // Row-key values to float to the top of the current page (e.g. pinned records), kept above the
   // rest regardless of the active sort.
   pinnedRowKeys: { type: Array, default: () => [] },
-  // Personal row tints as { [rowKey]: "#hex" } — a Universal Features colour code, private to the
-  // viewer. Drawn as a stripe down the row's left edge rather than as a filled background: a full tint
-  // fights the badges the row already carries, and it is a MARK, not a status.
-  //
-  // Here rather than in each list so a coloured row looks the same everywhere, the way the pinned rows
-  // above it already do.
+  // Personal row tints as { [rowKey]: "#hex" } — a Universal Features colour code, private to the viewer.
   rowColours: { type: Object, default: () => ({}) }
 });
 
@@ -132,8 +125,7 @@ const rowsPerPageOptions = [10, 20, 50, 100];
 const prefs = props.pageKey ? usePreferences(props.pageKey) : null;
 
 // The page owns page, size AND sort — useListTable holds them, sends them to the server and remembers
-// them. This is a mirror of that, because QTable insists on a pagination object of its own; every change
-// to it goes straight back out as `request`.
+// them.
 const innerPagination = ref({
   page: 1,
   rowsPerPage: prefs?.get("pageSize", 20) ?? 20,
@@ -157,15 +149,7 @@ watch(() => props.pagination, (next) => {
 }, { deep: true });
 
 // ---- Sorting ----
-// A list is NOT ordered here. Sorting is the server's: it is the only place that can see the whole set,
-// and a browser can only ever reorder the page it was handed — "oldest first" over twenty of two hundred
-// rows is not the oldest of anything. `onRequest` sends the column back and the page re-fetches.
-//
-// `clientSort` is the exception, for a table that IS its whole set (a dashboard panel, a members list).
-// There QTable does the sorting, through this comparator rather than its default one: the default reads
-// what the CELL shows, and a date cell reads MM/DD/YYYY, which as text sorts by month before year. This
-// reads the column's `sort` accessor (the raw value) where one is given, and compares dates and numbers
-// as dates and numbers.
+// A list is NOT ordered here.
 const sortValue = (col, name) => {
   const accessor = col?.sort ?? col?.field ?? name;
   return typeof accessor === "function" ? accessor : (row) => row[accessor];
@@ -193,8 +177,6 @@ const sortMethod = (rows, sortBy, descending) => {
 };
 
 // Whether this list carries an actions column — it is what the nowrap rule in the stylesheet keys off.
-// Safe to address by POSITION there (last cell) because orderColumns always sinks "actions" last,
-// whatever order the reader has dragged the rest into.
 const hasActions = computed(() => props.columns.some((c) => c.name === "actions"));
 
 const pinnedSet = computed(() => new Set(props.pinnedRowKeys));
@@ -208,10 +190,7 @@ const displayedRows = computed(() => {
 });
 
 // ---- Personal row marks ----
-// A pinned row is tinted faintly and a coloured row gets a stripe down its left edge. The stripe is a
-// CSS custom property rather than a border on the <tr>: a table row is not a reliable box to paint —
-// borders and backgrounds on it collapse differently across browsers — so the value is set here and the
-// stylesheet draws it on the row's first CELL, which is.
+// A pinned row is tinted faintly and a coloured row gets a stripe down its left edge.
 const rowClassFn = (row) =>
   (pinnedSet.value.has(row?.[props.rowKey]) ? "app-data-table__row--pinned" : "");
 
@@ -227,16 +206,15 @@ const onRequest = (requestProps) => {
     prefs.merge({ pageSize: next.rowsPerPage });
   }
 
-  // Page, size and sort all go back to the server — a new sort is a new question about the whole set,
-  // not a rearrangement of the rows already here. A client-sorted table has nowhere to send it: the
-  // pagination above is the whole change, and `displayedRows` has already acted on it.
+  // Page, size and sort all go back to the server — a new sort is a new question about the whole set, not
+  // a rearrangement of the rows already here.
   emit("update:pagination", innerPagination.value);
   if (!props.clientSort) emit("request", innerPagination.value);
 };
 
 // ---- Column visibility (persisted) ----
-// The menu lists ALL data columns; only those flagged `default: true` are shown
-// initially (falling back to all when none are flagged). Users add the rest.
+// The menu lists ALL data columns; only those flagged `default: true` are shown initially (falling back to
+// all when none are flagged).
 const toggleableColumns = computed(() => props.columns.filter((c) => c.name !== "actions"));
 const allColumnNames = computed(() => props.columns.map((c) => c.name));
 

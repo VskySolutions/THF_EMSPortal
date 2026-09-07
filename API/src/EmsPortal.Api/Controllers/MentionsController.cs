@@ -9,11 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Mention Inbox + @mention autocomplete. Lists the authenticated user's @mentions across all records,
-/// and resolves candidate users (tenant people who hold a login) for the conversation editor's autocomplete.
-/// Scoped to the calling user / active tenant.
-/// </summary>
+/// <summary>Mention Inbox + @mention autocomplete.</summary>
 [ApiController]
 [Authorize]
 [Route("/api/uf")]

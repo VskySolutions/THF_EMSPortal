@@ -1,10 +1,6 @@
 import { Dialog } from "quasar";
 
 // Standardized confirmation dialog (UI Development Standards §1.7).
-// Page components must use this rather than calling $q.dialog() directly.
-//
-//   const { confirm } = useConfirm();
-//   if (await confirm({ title: "Delete tenant", message: "...", type: "danger" })) { ... }
 export function useConfirm () {
   const confirm = ({
     title = "Please confirm",

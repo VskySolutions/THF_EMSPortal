@@ -1,18 +1,6 @@
 import { reactive, computed } from "vue";
 
-// Per-column filtering for AppDataTable lists. Builds one reactive filter value per filterable
-// column, the active-filter chips, and (for client mode) a `filteredRows` view.
-//
-// Filtering is SERVER-SIDE by default: the page maps `filters` to API params and reloads, so
-// pagination/totals reflect the whole filtered set. Pass `{ server: false }` for the legacy
-// client-side filtering of the loaded page.
-//
-// Column opt-outs / hints (on the column definition):
-//   filterable: false            → no filter control for this column (e.g. computed/audit/date columns)
-//   filterOptions: [{label,value}] → renders a select instead of a text box
-//
-//   const { filters, filterableColumns, filteredRows, filterChips, removeFilter, clearFilters }
-//     = useColumnFilters(columns, rows, { server: true });
+// Per-column filtering for AppDataTable lists.
 export function useColumnFilters (columnsInput, rows, options = {}) {
   const server = options.server !== false; // default: server-side
   const colList = () => (Array.isArray(columnsInput) ? columnsInput : (columnsInput.value || []));

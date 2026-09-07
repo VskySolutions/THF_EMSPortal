@@ -1,11 +1,8 @@
 <template>
   <span class="uf-marks">
-    <!-- `type="a"` on both, as on every other control in an Actions column: the column renders one kind
-         of tag throughout, whether the control goes somewhere or does something. Quasar gives an
-         href-less anchor `role="button"` and a tabindex, so the tag is the only thing that changes —
-         keyboard focus and screen readers still read these as the buttons they are. -->
-    <!-- Pin: a toggle, so one control rather than a menu item. One click on, one click off, and the icon
-         itself carries the state — filled and in the brand colour when the row is pinned. -->
+    <!-- `type="a"` on both, as on every other control in an Actions column: the column renders one kind of
+         tag throughout, whether the control goes somewhere or does something. -->
+    <!-- Pin: a toggle, so one control rather than a menu item. -->
     <q-btn
       type="a"
       flat round dense
@@ -19,8 +16,7 @@
       <q-tooltip>{{ pinTooltip }}</q-tooltip>
     </q-btn>
 
-    <!-- Colour: a palette, so a menu. The icon wears the row's own colour, which means the column says
-         which rows are marked without the reader opening anything. -->
+    <!-- Colour: a palette, so a menu. -->
     <q-btn type="a" flat round dense :color="colour ? undefined : 'grey-7'" icon="o_palette" :disable="busy">
       <q-icon v-if="colour" name="o_palette" class="uf-marks__swatch-icon" :style="{ color: colour }" />
       <q-tooltip>{{ colour ? "Change this row's colour" : "Colour this row (only you see it)" }}</q-tooltip>
@@ -55,14 +51,6 @@
 
 <script setup>
 // The two PERSONAL marks on a list row: pin it to the top, or tint it.
-//
-// Purely presentational — it renders state and emits intent. The LIST owns both, because both are
-// fetched once for the whole page (see useRowPersonalisation); a control that fetched its own would
-// cost two requests per row.
-//
-// It deliberately does NOT reach for EntityRowActionsMenu, which carries the same two actions plus
-// reminders, copy-link and PDF export. Those are three more features than this list was asked for, and
-// each of them fires its own request when the menu opens.
 import { computed } from "vue";
 
 const props = defineProps({

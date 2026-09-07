@@ -12,8 +12,8 @@ using AuthenticationOptions = EmsPortal.Shared.Configuration.AuthenticationOptio
 namespace EmsPortal.Api.Security;
 
 /// <summary>
-/// Registers the two authentication schemes (platform JWT + API key), the
-/// <c>AnyOf</c> composite scheme, and the three named RBAC policies.
+/// Registers the two authentication schemes (platform JWT + API key), the <c>AnyOf</c> composite
+/// scheme, and the three named RBAC policies.
 /// </summary>
 public static class AuthenticationServiceCollectionExtensions
 {
@@ -85,9 +85,8 @@ public static class AuthenticationServiceCollectionExtensions
                 .RequireRole(Roles.SuperAdmin, Roles.TenantAdmin));
         });
 
-        // Permission-based authorization: a dynamic policy provider materializes "perm:<key>"
-        // policies (see RequirePermissionAttribute) and a handler grants them from permission
-        // claims, falling back to the role claim's seeded permission set.
+        // Permission-based authorization: a dynamic policy provider materializes "perm:<key>" policies (see
+        // RequirePermissionAttribute) and a handler grants them from permission claims.
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

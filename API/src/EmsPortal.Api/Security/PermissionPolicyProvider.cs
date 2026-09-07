@@ -4,13 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Security;
 
-/// <summary>
-/// Materializes per-permission authorization policies on demand. A policy named
-/// "perm:&lt;key&gt;" (see <see cref="RequirePermissionAttribute"/>) accepts either the JWT or
-/// API-key scheme, requires an authenticated user, and adds a <see cref="PermissionRequirement"/>.
-/// All other policy names fall through to the default provider (the named base-level policies and
-/// the default policy registered in <c>AddAuthorization</c>).
-/// </summary>
+/// <summary>Materializes per-permission authorization policies on demand.</summary>
 public sealed class PermissionPolicyProvider : IAuthorizationPolicyProvider
 {
     private readonly DefaultAuthorizationPolicyProvider _fallback;

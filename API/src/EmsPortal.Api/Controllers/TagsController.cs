@@ -13,9 +13,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Tags — tenant-managed labels (CRUD under <c>/api/admin/tags</c>, gated by <c>settings.manage</c>) and
-/// their application to entity records (<c>/api/uf/entity-tags</c>, gated by the parent entity's read
-/// permission). All tenant-scoped via the ambient query filter.
+/// Tags — tenant-managed labels (CRUD under <c>/api/admin/tags</c>, gated by <c>settings.manage</c>)
+/// and their application to entity records (<c>/api/uf/entity-tags</c>.
 /// </summary>
 [ApiController]
 [Authorize]

@@ -12,9 +12,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Personal productivity features that attach to any entity record for the current user: Pins (max 5
-/// per entity type, 50 overall), Colour Codes (upsert/clear, batch fetch for list pages), and
-/// synchronous PDF export. All operations are scoped to the calling user and require the read
-/// permission of the parent entity.
+/// per entity type, 50 overall), Colour Codes (upsert/clear, batch fetch for list pages).
 /// </summary>
 [ApiController]
 [Authorize]

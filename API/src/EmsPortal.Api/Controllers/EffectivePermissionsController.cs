@@ -10,7 +10,6 @@ namespace EmsPortal.Api.Controllers;
 /// <summary>
 /// Read-only, profile-facing view of the authenticated user's effective permissions in the active
 /// tenant, broken down by source: Role → Permission Group → permission key (WO-120, REQ-PG-014.4).
-/// Uses the same union rules as token permission calculation and never exposes another user's data.
 /// </summary>
 [ApiController]
 [Authorize]

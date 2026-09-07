@@ -34,8 +34,7 @@
           </q-item-section>
         </q-item>
         <q-separator class="q-mb-sm" />
-        <!-- The full list, above the bell's popover — which only ever shows the unread few. Its own
-             settings sit further down as "Notification Preferences". -->
+        <!-- The full list, above the bell's popover — which only ever shows the unread few. -->
         <q-item v-ripple :to="{ name: 'uf_notifications' }" clickable>
           <q-item-section avatar>
             <q-icon name="o_notifications" color="orange" class="material-icons-outlined" />

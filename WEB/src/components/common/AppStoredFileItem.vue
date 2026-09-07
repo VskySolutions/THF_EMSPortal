@@ -29,14 +29,7 @@
 
 <script setup>
 // Preview row for a file that is already SAVED against a record: the icon for its type, its name, its
-// extension and size, and — where the form it sits on is editable — an ✕ that takes it off the record.
-// Clicking the row opens the file in a new tab (see openStoredFile: the bytes come through the
-// authenticated client, because a bare link to /api/media/… is refused).
-//
-// The staged counterpart is AppFilePreviewItem, which previews a File the browser is still holding. The
-// two are deliberately the same row, so a document looks the same before and after it is saved — which
-// includes the thumbnail below: a picture used to preview as a picture while it sat in the picker and as
-// a grey glyph the moment it was saved, so the save appeared to lose the one thing worth looking at.
+// extension and size.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -66,9 +59,7 @@ const name = computed(() => nameOf(props.file));
 const description = computed(() => describeStored(props.file));
 
 // ---- The thumbnail, for a stored file that is a picture ----
-// Fetched only when the row is actually on screen, and only for images. A stored file's bytes come down
-// through the authenticated client one request at a time, so a folder of a dozen attachments would
-// otherwise pay for twelve downloads to draw a list most of which is below the fold.
+// Fetched only when the row is actually on screen, and only for images.
 const rowRef = ref(null);
 const thumbUrl = ref(null);
 // The bytes behind the thumbnail, kept so that opening a picture that has already been previewed does not
@@ -89,9 +80,7 @@ const loadThumb = async () => {
     thumbBlob = blob;
     thumbUrl.value = URL.createObjectURL(blob);
   } catch {
-    // Silent on purpose. The row still names the file, still says what type and size it is, and still
-    // opens it — and a click that fails reports itself, which is where the reader actually asked for the
-    // bytes. A toast about a decoration nobody requested is noise.
+    // Silent on purpose.
   }
 };
 
@@ -111,8 +100,7 @@ onMounted(() => {
 });
 
 // A single-file row is REPLACED rather than re-keyed — the purchase order and the signed CAF are each one
-// row whose file changes under it — so the old picture has to go when it does. On screen already by then,
-// which is why this does not wait for the observer.
+// row whose file changes under it — so the old picture has to go when it does.
 watch(() => mediaIdOf(props.file), () => {
   stopObserving();
   revokeThumb();
@@ -128,9 +116,8 @@ const open = async () => {
   if (opening.value) return;
   opening.value = true;
   try {
-    // The previewed bytes where there are some: the tab is opened synchronously by openStoredFile and
-    // then pointed at the blob, so handing it one it already holds is the difference between a picture
-    // appearing at once and a second trip to the server for the same file.
+    // The previewed bytes where there are some: the tab is opened synchronously by openStoredFile and then
+    // pointed at the blob.
     const source = thumbBlob ? () => Promise.resolve(thumbBlob) : props.fetchBlob;
     await openStoredFile(props.file, source);
   } catch (err) {

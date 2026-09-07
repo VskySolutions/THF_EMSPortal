@@ -1,8 +1,6 @@
 <template>
   <q-card flat bordered class="app-list-header q-mb-md">
-    <!-- Crumbs on the left, the tools for the list on the right. The bar was one no-wrap row, so on a
-         phone the search box, Filters, Add and Back ran straight off the side of the card. It wraps
-         now, and below sm the tools take a line of their own with the search box spanning it. -->
+    <!-- Crumbs on the left, the tools for the list on the right. -->
     <div class="app-list-header__bar q-px-md q-py-sm">
       <app-breadcrumbs
         v-if="breadcrumbs.length" :items="breadcrumbs" no-margin class="app-list-header__crumbs"

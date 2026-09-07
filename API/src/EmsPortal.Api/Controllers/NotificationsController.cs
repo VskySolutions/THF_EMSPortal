@@ -12,7 +12,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Notification centre — the authenticated user's in-app notifications plus their per-type channel
-/// preferences. All operations are scoped to the calling user.
+/// preferences.
 /// </summary>
 [ApiController]
 [Authorize]

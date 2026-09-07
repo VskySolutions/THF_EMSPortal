@@ -2,7 +2,7 @@ namespace EmsPortal.Api.Models.PermissionGroups;
 
 // ---- Requests ----
 
-/// <summary>Create a Permission Group. Super Admins may target a tenant; others use the active tenant.</summary>
+/// <summary>Create a Permission Group.</summary>
 public sealed class CreateGroupRequest
 {
     public Guid? TenantId { get; set; }
@@ -20,7 +20,7 @@ public sealed class UpdateGroupRequest
     public string? Description { get; set; }
     public List<string> PermissionKeys { get; set; } = new();
 
-    /// <summary>Optional capacity limit (WO-119); null = unlimited. A value below current usage is rejected.</summary>
+    /// <summary>Optional capacity limit (WO-119); null = unlimited.</summary>
     public int? CapacityLimit { get; set; }
 }
 

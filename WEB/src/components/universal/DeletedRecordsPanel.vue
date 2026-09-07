@@ -36,8 +36,7 @@
       </template>
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- One button per action, both of them on the row. The pair reads as what it is — put it back,
-               or end it — and the second is the only red thing on this panel. -->
+          <!-- One button per action, both of them on the row. -->
           <q-btn type="a" flat round dense color="primary" icon="o_restore" @click="restore(cell.row)">
             <q-tooltip>Restore</q-tooltip>
           </q-btn>

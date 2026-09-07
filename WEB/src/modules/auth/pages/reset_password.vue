@@ -51,9 +51,7 @@
 </template>
 
 <script setup>
-// Step 2 of the self-service reset: redeem the emailed token. Anonymous — the token IS the authorisation.
-// The rules below mirror ChangePasswordForm; they cannot share it because that component asks for the
-// CURRENT password, which someone who has forgotten it cannot supply.
+// Step 2 of the self-service reset: redeem the emailed token.
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { authApi, getApiErrorMessage } from "services/api";

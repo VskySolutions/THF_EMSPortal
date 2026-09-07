@@ -3,11 +3,7 @@ using System.Text;
 
 namespace EmsPortal.Api.Storage;
 
-/// <summary>
-/// Minimal, dependency-free PDF generator for the Universal Features "Export to PDF" feature. Lays out a
-/// title plus a list of text lines across one or more A4 pages using the standard Helvetica font. It is
-/// deliberately small — enough to render a record summary; it is not a general-purpose PDF library.
-/// </summary>
+/// <summary>Minimal, dependency-free PDF generator for the Universal Features "Export to PDF" feature.</summary>
 public static class SimplePdfWriter
 {
     private const int LinesPerPage = 48;

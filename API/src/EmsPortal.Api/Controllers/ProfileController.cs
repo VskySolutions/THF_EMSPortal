@@ -13,9 +13,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Person profile management (WO-61): the rich personal/contact/professional/social/address
-/// profile backed by the <see cref="Person"/> master record. Users manage their own profile;
-/// admins (users.read / users.write) manage any user's profile.
+/// Person profile management (WO-61): the rich personal/contact/professional/social/address profile
+/// backed by the <see cref="Person"/> master record.
 /// </summary>
 [ApiController]
 [Produces("application/json")]

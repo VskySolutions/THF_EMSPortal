@@ -5,11 +5,8 @@ using EmsPortal.Shared.Contracts;
 namespace EmsPortal.Api.Middleware;
 
 /// <summary>
-/// Catches unhandled exceptions before they reach the caller, logs the full exception
-/// (type, message, stack trace, correlation ID) via Serilog, and returns an
-/// <c>ApiErrorResponse</c> error envelope (ADR-002) with <c>code: INTERNAL_ERROR</c>
-/// and the correlation ID in <c>details</c>. Exception detail is appended only when
-/// enabled (default: Development).
+/// Catches unhandled exceptions before they reach the caller, logs the full exception (type, message,
+/// stack trace, correlation ID) via Serilog.
 /// </summary>
 public sealed class ExceptionHandlingMiddleware
 {

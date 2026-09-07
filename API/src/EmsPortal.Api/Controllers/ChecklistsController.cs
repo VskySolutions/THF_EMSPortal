@@ -13,8 +13,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Checklists — completable task lists attachable to any entity record via the shared
-/// <c>(EntityType, EntityId)</c> key. Access requires the read permission of the parent entity;
-/// checklist deletion is restricted to the creator or an admin. Tenant-scoped via the ambient filter.
+/// <c>(EntityType, EntityId)</c> key.
 /// </summary>
 [ApiController]
 [Authorize]

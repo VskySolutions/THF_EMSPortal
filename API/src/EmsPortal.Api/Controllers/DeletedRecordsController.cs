@@ -13,10 +13,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Deleted Records Management — lets admins view, restore, and permanently delete soft-deleted records,
-/// and configure the retention period. All endpoints require <c>records.adminDelete</c> and are tenant
-/// scoped; Super Admins may target another tenant via <c>?tenantId=</c>. Hard-deletes cascade across all
-/// Universal Feature tables for the record.
+/// Deleted Records Management — lets admins view, restore, and permanently delete soft-deleted
+/// records, and configure the retention period.
 /// </summary>
 [ApiController]
 [Authorize]

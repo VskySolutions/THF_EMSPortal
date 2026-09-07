@@ -8,10 +8,7 @@
           label="Label *"
           hint="Shown to users, e.g. NET 30"
         />
-        <!-- The stored code. Read-only on a value the application itself writes: renaming it would strand
-             every record already holding the old code, so the API refuses it and the box says so rather
-             than letting somebody type a change that comes back rejected. The LABEL above stays open —
-             that is the word everybody actually reads. -->
+        <!-- The stored code. -->
         <app-text-field
           v-model="form.value"
           label="Value *"
@@ -28,8 +25,8 @@
           </template>
         </app-text-field>
 
-        <!-- Surfaced as this value's tooltip wherever it is offered or displayed, so a list whose
-             labels look alike can explain itself at the point of use. -->
+        <!-- Surfaced as this value's tooltip wherever it is offered or displayed, so a list whose labels
+             look alike can explain itself at the point of use. -->
         <app-text-field
           v-model="form.description"
           label="Description"
@@ -68,8 +65,7 @@
             </template>
           </app-text-field>
         </div>
-        <!-- The icon shown beside this value wherever it is rendered — an approver role, an email event.
-             A Material icon name; the outlined set ("o_" prefix) is what the rest of the app uses. -->
+        <!-- The icon shown beside this value wherever it is rendered — an approver role, an email event. -->
         <app-text-field
           v-model="form.icon"
           label="Icon"
@@ -92,10 +88,10 @@
         </div>
 
         <q-toggle v-model="form.isDefault" label="Default selection" />
-        <!-- Not offered on a value the application writes: hiding it would leave a stage the workflow
-             still reaches with nothing to render, and the API refuses it. -->
+        <!-- Not offered on a value the application writes: hiding it would leave a stage the workflow still
+             reaches with nothing to render, and the API refuses it. -->
         <!-- Hiding a value is refused only on a closed list, where it is a state the application still
-             sets. On an open list a firm may well want to stop offering a seeded value. -->
+             sets. -->
         <q-toggle v-if="item && !(isSystemItem && setIsClosed)" v-model="form.isActive" label="Active" />
       </q-card-section>
       <q-card-actions align="right">
@@ -138,9 +134,7 @@ const notify = useNotify();
 const saving = ref(false);
 const valueError = ref("");
 
-// A value the application itself writes and branches on — an approval status, a form state. Its code is
-// fixed and it cannot be hidden; everything a firm would actually want to change about it (the label, the
-// description, the colours, the icon, where it sits in the list) is open exactly as on any other value.
+// A value the application itself writes and branches on — an approval status, a form state.
 const isSystemItem = computed(() => !!props.item?.isSystem);
 
 const blankForm = () => ({

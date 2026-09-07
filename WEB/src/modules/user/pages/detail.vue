@@ -12,17 +12,12 @@
     <div v-if="loading" class="row flex-center q-pa-xl"><q-spinner color="primary" size="40px" /></div>
 
     <div v-else-if="user">
-      <!-- Who this is, at a glance: the identity, the standing, and the two actions that change it. The
-           status belongs up here — "is this account even usable?" should not be answered below the fold
-           while the fields above it are being edited. -->
+      <!-- Who this is, at a glance: the identity, the standing, and the two actions that change it. -->
       <q-card flat bordered class="user-card q-mb-md">
         <!-- Avatar and identity share a line at every width; the actions drop beneath them on a phone
              rather than squeezing the name into a column two words wide. -->
         <q-card-section class="row items-center q-col-gutter-md">
-          <!-- The avatar gets a column of its own. A q-col-gutter row puts its 16px padding on each
-               direct child, and on a q-avatar that padding lands INSIDE the circle — pushing the
-               initials out of the clipped content box (invisible) and the circle out of line with the
-               cards below it. On a plain wrapper the padding does what it is meant to. -->
+          <!-- The avatar gets a column of its own. -->
           <div class="col-auto">
             <q-avatar size="72px" :color="user.isActive ? 'primary' : 'grey-5'" text-color="white">
               <img v-if="avatarUrl" :src="avatarUrl" alt="">
@@ -85,8 +80,7 @@
       </q-card>
 
       <div class="row q-col-gutter-md">
-        <!-- Left: who they are. Right: what they can reach. Two columns rather than one long stack, so
-             the access cards are beside the identity fields instead of a scroll away from them. -->
+        <!-- Left: who they are. -->
         <div class="col-12 col-md-7">
           <!-- Basic info -->
           <q-card flat bordered class="user-card q-mb-md">
@@ -110,10 +104,7 @@
                 v-model="lastName" label="Last Name" class="col-8 col-sm-4"
                 :readonly="!canEdit" :rules="nameRules('Last name')" @blur="autoSaveBasics"
               />
-              <!-- The generational particle on the name, after the surname where it is read. The same box
-                   every other screen asks it in, so the suggestions and the cap match; saved on the way
-                   past with the rest of the basics, because it lives on the same Person record the two
-                   name fields do. -->
+              <!-- The generational particle on the name, after the surname where it is read. -->
               <app-name-suffix-field
                 v-model="suffix" class="col-4 col-sm-2" :readonly="!canEdit" @blur="autoSaveBasics"
               />
@@ -249,8 +240,7 @@
             </q-card-section>
           </q-card>
 
-          <!-- REMS delegation, arranged on the user's behalf. Self-service lives on their own profile; an
-               admin needs it here to set up cover for somebody who is away or has not thought about it. -->
+          <!-- REMS delegation, arranged on the user's behalf. -->
           <rems-delegates-panel
             v-if="canManageDelegates && inActiveTenant" :principal-user-id="userId"
             :principal-name="user?.displayName || 'this user'" class="q-mb-md"
@@ -371,9 +361,7 @@ const canReadPersons = computed(() => has(Permissions.PersonsRead));
 const userId = route.params.id;
 const user = ref(null);
 const loading = ref(false);
-// The generational particle on the person's name. This page edits the same Person record the People
-// screens do, so it is offered here too — through AppNameSuffixField, like everywhere else, now that this
-// card's fields carry their labels above them rather than inside the box.
+// The generational particle on the person's name.
 const suffix = ref("");
 const firstName = ref("");
 const lastName = ref("");
@@ -389,9 +377,7 @@ const { roleOptions, loading: loadingRoles, loadForTenant } = useRoleOptions();
 // The picture the person set on their own profile, when there is one.
 const avatarUrl = computed(() => mediaApi.absoluteUrl(user.value?.profileMediaUrl));
 
-// The stand-in when there is not: first and last initial. Taken from the name FIELDS rather than by
-// splitting the display name, which is free text and can be an alias, a single word, or carry a title
-// the initials would then be drawn from.
+// The stand-in when there is not: first and last initial.
 const initials = computed(() => {
   const u = user.value;
   if (!u) return "?";
@@ -407,9 +393,7 @@ const initials = computed(() => {
   return (words[0].charAt(0) + last).toUpperCase();
 });
 
-// Every role the caller can see this person holding, flattened for the summary chips. The tenant is on
-// the tooltip rather than the chip: a platform admin looking at somebody in four tenants wants the roles
-// at a glance, not the same four tenant names repeated across a wrapped row.
+// Every role the caller can see this person holding, flattened for the summary chips.
 const summaryRoles = computed(() =>
   visibleAssignments.value.flatMap((a) =>
     (a.roles || []).map((r) => ({
@@ -459,9 +443,7 @@ const loadRoles = async (tenantId) => {
   }
 };
 
-// `syncFields` seeds the inputs from the record. An auto-save refreshes the stored user — the baseline
-// every dirty check reads — but must NOT reseed the inputs: the next field is usually being typed into
-// while the last one is still saving, and reseeding would take those keystrokes back.
+// `syncFields` seeds the inputs from the record.
 const load = async ({ syncFields = true } = {}) => {
   loading.value = !user.value;
   try {
@@ -482,9 +464,7 @@ const load = async ({ syncFields = true } = {}) => {
 };
 
 // ---- Department ----
-// Scoped to the active tenant. A department has exactly one head, and that head IS its REMS Department
-// Director — saving the flag repoints the tenant's department-director mapping, which is what prefills an
-// engagement's Department Director. Taking the headship off someone is confirmed by name first.
+// Scoped to the active tenant.
 const department = ref(null);
 const isDepartmentHead = ref(false);
 const departmentOptions = ref([]);
@@ -537,9 +517,6 @@ const loadDepartments = async () => {
 
 // ---- Auto-save ----
 // The cards on this page save themselves: a field commits when you leave it, a picker when you change it.
-// On blur rather than on a keystroke timer, so a half-typed value is never written; per card rather than
-// per page, so one card's failure cannot swallow another card's edit. Each card says what happened
-// (AppAutoSaveState) — silent success is the one thing an auto-saving form must never be.
 const basicSave = reactive({ state: "idle", message: "" });
 const departmentSave = reactive({ state: "idle", message: "" });
 
@@ -559,9 +536,7 @@ const runAutoSave = async (target, fn) => {
   }
 };
 
-// The name and phone fields. The email travels as STORED, never as typed: it is the sign-in credential
-// with its own confirmation (commitEmail), and a name edit must not be able to carry a half-typed one
-// past that gate.
+// The name and phone fields.
 const autoSaveBasics = async () => {
   const u = user.value;
   if (!canEdit.value || !u) return;
@@ -587,9 +562,7 @@ const autoSaveBasics = async () => {
 };
 
 // The username is the one field that cannot simply be saved on the way past: the API only rejects
-// duplicates, so the format is checked here, and changing it bumps TokenVersion server-side — ending
-// every session the user has. Confirmed by name first, and put back as it was whenever the change does
-// not go through, so what the field shows is always what is stored.
+// duplicates, so the format is checked here.
 const commitEmail = async () => {
   const u = user.value;
   if (!canEdit.value || !u) return;

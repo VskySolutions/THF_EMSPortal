@@ -34,9 +34,7 @@
 </template>
 
 <script setup>
-// Standard single-line text/email/number field. Renders the label as an external top-left label
-// (via AppFieldLabel) with a red asterisk for mandatory fields, and centralises the outlined / dense
-// styling so every form looks and behaves the same (UI consistency).
+// Standard single-line text/email/number field.
 import { computed, toRef } from "vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
 import { useFieldLabel } from "composables/useFieldLabel";

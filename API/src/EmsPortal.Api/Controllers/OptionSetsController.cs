@@ -16,9 +16,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Manage tenant-configurable option lists (e.g. Payment Terms) and their values. Reads require
-/// <c>optionSets.read</c>; writes require <c>optionSets.manage</c>. Values are manageable on every list a
-/// caller can see, standard (seeded) ones included; only deleting a standard LIST is refused. Lists are
-/// scoped to the caller's resolved tenant, and a tenant's own copy of a key hides the standard original.
+/// <c>optionSets.read</c>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -47,7 +45,7 @@ public sealed class OptionSetsController : ControllerBase
 
     private Guid? ScopeTenantId => _tenantContext.IsResolved ? _tenantContext.TenantId : null;
 
-    /// <summary>What the Option Lists list may be ordered by. "Type" is the system/tenant origin flag.</summary>
+    /// <summary>What the Option Lists list may be ordered by.</summary>
     private static readonly SortMap<OptionSetSummaryResponse> ListSorts =
         new SortMap<OptionSetSummaryResponse>("updatedOnUtc")
             .Add("name", s => s.Name)
@@ -71,10 +69,7 @@ public sealed class OptionSetsController : ControllerBase
         var filter = entityType is { } et ? (EntityType)et : (EntityType?)null;
         var sets = await _sets.ListSetsForScopeAsync(ScopeTenantId, filter, cancellationToken);
 
-        // A tenant with its own copy of a standard list sees only that copy. Both rows are in scope (the
-        // shared original never goes away), and showing them together would put the same list on screen
-        // twice — once editable, once not — with no way to tell which one is in force. The tenant's wins,
-        // matching how GetEffectiveSetAsync resolves a key.
+        // A tenant with its own copy of a standard list sees only that copy.
         var owned = sets.Where(s => s.TenantId is not null).Select(s => (s.EntityType, s.Key)).ToHashSet();
         var visible = sets.Where(s => s.TenantId is not null || !owned.Contains((s.EntityType, s.Key))).ToList();
 
@@ -105,25 +100,10 @@ public sealed class OptionSetsController : ControllerBase
             : Ok(ApiResponseFactory.Success(await ToDetailAsync(set, cancellationToken), "Option list retrieved."));
     }
 
-    /// <summary>Effective active values for a key — the tenant's own list when present, else the standard one.</summary>
-    /// <remarks>
-    /// Any authenticated caller, NOT optionSets.read — unlike every other endpoint on this controller.
-    /// This one returns display vocabulary and nothing else: the ACTIVE values of one list in the caller's
-    /// own tenant, with the label, description, colours and icon a screen paints them with. It reveals no
-    /// inactive value, no other tenant's copy, and nothing about who may edit the list.
-    /// <para>
-    /// Open because the screens that READ these words are not the screens that MANAGE them. The REMS seat
-    /// roles — CSE, Engagement Executive, Billing Manager, Shareholder — grant no permissions at all by
-    /// design, yet a Shareholder opens an approval task and must see "Pending Approval" rather than a
-    /// blank badge. Gating this behind optionSets.read is what forced a hardcoded copy of every list into
-    /// the front end to stand in on a 403 — and that copy then drifted from the lists tenants actually
-    /// edit, which is the very thing option sets exist to prevent.
-    /// </para>
-    /// <para>
-    /// The same words already reach ANONYMOUS callers on the public intake form, which resolves its lists
-    /// server-side. So this is not newly exposed, only consistently reachable.
-    /// </para>
-    /// </remarks>
+    /// <summary>
+    /// Effective active values for a key — the tenant's own list when present, else the standard
+    /// one.
+    /// </summary>
     [HttpGet("resolve")]
     [Authorize]
     [ProducesResponseType<ApiResponse<IEnumerable<OptionSetItemResponse>>>(StatusCodes.Status200OK)]
@@ -294,10 +274,8 @@ public sealed class OptionSetsController : ControllerBase
     };
 
     /// <summary>
-    /// Every list a caller can see is manageable — a standard list is a starting point, not a fixed one, so
-    /// its values can be added, renamed, re-ordered and removed. Only DELETING a standard list is refused
-    /// (see <c>OptionSetService.EnsureDeletable</c>). Use <see cref="OptionSet.IsSystem"/>, not this flag,
-    /// to tell Standard from Custom.
+    /// Every list a caller can see is manageable — a standard list is a starting point, not a fixed
+    /// one, so its values can be added, renamed, re-ordered and removed.
     /// </summary>
     private static bool IsEditable(OptionSet set) => true;
 

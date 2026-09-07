@@ -7,17 +7,8 @@
 </template>
 
 <script setup>
-// The standard place to put a note that explains rather than instructs: an info icon beside a heading,
-// with the note on its tooltip.
-//
-// A paragraph of explanation under a section title reads as content on first sight and as noise on every
-// sight after it — the people who need it need it once, and everyone else scrolls past it forever. Behind
-// an icon it stays one hover away and costs the layout a line height instead of three. The same idea
-// AppFieldLabel already applies to a field's `info`, at section scale.
-//
-// Use it for background ("what this list is", "how these people are chosen"), not for anything the user
-// must read to work the screen: a state explanation (why Save is missing), a warning, or a required step
-// stays on the page in the open.
+// The standard place to put a note that explains rather than instructs: an info icon beside a heading, with
+// the note on its tooltip.
 defineProps({
   // The note. Multi-paragraph or marked-up notes can go in the default slot instead.
   text: { type: String, default: "" },

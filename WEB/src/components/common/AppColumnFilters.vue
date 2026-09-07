@@ -20,8 +20,7 @@
 
 <script setup>
 // Renders one filter control per filterable column (select when the column declares filterOptions,
-// otherwise a text "contains" box). Pairs with the useColumnFilters composable; reused by every
-// list's filter drawer so filtering looks and behaves the same everywhere.
+// otherwise a text "contains" box).
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
 

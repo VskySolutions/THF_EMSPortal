@@ -41,13 +41,11 @@
         </q-td>
       </template>
 
-      <!-- The row opens the role's own page. A role the caller does not own opens read-only there:
-           seeing what a platform role grants is part of deciding who to give it to, changing it is a
-           Super Admin's call — but who holds it in this tenant is still theirs to manage. -->
+      <!-- The row opens the role's own page. -->
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- A LINK, not a click handler: the role detail is a place, so this renders as a real
-               <a href> and middle-click / "open in new tab" work on it. -->
+          <!-- A LINK, not a click handler: the role detail is a place, so this renders as a real <a href>
+               and middle-click / "open in new tab" work on it. -->
           <q-btn
             flat round dense color="primary" :icon="cell.row.canManage ? 'o_edit' : 'o_visibility'"
             :to="roleRoute(cell.row)"
@@ -68,9 +66,7 @@
       v-if="canManageDeleted" :entity-type="EntityType.Role" :show="showDeleted" @restored="load"
     />
 
-    <!-- Create. Everything else about a role — its permissions, the groups composing it, who holds it —
-         is on the role's own page, which is where editing one goes. This drawer only has to get a new one
-         far enough to open it. -->
+    <!-- Create. -->
     <app-form-drawer
       v-model="formOpen" title="Create Role" :saving="saving" save-label="Create"
       @submit="submitForm" @cancel="resetForm"
@@ -123,8 +119,7 @@ const authStore = useAuthStore();
 const router = useRouter();
 
 // The list shows every role this caller may see: the platform ones (theirs to read, a Super Admin's to
-// change) and the ones their own tenant created. Which of the two a row is comes from the server as
-// `canManage` — the same rule it enforces on save, rather than a second copy of it here.
+// change) and the ones their own tenant created.
 const isSuperAdmin = computed(() => authStore.roles.includes("SuperAdmin"));
 
 const columns = [
@@ -190,8 +185,7 @@ const loadPermissions = async () => {
 };
 
 // ---- Open ----
-// Editing a role happens on the role's own page. It is a record with permissions, composed groups and a
-// membership hanging off it — more than a drawer can hold, and worth a URL somebody can link to.
+// Editing a role happens on the role's own page.
 const roleRoute = (row) => ({ name: "role_detail", params: { id: row.id } });
 
 const actionTooltip = (row) => (row.canManage ? "Open" : "View");

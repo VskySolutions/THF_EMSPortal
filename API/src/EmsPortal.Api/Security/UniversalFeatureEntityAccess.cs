@@ -6,16 +6,11 @@ namespace EmsPortal.Api.Security;
 
 /// <summary>
 /// Maps a Universal Feature target <see cref="EntityType"/> to the base read permission of its parent
-/// entity, and checks it on the current principal. Universal Feature operations (notes, tags, activity,
-/// modified-log, …) require only the read permission of the record they attach to (Universal Features —
-/// Authentication &amp; Security). Super Admins always pass.
+/// entity, and checks it on the current principal.
 /// </summary>
 public static class UniversalFeatureEntityAccess
 {
-    /// <summary>
-    /// The base read permission(s) gating UF access to a given entity type. Holding ANY one grants
-    /// access, so everyone who can open the parent record can read its notes, tags, activity, etc.
-    /// </summary>
+    /// <summary>The base read permission(s) gating UF access to a given entity type.</summary>
     public static IReadOnlyList<string> RequiredReadPermissions(EntityType entityType) => entityType switch
     {
         EntityType.Tenant => new[] { Permissions.TenantsRead },

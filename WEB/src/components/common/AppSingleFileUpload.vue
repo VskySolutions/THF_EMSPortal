@@ -45,9 +45,8 @@
 </template>
 
 <script setup>
-// Standard single-file upload: a modern click-or-drag-and-drop dropzone with the external top-left
-// label. v-model holds the chosen File (or null). Validates against `accept`/`max-size-mb` and emits
-// `rejected` for invalid files. Use AppMultiFileUpload for many files, AppImageUpload for avatars.
+// Standard single-file upload: a modern click-or-drag-and-drop dropzone with the external top-left label.
+// v-model holds the chosen File (or null).
 import { ref } from "vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
 import AppFilePreviewItem from "components/common/AppFilePreviewItem.vue";
@@ -73,12 +72,8 @@ const error = ref("");
 
 const open = () => { if (!props.disable) inputRef.value?.click(); };
 
-// The picked or dropped files, checked against `accept` / `max-size-mb`.
-//
-// Deliberately NOT named `accept`. A const declared in `<script setup>` shadows the prop of the same name
-// when the template is compiled, so the input's `:accept` bound THIS FUNCTION rather than the extension
-// list — which meant the browser's file picker offered every file on the machine whatever the caller had
-// asked for, and the only thing enforcing ".pdf" was the check below, after the file had been chosen.
+// The picked or dropped files, checked against `accept` / `max-size-mb`. Deliberately NOT named `accept`. A
+// const declared in `<script setup>` shadows the prop of the same name when the template is compiled.
 const acceptFiles = (fileList) => {
   error.value = "";
   const { accepted, error: err } = validateFiles(fileList, { accept: props.accept, maxSizeMb: props.maxSizeMb });

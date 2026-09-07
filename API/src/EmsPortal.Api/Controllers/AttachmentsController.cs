@@ -14,9 +14,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Attachments — files uploaded against any entity record via the shared <c>(EntityType, EntityId)</c>
-/// key. Access requires the read permission of the parent entity. Deletion (permanent, including the
-/// file) is restricted to the uploader or an admin. Tenant-scoped via the ambient query filter.
+/// Attachments — files uploaded against any entity record via the shared <c>(EntityType,
+/// EntityId)</c> key.
 /// </summary>
 [ApiController]
 [Authorize]

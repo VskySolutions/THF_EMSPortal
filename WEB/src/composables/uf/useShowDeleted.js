@@ -1,12 +1,7 @@
 import { ref } from "vue";
 import { usePermissions, Permissions } from "composables/usePermissions";
 
-// Drives the admin-only "Show Deleted" toggle on a list page. When enabled, the host page re-fetches
-// with includeDeleted=true. Exposes helpers to detect deleted rows and retention-overdue rows.
-//
-//   const { canShowDeleted, showDeleted, toggle, isDeleted } = useShowDeleted(reload);
-//
-// The host page passes showDeleted.value into its fetcher (as includeDeleted) and reloads via `reload`.
+// Drives the admin-only "Show Deleted" toggle on a list page.
 export function useShowDeleted (reload) {
   const { has } = usePermissions();
   const canShowDeleted = has(Permissions.RecordsAdminDelete);

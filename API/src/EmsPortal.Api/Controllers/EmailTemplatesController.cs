@@ -11,11 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Manage transactional email templates. Reads require <c>users.read</c>; writes require
-/// <c>email.manage</c>. Tenant Admins manage their tenant's overrides; Super Admins additionally manage
-/// the platform-wide defaults (<c>?global=true</c>) and any tenant's overrides (<c>?tenantId=</c>).
-/// </summary>
+/// <summary>Manage transactional email templates.</summary>
 [ApiController]
 [Authorize]
 [Route("/api/admin/email-templates")]
@@ -48,10 +44,7 @@ public sealed class EmailTemplatesController : ControllerBase
         _users = users;
     }
 
-    /// <summary>
-    /// Fills in the Created/Updated By display names on a page of descriptors. A template that has never
-    /// been overridden carries no actor ids and is returned untouched — there is no edit to attribute.
-    /// </summary>
+    /// <summary>Fills in the Created/Updated By display names on a page of descriptors.</summary>
     private async Task<IReadOnlyList<EmailTemplateDescriptor>> WithAuditNamesAsync(
         IEnumerable<EmailTemplateDescriptor> templates, CancellationToken cancellationToken)
     {
@@ -67,10 +60,7 @@ public sealed class EmailTemplatesController : ControllerBase
             .ToList();
     }
 
-    /// <summary>
-    /// What the Email Templates list may be ordered by. A template nobody has overridden carries no audit
-    /// row at all, so its dates are null — they sort together at one end rather than pretending to a time.
-    /// </summary>
+    /// <summary>What the Email Templates list may be ordered by.</summary>
     private static readonly SortMap<EmailTemplateDescriptor> ListSorts =
         new SortMap<EmailTemplateDescriptor>("updatedOnUtc")
             .Add("displayName", t => t.DisplayName)
@@ -202,11 +192,7 @@ public sealed class EmailTemplatesController : ControllerBase
     private static bool TryParseKey(string key, out EmailTemplateKey templateKey)
         => Enum.TryParse(key, ignoreCase: true, out templateKey) && Enum.IsDefined(templateKey);
 
-    /// <summary>
-    /// Resolves the scope to operate on. Super Admins may target the platform default (<paramref name="global"/>)
-    /// or a tenant; everyone else is pinned to their active tenant and cannot touch the platform default.
-    /// A null scope (with no error) means the platform default.
-    /// </summary>
+    /// <summary>Resolves the scope to operate on.</summary>
     private (Guid? Scope, IActionResult? Error) ResolveScope(Guid? tenantId, bool global)
     {
         if (User.IsSuperAdmin())

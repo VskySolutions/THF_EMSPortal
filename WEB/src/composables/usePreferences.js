@@ -1,12 +1,6 @@
 import { Cookies } from "quasar";
 
 // Per-page preference persistence via browser cookies (UI Development Standards §4.2).
-// Stores page size, sort state, column widths and active filters keyed by page.
-//
-// Usage:
-//   const prefs = usePreferences("tenants");
-//   prefs.set("pageSize", 50);
-//   const size = prefs.get("pageSize", 20);
 export function usePreferences (pageKey) {
   const cookieName = `pref:${pageKey}`;
   const cookieOptions = { expires: 365, path: "/", sameSite: "Lax" };

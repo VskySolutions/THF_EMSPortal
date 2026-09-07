@@ -11,12 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Read-only dashboard aggregations (WO-72). Each section is permission-gated and tenant-scoped:
-/// Tenant Admins see their own tenant; a Super Admin may target any tenant via <c>?tenantId=</c>.
-/// The platform section is Super-Admin only and short-lived cached. Layout endpoints persist a
-/// per-user widget arrangement, defaulting to a role-based layout when none is saved.
-/// </summary>
+/// <summary>Read-only dashboard aggregations (WO-72).</summary>
 [ApiController]
 [Authorize]
 [Route("/api/dashboard")]
@@ -133,15 +128,14 @@ public sealed class DashboardController : ControllerBase
 
     /// <summary>
     /// Super Admins may target any tenant explicitly; with none requested they get the tenant they are
-    /// currently viewing (the claim follows the Super-Admin tenant scope), so the dashboard agrees with
-    /// every other screen instead of silently showing a cross-tenant roll-up. Others are pinned to their
-    /// active tenant.
+    /// currently viewing (the claim follows the Super-Admin tenant scope).
     /// </summary>
     private Guid? ResolveScope(Guid? requestedTenantId)
         => (User.IsSuperAdmin() ? requestedTenantId : null) ?? User.GetActiveTenantId();
 
     /// <summary>
-    /// Resolves the layout tier: Super Admin, else Tenant Admin (users.read + tenants.read), else Common.
+    /// Resolves the layout tier: Super Admin, else Tenant Admin (users.read + tenants.read), else
+    /// Common.
     /// </summary>
     private DashboardRole ResolveDashboardRole()
     {

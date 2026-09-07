@@ -2,10 +2,7 @@ using EmsPortal.Api.Models.Dashboard;
 
 namespace EmsPortal.Api.Dashboard;
 
-/// <summary>
-/// Aggregates the dashboard read models from across the platform's data sources (users, tenants).
-/// Scoped: shares the request's DbContext and tenant scope.
-/// </summary>
+/// <summary>Aggregates the dashboard read models from across the platform's data sources (users, tenants).</summary>
 public interface IDashboardQueryService
 {
     Task<UserDashboardDto> GetUsersAsync(Guid? tenantId, string dateRange, CancellationToken cancellationToken);

@@ -66,8 +66,7 @@
           <q-btn type="a" flat round dense color="primary" icon="o_edit" @click="openEdit(cell.row)">
             <q-tooltip>Edit</q-tooltip>
           </q-btn>
-          <!-- One button per action, all of them on the row. Edit is not repeated: it is already the
-               button beside this one. -->
+          <!-- One button per action, all of them on the row. -->
           <q-btn
             v-if="!cell.row.isActive" type="a"
             flat round dense color="positive" icon="o_check_circle" @click="setActive(cell.row)"
@@ -138,8 +137,7 @@ const { encryptionLabel } = useSmtpOptions();
 const { canChooseTenant } = useTenantOptions();
 
 // The tenant in view comes from the toolbar's global scope control rather than a dropdown of its own —
-// one selection drives every tenant-scoped screen. Still passed explicitly because this API predates the
-// ambient override and takes ?tenantId=; the child drawer/dialog need it for their own calls too.
+// one selection drives every tenant-scoped screen.
 const { selectedTenantId } = useTenantScope();
 const scopeTenantId = () => (canChooseTenant.value && selectedTenantId.value ? selectedTenantId.value : undefined);
 
@@ -156,17 +154,14 @@ const columns = [
   { name: "encryptionType", label: "Encryption", field: "encryptionType", align: "left", default: true, filterable: false },
   { name: "status", label: "Status", field: "isActive", align: "left", sortable: true, default: true, filterOptions: STATUS_OPTIONS },
   // All four from the shared set, so this list keeps the platform convention: the updated pair last and
-  // visible, the created pair a click away in the Columns menu. The API names the actors *ByName here,
-  // hence the overrides.
+  // visible, the created pair a click away in the Columns menu.
   ...auditColumns({ overrides: { createdBy: "createdByName", updatedBy: "updatedByName" } }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ];
 
 const { rows, loading, totalRecords, selected, search, filterOpen, pagination, load, onRequest } = useListTable({
   pageKey: "smtp-accounts",
-  // No default column. This list has an order of its own that no single column expresses — the ACTIVE
-  // account pinned above the rest, then most recently touched — and naming a column here would silently
-  // replace it. Clicking a header still sorts, server-side, like every other list.
+  // No default column.
   defaultSortBy: null,
   fetcher: ({ page, limit, sortBy, descending }) =>
     smtpAccountApi.list({

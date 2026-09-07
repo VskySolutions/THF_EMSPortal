@@ -27,10 +27,8 @@
               <q-icon :name="metaFor(n.type).icon" :color="metaFor(n.type).color" />
             </q-item-section>
             <q-item-section>
-              <!-- The title WRAPS. It was `ellipsis` — one line, cut off with a "…" — and a title is the
-                   one part of a notification that has to be readable without opening it: "A REMS
-                   engagement was declined…" could be any engagement, and the reader had no way to tell
-                   which without clicking through. A dropdown row is cheap; a wrong guess is not. -->
+              <!-- The title WRAPS. It was `ellipsis` — one line, cut off with a "…" — and a title is
+                   the one part of a notification that has to be readable without opening. -->
               <q-item-label class="text-weight-medium notif__title">{{ n.title }}</q-item-label>
               <q-item-label caption lines="2">{{ n.body }}</q-item-label>
               <q-item-label caption>{{ formatDateTime(n.createdOnUtc) }}</q-item-label>

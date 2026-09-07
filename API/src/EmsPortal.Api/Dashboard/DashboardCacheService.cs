@@ -3,8 +3,8 @@ using Microsoft.Extensions.Caching.Memory;
 namespace EmsPortal.Api.Dashboard;
 
 /// <summary>
-/// Short-lived in-process cache for expensive dashboard aggregations (primarily the platform
-/// fan-out). 60-second TTL; <c>forceRefresh</c> evicts the entry and re-queries.
+/// Short-lived in-process cache for expensive dashboard aggregations (primarily the platform fan-out).
+/// 60-second TTL; <c>forceRefresh</c> evicts the entry and re-queries.
 /// </summary>
 public interface IDashboardCacheService
 {

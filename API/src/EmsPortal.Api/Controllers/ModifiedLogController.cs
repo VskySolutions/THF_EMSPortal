@@ -11,11 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Modified Log — field-level change history. History and icon-count reads require the read permission of
-/// the parent entity; the tracked-field configuration matrix requires <c>settings.manage</c>. The log is
-/// written only by the <c>FieldChangeInterceptor</c>; this controller never writes log entries.
-/// </summary>
+/// <summary>Modified Log — field-level change history.</summary>
 [ApiController]
 [Authorize]
 [Produces("application/json")]

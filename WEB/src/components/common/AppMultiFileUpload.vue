@@ -48,9 +48,8 @@
 </template>
 
 <script setup>
-// Standard multi-file upload: a modern click-or-drag-and-drop dropzone with the external top-left
-// label. v-model holds the array of chosen Files (appended on each pick/drop). Validates against
-// `accept`/`max-size-mb` and emits `rejected` for invalid files.
+// Standard multi-file upload: a modern click-or-drag-and-drop dropzone with the external top-left label.
+// v-model holds the array of chosen Files (appended on each pick/drop).
 import { ref } from "vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
 import AppFilePreviewItem from "components/common/AppFilePreviewItem.vue";

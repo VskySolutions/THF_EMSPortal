@@ -2,19 +2,13 @@ import { ref } from "vue";
 import { ufColourApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
 
-// The swatches a user may tint a row with. ONE palette for the whole platform: a colour is a private
-// mark, and the same eight colours have to mean the same eight colours whether they were picked from a
-// list row or from a record's own action bar. Eight is deliberate — a palette a reader has to hunt
-// through is a palette nobody uses twice.
+// The swatches a user may tint a row with.
 export const ROW_COLOUR_PALETTE = Object.freeze([
   "#ef5350", "#ec407a", "#ab47bc", "#5c6bc0", "#42a5f5", "#26a69a", "#9ccc65", "#ffa726"
 ]);
 
-// Batch colour-code fetch + write for a list page: given the visible rows' ids, keeps a reactive
-// map { entityId: colour } for AppDataTable's `row-colours`, and writes one row's colour back.
-//
-// A colour is PERSONAL — it is stored against (user, entityType, entityId), so what one person marks
-// red nobody else ever sees. That is the whole feature: a private mark on a shared list.
+// Batch colour-code fetch + write for a list page: given the visible rows' ids, keeps a reactive map {
+// entityId: colour } for AppDataTable's `row-colours`, and writes one row's colour back.
 export function useColourCodes (entityType) {
   const notify = useNotify();
   const colours = ref({});

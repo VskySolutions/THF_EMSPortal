@@ -44,10 +44,7 @@
         </q-card-section>
       </q-card>
 
-      <!-- The tenant's own user accounts. Managing a tenant IS largely managing who is in it, and until
-           now the only way to see that was to switch the whole application into the tenant and go to the
-           Users page. The list is asked for by tenant id, so it stays this tenant's however the toolbar's
-           "View as" is set. -->
+      <!-- The tenant's own user accounts. -->
       <app-data-table
         v-if="canReadUsers"
         page-key="tenant-users"
@@ -89,8 +86,7 @@
             >
               <q-tooltip>View / Manage</q-tooltip>
             </q-btn>
-            <!-- One button per action, all of them on the row. Activate and Deactivate are two states of
-                 one action, so they are one button that says which way it will go. -->
+            <!-- One button per action, all of them on the row. -->
             <q-btn
               v-if="canWriteUsers" type="a"
               flat round dense
@@ -172,9 +168,7 @@ const name = ref("");
 const savingName = ref(false);
 const archiveError = ref("");
 
-// Whether the tenant being edited is one the signed-in user actually belongs to. Their own membership
-// list — which is what the tenant SWITCHER and the header are named from — is cached at sign-in, so a
-// rename of a tenant they are in is stale everywhere until the profile is read again.
+// Whether the tenant being edited is one the signed-in user actually belongs to.
 const authStore = useAuthStore();
 const tenantStore = useTenantStore();
 const isOwnTenant = computed(() => tenantStore.assignments.some((t) => t.tenantId === tenantId));
@@ -252,10 +246,7 @@ const archive = async () => {
 // ---------------------------------------------------------------------------------------------------
 // The tenant's user accounts
 // ---------------------------------------------------------------------------------------------------
-// Asked for by tenant id rather than by switching the application into the tenant: this page is ABOUT
-// one tenant, and the accounts in it are part of what there is to manage. `reloadOnTenantSwitch` is off
-// for the same reason — the toolbar's tenant scope decides what the rest of the app is looking at, and
-// this list is not one of the things it decides.
+// Asked.
 const canReadUsers = computed(() => has(Permissions.UsersRead));
 const canWriteUsers = computed(() => has(Permissions.UsersWrite));
 const canResetPassword = computed(() => has(Permissions.UsersResetPassword));
@@ -265,8 +256,7 @@ const tempPwOpen = ref(false);
 const tempPassword = ref("");
 
 // No Tenant column and no Department column: every row here is this tenant's, and a department is read
-// through the caller's ACTIVE tenant, which this one need not be — the server sends none, so asking for
-// the column would only promise a cell that is always empty.
+// through the caller's ACTIVE tenant, which this one need not be — the server sends none.
 const userColumns = [
   { name: "fullName", label: "Name", field: "fullName", align: "left", sortable: true, default: true },
   { name: "email", label: "Email", field: "email", align: "left", sortable: true, default: true },

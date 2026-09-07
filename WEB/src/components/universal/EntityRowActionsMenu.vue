@@ -102,8 +102,6 @@ import AppFormDrawer from "components/common/AppFormDrawer.vue";
 import AppTextField from "components/common/AppTextField.vue";
 
 // The full Universal Features action set as menu items, for use inside a list row's "more" menu.
-// Drop entity-specific items (View/Edit/Delete) into the default slot and they render above the
-// universal actions in the same menu.
 const props = defineProps({
   entityType: { type: Number, required: true },
   entityId: { type: String, required: true },

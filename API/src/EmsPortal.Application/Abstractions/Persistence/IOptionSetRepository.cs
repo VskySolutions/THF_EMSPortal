@@ -3,14 +3,10 @@ using EmsPortal.Domain.Enums;
 
 namespace EmsPortal.Application.Abstractions.Persistence;
 
-/// <summary>
-/// Persistence for tenant-configurable option lists. Standard lists carry a null <c>TenantId</c> and
-/// are visible to every tenant; a tenant's own lists carry its id. Reads return the standard rows
-/// unioned with the caller tenant's rows.
-/// </summary>
+/// <summary>Persistence for tenant-configurable option lists.</summary>
 public interface IOptionSetRepository
 {
-    /// <summary>Standard lists ∪ the tenant's lists, optionally filtered by entity type. Items not loaded.</summary>
+    /// <summary>Standard lists ∪ the tenant's lists, optionally filtered by entity type.</summary>
     Task<IReadOnlyList<OptionSet>> ListSetsForScopeAsync(Guid? tenantId, EntityType? entityType, CancellationToken cancellationToken = default);
 
     /// <summary>A single list (standard or owned by the tenant) including its items, or null.</summary>
@@ -32,9 +28,8 @@ public interface IOptionSetRepository
     Task<IReadOnlyList<OptionSetItem>> ListItemsAsync(Guid setId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Items by ID, across every list and scope — what the option-code resolver reads to turn the ids
-    /// stored on a row back into the codes the application branches on. Unscoped by tenant deliberately: an
-    /// item id is unique platform-wide, and a row already holding one is holding it whoever reads the row.
+    /// Items by ID, across every list and scope — what the option-code resolver reads to turn the
+    /// ids stored on a row back into the codes the application branches on.
     /// </summary>
     Task<IReadOnlyList<OptionSetItem>> ListItemsByIdsAsync(IReadOnlyCollection<Guid> itemIds, CancellationToken cancellationToken = default);
 

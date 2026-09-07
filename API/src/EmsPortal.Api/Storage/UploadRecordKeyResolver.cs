@@ -3,11 +3,7 @@ using EmsPortal.Domain.Enums;
 
 namespace EmsPortal.Api.Storage;
 
-/// <summary>
-/// Names the folder a record owns in the upload tree. Records that carry a human-readable number use
-/// it (<c>Rems/REMS-42</c>, <c>Person/PER-A1B2C3D4E5</c>) so a folder on the server says what it holds
-/// without a database lookup; everything else falls back to its id.
-/// </summary>
+/// <summary>Names the folder a record owns in the upload tree.</summary>
 public interface IUploadRecordKeyResolver
 {
     /// <summary>

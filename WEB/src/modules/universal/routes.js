@@ -1,7 +1,4 @@
-// Universal Features platform-level routes (Phase 15). Feature panels attach to existing detail pages;
-// these are the standalone pages: notification centre, mention inbox, pinned records, and the admin
-// settings pages. All require authentication; admin pages additionally gate on settings.manage /
-// records.adminDelete via route meta.
+// Universal Features platform-level routes (Phase 15).
 export default [
   {
     path: "/",

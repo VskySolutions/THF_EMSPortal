@@ -9,11 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Reminders — personal, date-based reminders a user sets against any entity record. The owner is the
-/// authenticated user; only the owner may edit, and the owner or an admin may cancel. Due reminders are
-/// dispatched (in-app + email) by the recurring background job. Tenant-scoped via the ambient filter.
-/// </summary>
+/// <summary>Reminders — personal, date-based reminders a user sets against any entity record.</summary>
 [ApiController]
 [Authorize]
 [Route("/api/uf/reminders")]

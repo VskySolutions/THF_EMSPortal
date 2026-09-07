@@ -11,9 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Role ↔ Permission Group composition — the bridge in the Permission Keys → Groups → Roles → Users
-/// hierarchy. Assigning/removing groups recomputes the role's cached effective permission set, which
-/// flows into the JWT <c>permissions[]</c> claim on the next token refresh. Requires roles management.
+/// Role ↔ Permission Group composition — the bridge in the Permission Keys → Groups → Roles
+/// → Users hierarchy.
 /// </summary>
 [ApiController]
 [Route("/api/admin/roles/{roleId:guid}")]
@@ -123,9 +122,8 @@ public sealed class RoleGroupCompositionController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden("Groups must belong to your tenant."));
         }
 
-        // Capacity (WO-119): composing this role into a group that already has users must not push the
-        // group's usage past its limit (AC-PG-013.2). Check every newly-composed capped group up front
-        // — the role's active users would join the group's population — and reject before any write.
+        // Capacity (WO-119): composing this role into a group that already has users must not push the group's
+        // usage past its limit (AC-PG-013.2).
         foreach (var group in loaded)
         {
             if (group.CapacityLimit is not { } limit)

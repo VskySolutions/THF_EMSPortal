@@ -1,16 +1,5 @@
-// Reading a file that is already STORED on the server — the counterpart to useFileDrop, which describes
-// a File the browser is still holding.
-//
-// A stored file cannot simply be linked to. /api/media/{id}/content refuses an anonymous caller for
-// anything but a profile picture, and a browser following a plain href sends no Authorization header, so
-// every attachment link opened onto {"success":false,"code":"UNAUTHORIZED"} instead of the document. The
-// bytes are pulled through the authenticated client here and handed to the tab as a blob URL, which is
-// the one shape of link a fresh tab can follow without credentials of its own.
-//
-// Shapes accepted: the REMS request's `files` rows ({ id, mediaId, fileName, mimeType, fileSize, url }),
-// the UF attachment rows ({ id, fileName, fileExtension, fileSize }) and a bare media response
-// ({ id, originalFileName, mimeType }). Everything below reads whichever of those keys is present rather
-// than asking every call site to reshape its rows first.
+// Reading a file that is already STORED on the server — the counterpart to useFileDrop, which describes a
+// File the browser is still holding.
 
 import { mediaApi } from "services/api";
 import { extOf, formatFileSize, iconForExtension, isImageExtension } from "composables/useFileDrop";
@@ -42,19 +31,9 @@ export const describeStored = (file) => {
 };
 
 // The tab holds the blob for as long as it is rendering it; the URL only has to survive the navigation.
-// Two minutes is long enough for a slow PDF to paint and short enough that reading a folder of documents
-// does not pin every one of them in memory for the session.
 const REVOKE_AFTER_MS = 120000;
 
-/**
- * Fetches a stored file's bytes. Media is the default store, but not the only one — Universal Features
- * keeps its attachments behind /api/uf/attachments/{id}/download — so a caller whose file lives
- * elsewhere passes its own `fetchBlob`.
- *
- * Exported because opening a file is not the only reason to want its bytes: the preview row reads them
- * to draw a thumbnail of a stored image, and then hands the same blob back to `openStoredFile` so a
- * picture that has already been previewed opens without being downloaded twice.
- */
+/** Fetches a stored file's bytes. */
 export const fetchStoredBytes = (file, fetchBlob = null) => {
   if (fetchBlob) return fetchBlob(file);
   const mediaId = mediaIdOf(file);
@@ -62,17 +41,7 @@ export const fetchStoredBytes = (file, fetchBlob = null) => {
   return mediaApi.content(mediaId);
 };
 
-/**
- * Opens a stored file in a new browser tab.
- *
- * The tab is opened SYNCHRONOUSLY, before the download starts: a window.open() that runs after an await
- * is no longer attributable to the click that caused it, and pop-up blockers stop it. So a blank tab is
- * claimed in the click's own tick and pointed at the blob once it arrives. If the browser blocked even
- * that, the file is saved instead of shown — better than a click that appears to do nothing.
- *
- * Returns nothing and throws on failure, so callers can report it the way they report any other API
- * error.
- */
+/** Opens a stored file in a new browser tab. */
 export async function openStoredFile (file, fetchBlob = null) {
   const tab = window.open("", "_blank");
   try {

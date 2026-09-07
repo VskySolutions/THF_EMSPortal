@@ -28,9 +28,7 @@
 </template>
 
 <script setup>
-// Quick-add Person dialog used inline by the user-create form (the "+" next to the Person
-// dropdown). Reuses the shared PersonFormFields, creates the person, and emits `created`
-// with the new person so the caller can auto-select it.
+// Quick-add Person dialog used inline by the user-create form (the "+" next to the Person dropdown).
 import { ref, reactive, computed, watch } from "vue";
 import { personApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -41,8 +39,7 @@ import PersonFormFields from "components/person/PersonFormFields.vue";
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   // The tenant the person belongs to, when the caller already knows it — the tenant-management screen,
-  // which is looking at one tenant and adding somebody to it. Given, the tenant question is settled and
-  // its dropdown is not asked, even of a Super Admin who would otherwise choose.
+  // which is looking at one tenant and adding somebody to it.
   tenantId: { type: String, default: null }
 });
 const emit = defineEmits(["update:modelValue", "created"]);

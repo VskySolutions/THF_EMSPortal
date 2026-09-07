@@ -1,10 +1,4 @@
 // NotificationType enum mirror (backend EmsPortal.Domain.Enums.NotificationType).
-//
-// EVERY VALUE HERE IS ONE THE BACKEND ACTUALLY SENDS. This list becomes the type filter on the
-// notifications page, so a value the server can never raise is a filter that always finds nothing.
-// Retired numbers, never to be reused: 3, 4, 5 (sync notifications, from an integration that no longer
-// exists), 6 (a generic "System" catch-all nothing raised) and 14 (approval resubmitted — a resubmitted
-// round arrives as RemsApprovalRequested with a different title).
 export const NotificationType = Object.freeze({
   Mention: 1,
   ReminderDue: 2,

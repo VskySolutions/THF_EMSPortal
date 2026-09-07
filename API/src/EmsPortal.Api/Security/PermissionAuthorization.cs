@@ -12,8 +12,8 @@ public static class PermissionAuthorizationDefaults
 }
 
 /// <summary>
-/// An authorization requirement satisfied when the caller holds ANY of the listed permission keys
-/// (see <see cref="Permissions"/>). A single permission is the common case; multiple express an OR.
+/// An authorization requirement satisfied when the caller holds ANY of the listed permission keys (see
+/// <see cref="Permissions"/>).
 /// </summary>
 public sealed class PermissionRequirement : IAuthorizationRequirement
 {
@@ -22,11 +22,7 @@ public sealed class PermissionRequirement : IAuthorizationRequirement
     public IReadOnlyList<string> Permissions { get; }
 }
 
-/// <summary>
-/// Grants a <see cref="PermissionRequirement"/> when the caller carries any of its permission
-/// claims. As a fallback for callers without explicit permission claims (API-key callers and
-/// pre-RBAC tokens), the role claim is mapped to its seeded system-role permission set.
-/// </summary>
+/// <summary>Grants a <see cref="PermissionRequirement"/> when the caller carries any of its permission claims.</summary>
 public sealed class PermissionAuthorizationHandler : AuthorizationHandler<PermissionRequirement>
 {
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)

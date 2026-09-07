@@ -20,9 +20,7 @@
       @blur="onBlur"
     >
       <template #append>
-        <!-- The whole point of the icon is that somebody can see it. The native control's own glyph is a
-             low-contrast grey square the browser draws at whatever size it likes; this is the app's
-             primary colour, a full calendar grid rather than a smudge, and it is obviously a button. -->
+        <!-- The whole point of the icon is that somebody can see it. -->
         <q-icon
           name="o_calendar_month"
           size="21px"
@@ -60,17 +58,6 @@
 <script setup>
 // Standard date field. v-model is an ISO calendar date ("YYYY-MM-DD") — what every endpoint stores and
 // what a DateOnly column round-trips — while the box READS MM/DD/YYYY, the app's display format.
-//
-// It was `<q-input type="date">`, i.e. the browser's own control, which had two problems a form this size
-// cannot afford. Its calendar glyph is drawn by the browser: small, grey, low-contrast, and in Chrome
-// tucked against the right edge where people simply did not see it. And the panel behind it is the
-// BROWSER's, so it matched nothing else on screen and differed between Chrome, Firefox and Safari.
-// It is Quasar's q-date now — the same widget the rest of the app's popups are built from, in the app's
-// own palette, identical everywhere.
-//
-// The box stays TYPEABLE. A picker alone is fine for next Tuesday and miserable for a date of birth,
-// where it means clicking back forty years — so the value can be typed as MM/DD/YYYY behind a mask, and
-// the calendar is there for the dates worth pointing at.
 import { ref, computed, toRef, watch } from "vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
 import { useFieldLabel } from "composables/useFieldLabel";
@@ -101,9 +88,8 @@ const popupRef = ref(null);
 const locked = computed(() => props.readonly || props.disable);
 
 // ---- ISO ⇄ MM/DD/YYYY ----
-// Reformatted from the STRING, never through a Date object: "2026-12-31" parsed as a date is parsed as
-// UTC midnight and read back a day early anywhere west of Greenwich, which turns a fiscal year end of
-// 31 December into the 30th.
+// Reformatted from the STRING, never through a Date object: "2026-12-31" parsed as a date is parsed as UTC
+// midnight and read back a day early anywhere west of Greenwich.
 const isoToDisplay = (iso) => formatDateOnly(iso, "");
 
 const displayToIso = (text) => {
@@ -118,9 +104,7 @@ const displayToIso = (text) => {
   return day > lastDay ? null : `${yyyy}-${mm}-${dd}`;
 };
 
-// What the box shows. A local ref rather than a computed with a setter: a half-typed "06/2" is not a
-// date, so it emits nothing — and a computed would immediately overwrite it with the last committed
-// value, which makes the field impossible to type in.
+// What the box shows.
 const display = ref(isoToDisplay(props.modelValue));
 
 watch(() => props.modelValue, (iso) => {

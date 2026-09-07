@@ -22,8 +22,8 @@
           <q-item-label caption>{{ captionFor(member) }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <!-- Their last role here IS their access to the tenant; ending that is a decision taken on
-               their own page, where it says so. The server refuses it either way. -->
+          <!-- Their last role here IS their access to the tenant; ending that is a decision taken on their
+               own page, where it says so. -->
           <q-btn
             flat round dense color="negative" icon="o_remove_circle_outline"
             :disable="member.isOnlyRole" @click="removeMember(member)"
@@ -75,9 +75,7 @@ import { useConfirm } from "composables/useConfirm";
 import AppSelect from "components/common/AppSelect.vue";
 import AppInfoTip from "components/common/AppInfoTip.vue";
 
-// Who holds this role in the active tenant. Membership is tenant data even when the role belongs to the
-// platform, so this panel works on a role the caller cannot otherwise edit — a tenant admin decides who
-// in their firm is a "Partner" without being able to change what Partner grants.
+// Who holds this role in the active tenant.
 const props = defineProps({
   roleId: { type: String, default: null },
   roleName: { type: String, default: "" }

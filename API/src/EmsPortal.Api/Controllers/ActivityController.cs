@@ -8,11 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Activity timeline — the read-only, append-only event feed for any entity record. Events are written
-/// in-process by modules via <c>ActivityEventWriter</c>; this controller exposes them for display only
-/// (no mutations). Access requires the read permission of the parent entity.
-/// </summary>
+/// <summary>Activity timeline — the read-only, append-only event feed for any entity record.</summary>
 [ApiController]
 [Authorize]
 [Route("/api/uf/activity")]

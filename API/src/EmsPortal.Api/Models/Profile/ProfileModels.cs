@@ -18,11 +18,11 @@ public sealed class AddressInput
     public string? PostalCode { get; set; }
 }
 
-/// <summary>Update payload for a person profile. Null fields are left unchanged.</summary>
+/// <summary>Update payload for a person profile.</summary>
 public sealed class UpdatePersonProfileRequest
 {
     // Personal
-    /// <summary>The generational particle on the name. Free text; not part of the filed name.</summary>
+    /// <summary>The generational particle on the name.</summary>
     public string? Suffix { get; set; }
 
     public string? FirstName { get; set; }
@@ -50,7 +50,7 @@ public sealed class UpdatePersonProfileRequest
 
     public string? Notes { get; set; }
 
-    /// <summary>Profile image reference (a <c>Media</c> id). Set to attach/replace the photo.</summary>
+    /// <summary>Profile image reference (a <c>Media</c> id).</summary>
     public Guid? ProfileMediaId { get; set; }
 
     /// <summary>When true, clears the profile image (takes precedence over <see cref="ProfileMediaId"/>).</summary>

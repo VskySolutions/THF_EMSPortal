@@ -47,9 +47,7 @@ import EntityChecklistsPanel from "./EntityChecklistsPanel.vue";
 import EntityAttachmentsPanel from "./EntityAttachmentsPanel.vue";
 
 // The reusable Universal Features collaboration panel: inline tags plus a tabbed conversation, activity,
-// checklists and attachments for any (entityType, entityId). Drop it onto any detail page:
-//   <entity-universal-panel :entity-type="EntityType.User" :entity-id="userId" />
-// Pick/Order sections with `tabs`, hide tags with `:show-tags="false"`, add a heading with `title`.
+// checklists and attachments for any (entityType, entityId).
 const TAB_REGISTRY = {
   conversation: { label: "Conversation", icon: "o_chat", component: EntityConversationPanel },
   activity: { label: "Activity", icon: "o_history", component: EntityActivityTimeline },

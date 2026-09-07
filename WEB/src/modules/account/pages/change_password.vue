@@ -18,8 +18,7 @@
 
 <script setup>
 // The dedicated change-password screen, also used as the forced-change gate after a first sign-in or a
-// password reset. The form itself is shared with the card on /account/profile (ChangePasswordForm) so both
-// enforce exactly the same rules.
+// password reset.
 import { ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import { useAuthStore } from "stores/auth";

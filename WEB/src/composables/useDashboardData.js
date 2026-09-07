@@ -1,11 +1,7 @@
 import { ref, watch, onMounted, unref } from "vue";
 import { dashboardApi, getApiErrorMessage } from "services/api";
 
-// Dashboard data composables (WO-73). Each owns independent loading/error/state and re-fetches when
-// the date range (or tenant) changes. Errors are captured on the composable's `error` ref and NEVER
-// thrown — one category failing must not break the others on the page.
-//
-// Each composable accepts (dateRange: Ref<string>, tenantId?: Ref<Guid|null>).
+// Dashboard data composables (WO-73).
 
 const paramsFrom = (dateRange, tenantId) => {
   const params = { dateRange: unref(dateRange) };

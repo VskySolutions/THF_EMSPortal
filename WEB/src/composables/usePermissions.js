@@ -41,8 +41,7 @@ export const Permissions = Object.freeze({
   // Arranging cover for somebody ELSE. Naming your own delegates is self-service and needs no key.
   RemsDelegationsManage: "rems.delegations.manage"
   // No "approvals.act" key: deciding an approval task is authorised by owning the task, not by a
-  // permission, so the Approvals inbox and task detail are open to every authenticated user and the
-  // server returns only the caller's own tasks. Mirrors EmsPortal.Shared.Security.Permissions.
+  // permission.
 });
 
 // Reactive permission checks for the active tenant. `has`/`hasAny` read the auth store's

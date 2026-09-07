@@ -1,9 +1,6 @@
 namespace EmsPortal.Api.Dashboard;
 
-/// <summary>
-/// Role-based default dashboard widget orders. Returned by the layout endpoint when a user has not
-/// saved a personalised layout. Widget keys are the contract shared with the frontend.
-/// </summary>
+/// <summary>Role-based default dashboard widget orders.</summary>
 public static class DashboardDefaultLayouts
 {
     /// <summary>Widgets every authenticated user sees when no role-specific layout applies.</summary>
@@ -27,10 +24,7 @@ public static class DashboardDefaultLayouts
         _ => Common,
     };
 
-    /// <summary>
-    /// Widgets hidden by default. No widgets are hidden by default: a user lands on the full set of
-    /// widgets for their role and can hide any of them from Customise.
-    /// </summary>
+    /// <summary>Widgets hidden by default.</summary>
     public static IReadOnlyList<string> DefaultHiddenFor(DashboardRole role) => Array.Empty<string>();
 }
 

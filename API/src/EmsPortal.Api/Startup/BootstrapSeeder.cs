@@ -10,9 +10,8 @@ using EmsPortal.Shared.Security;
 namespace EmsPortal.Api.Startup;
 
 /// <summary>
-/// Seeds a bootstrap Super Admin (and a default tenant) on first startup when the platform
-/// has no users, so the system is usable out of the box. Credentials come from the
-/// <c>Bootstrap</c> configuration section. Idempotent: does nothing once any user exists.
+/// Seeds a bootstrap Super Admin (and a default tenant) on first startup when the platform has no
+/// users, so the system is usable out of the box.
 /// </summary>
 public static class BootstrapSeeder
 {
@@ -111,9 +110,7 @@ public static class BootstrapSeeder
             // REMS operational roles (WO-122). Assigned per (user, tenant), stackable with other roles.
             (Roles.Partner, "REMS Partner: create and manage their own requests.", Permissions.ForPartner()),
             (Roles.Admin, "REMS Admin: full request lifecycle, EMS Review, forms, engagements, approvals routing and email log, plus deciding approval tasks assigned to them (as CSE or commission recipient).", Permissions.ForAdmin()),
-            // The REMS seats. They grant nothing (Permissions.ForSeatRole) — holding one makes the user
-            // offerable in the picker that fills that seat on an engagement. Seeded here so the pickers
-            // have something to offer in every tenant without anyone building the lists by hand first.
+            // The REMS seats.
             (Roles.Cse, "REMS CSE: offerable as the Client Service Executive on an engagement, and as a commission recipient.", Permissions.ForSeatRole()),
             (Roles.EngagementExecutive, "REMS Engagement Executive: offerable as the Engagement Executive on an engagement.", Permissions.ForSeatRole()),
             (Roles.BillingManager, "REMS Billing Manager: offerable as the Billing Manager on an engagement.", Permissions.ForSeatRole()),
@@ -148,11 +145,7 @@ public static class BootstrapSeeder
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Seeds the platform-wide default email templates (one per <see cref="EmailTemplateKey"/>). Idempotent
-    /// and non-destructive: a default is inserted only when absent, so Super Admin edits to the global
-    /// templates survive restarts.
-    /// </summary>
+    /// <summary>Seeds the platform-wide default email templates (one per <see cref="EmailTemplateKey"/>).</summary>
     private static async Task SeedEmailTemplatesAsync(IEmailTemplateRepository templates, IUnitOfWork unitOfWork, CancellationToken cancellationToken)
     {
         var added = false;
@@ -180,11 +173,7 @@ public static class BootstrapSeeder
         }
     }
 
-    /// <summary>
-    /// Seeds the platform-standard option lists (TenantId = null, IsSystem = true). Idempotent and
-    /// non-destructive: a standard list is inserted only when its key is absent, so tenant additions
-    /// and any later edits to the standard items survive restarts.
-    /// </summary>
+    /// <summary>Seeds the platform-standard option lists (TenantId = null, IsSystem = true).</summary>
     private static async Task SeedOptionSetsAsync(IOptionSetRepository sets, IUnitOfWork unitOfWork, CancellationToken cancellationToken)
     {
         var added = false;

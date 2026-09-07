@@ -1,11 +1,4 @@
 // Dashboard widget registry (WO-73) — the single source of truth for every dashboard widget.
-//
-// Each entry: { key, title, description, role, category, component }
-//   role     ∈ "common" | "tenantAdmin" | "superAdmin"  (visibility tier)
-//   category ∈ "users" | "platform"  (data source)
-//   component  lazy async import of the widget SFC
-//
-// Keys/roles/categories/paths must stay in lockstep with the backend DashboardDefaultLayouts.
 
 export const WIDGETS = [
   // ---- TENANT ADMIN ----

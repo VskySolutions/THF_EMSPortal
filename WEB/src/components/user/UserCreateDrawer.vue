@@ -34,9 +34,7 @@
           info="The roles assignable in the chosen tenant, grouped System / Operational / Custom. Super Admin is only listed for a Super Admin."
         />
 
-        <!-- Department + groups, the same placements the user's detail page manages. Both are tenant-scoped
-             and their endpoints reject a user who holds no assignment in the caller's active tenant, so the
-             section only appears when the account is being created there. -->
+        <!-- Department + groups, the same placements the user's detail page manages. -->
         <template v-if="inActiveTenant">
           <app-select
             v-model="form.department" :options="departmentOptions" :loading="loadingDepartments"
@@ -75,12 +73,6 @@
 <script setup>
 // The Create User drawer: promote an existing Person to a login account, give it roles, and optionally
 // place it in a department and some groups.
-//
-// One component rather than one per screen, because two screens create users and they must create the
-// same thing: the All Users list (where the tenant is asked, or is the caller's own) and a tenant's own
-// page (where the tenant is already settled, and is passed in as `tenant-id`). The difference between
-// them is that one prop — everything else, including which roles are offered and which placements can be
-// applied, follows from the tenant the account is going into.
 import { ref, reactive, computed, watch } from "vue";
 import { userApi, personApi, userGroupApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { usePermissions, Permissions } from "composables/usePermissions";
@@ -198,8 +190,7 @@ const onPersonCreated = (detail) => {
 
 // ---- Department & groups (as on the user's detail page) ----
 // Both live in the caller's ACTIVE tenant: the pickers are loaded from it and the endpoints require the
-// user to hold an assignment there. A platform admin creating an account in some other tenant therefore
-// sets neither here — they do it after switching into that tenant.
+// user to hold an assignment there.
 const inActiveTenant = computed(() => !!activeTenantId.value && targetTenantId.value === activeTenantId.value);
 
 const departmentOptions = ref([]);
@@ -297,9 +288,8 @@ const resetForm = () => {
   emailError.value = "";
 };
 
-// Everything the drawer offers depends on which tenant the account is going into, so it is all loaded
-// when the drawer opens rather than once on mount: the same drawer is opened again for a different
-// tenant, and a person list or a role list left over from the last one would be the wrong tenant's.
+// Everything the drawer offers depends on which tenant the account is going into, so it is all loaded when
+// the drawer opens rather than once on mount: the same drawer is opened again for a different tenant.
 watch(open, async (isOpen) => {
   if (!isOpen) return;
   resetForm();

@@ -3,25 +3,8 @@ import { ufPinApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useColourCodes, ROW_COLOUR_PALETTE } from "composables/uf/useColourCodes";
 
-/**
- * The two PERSONAL marks a user may put on a list row: a pin that floats it to the top, and a colour
- * that tints it. Both are stored against (user, entityType, entityId), so neither is ever visible to
- * anybody else — that is what makes them safe to offer on a shared list.
- *
- * One composable rather than two because a list wants one call after each load and one object to hand
- * the table. The colour half is `useColourCodes`; the pin half is here, because a LIST needs the whole
- * set at once (`usePins` answers "is this one record pinned?", which is the detail-page question and
- * would be one request per row here).
- *
- *   const marks = useRowPersonalisation(EntityType.Rems);
- *   watch(rows, (r) => marks.sync(r.map((x) => x.id)));
- *   <app-data-table :pinned-row-keys="marks.pinnedRowKeys.value" :row-colours="marks.colours.value" />
- *
- * WHAT PINNING DOES HERE: it floats the row to the top of the page it is on, which is AppDataTable's
- * own contract. The list itself is ordered by the server, and it does not know about anybody's pins —
- * so a pinned record sitting on page 4 stays on page 4. "My Pinned" (Account → My Pinned) is the view
- * that gathers them across everything.
- */
+/** The two PERSONAL marks a user may put on a list row: a pin that floats it to the top, and a colour that
+    tints it. */
 
 // Mirrors PersonalFeaturesController.MaxPinsPerType. Held here so the button can say why it is disabled
 // rather than letting the click come back a 400.
@@ -64,11 +47,7 @@ export function useRowPersonalisation (entityType) {
     }
   };
 
-  /**
-   * Call after every load with the ids now on screen. The COLOURS are re-read each time (a new page is
-   * a new set of rows); the PINS are read once — they are the user's own small set and no amount of
-   * paging changes them.
-   */
+  /** Call after every load with the ids now on screen. */
   const sync = async (entityIds) => {
     await Promise.all([
       pinsLoaded.value ? Promise.resolve() : loadPins(),
@@ -76,11 +55,8 @@ export function useRowPersonalisation (entityType) {
     ]);
   };
 
-  /**
-   * Pin or unpin one row. `label` is what the record calls itself — a REMS number, a name — so the
-   * confirmation can say which row moved. Both marks are silent about themselves otherwise: the row
-   * jumps to the top or changes colour and nothing says why, which reads as the list misbehaving.
-   */
+  /** Pin or unpin one row. `label` is what the record calls itself — a REMS number, a name — so the
+      confirmation can say which row moved. */
   const togglePin = async (entityId, label = "") => {
     if (busyId.value) return;
     const existing = pins.value.get(entityId);

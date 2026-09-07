@@ -12,23 +12,8 @@
 </template>
 
 <script setup>
-// The provenance block every detail page ends with: who made this record and when, who last touched it
-// and when — and, once it is deleted, who deleted it and when.
-//
-//   <app-record-audit :audit="detail?.audit" />
-//
-// LAST on the page, and the same facts in the same order on every page, because that is what makes them
-// findable without reading. Somebody asking "when was this last changed" scrolls to the bottom rather
-// than hunting for wherever this particular screen chose to put it — and putting provenance anywhere
-// above the record's own content would give the reader the paperwork before the thing itself. The lists
-// answer the same question in the same order and with the same labels through useAuditColumns.
-//
-// The deleted pair appears only on a deleted record: a live one has nothing to say there, and two
-// permanent dashes would only dilute the four that always mean something.
-//
-// `audit` is the RecordAudit block the API puts on every detail response. The card renders nothing at all
-// when it is missing, so a page whose endpoint has not been given one shows no card rather than a card
-// full of dashes.
+// The provenance block every detail page ends with: who made this record and when, who last touched it and
+// when — and, once it is deleted.
 import { computed } from "vue";
 import { useDateFormat } from "composables/useDateFormat";
 

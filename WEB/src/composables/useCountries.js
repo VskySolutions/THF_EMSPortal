@@ -1,8 +1,7 @@
 import { Country } from "country-state-city";
 
-// Centralised country-list helpers, reused by every country / country-code dropdown so the
-// ordering and option shapes stay identical. US is the default selection and, with India,
-// is pinned to the top of the list; the remainder follow in the source (alphabetical) order.
+// Centralised country-list helpers, reused by every country / country-code dropdown so the ordering and
+// option shapes stay identical.
 const PINNED_ISO = ["US", "IN"];
 
 export const DEFAULT_COUNTRY_ISO = "US";
@@ -15,7 +14,7 @@ const rest = all.filter((c) => !PINNED_ISO.includes(c.isoCode));
 export const orderedCountries = [...pinned, ...rest];
 
 /** Dial-code option, e.g. "United States (+1)" → value is the ISO-2 code. The flag emoji is omitted
- *  because on Windows it renders as the two-letter ISO code, which looks like a duplicate. */
+    because on Windows it renders as the two-letter ISO code, which looks like a duplicate. */
 export const dialCodeOption = (c) => ({ label: `${c.name} (+${c.phonecode})`, value: c.isoCode });
 
 /** Country option keyed by ISO-2 code. */
@@ -27,12 +26,7 @@ export const countryNameFromIso = (isoCode) => all.find((c) => c.isoCode === iso
 /** Country option keyed by display name (e.g. for nationality fields). */
 export const countryNameOption = (c) => ({ label: c.name, value: c.name });
 
-/** ISO-2 code from a stored dial code ("+91" → "IN").
- *  A dial code does not always name one country — +1 is the US and Canada both — so the answer is
- *  whichever country this app puts first. Searching the pinned order rather than the alphabetical one
- *  is what makes +1 come back as the US: alphabetically Canada gets there first, and every US number
- *  in the system carries +1. Codes nobody pinned (+44, +7) still resolve alphabetically — the app has
- *  no preference to apply there. */
+/** ISO-2 code from a stored dial code ("+91" → "IN"). */
 export const isoFromDial = (dial) => {
   if (!dial) return null;
   const normalized = String(dial).replace("+", "");

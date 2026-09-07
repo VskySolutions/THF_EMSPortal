@@ -4,10 +4,8 @@ using EmsPortal.Application.Abstractions.Security;
 namespace EmsPortal.Api.Logging;
 
 /// <summary>
-/// Logs a structured entry for each request (method, path, redacted headers,
-/// correlation ID) and response (status code, duration). Runs after
-/// CorrelationIdMiddleware so the correlation ID is enriched into every entry.
-/// Request and response bodies are not buffered (REQ-INF-010).
+/// Logs a structured entry for each request (method, path, redacted headers, correlation ID) and
+/// response (status code, duration).
 /// </summary>
 public sealed class RequestResponseLoggingMiddleware
 {

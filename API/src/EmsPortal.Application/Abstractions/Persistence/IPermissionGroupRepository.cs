@@ -4,9 +4,8 @@ using EmsPortal.Application.Common;
 namespace EmsPortal.Application.Abstractions.Persistence;
 
 /// <summary>
-/// Data access for Permission Groups, their permission-key junction rows, role-composition links,
-/// and group templates. Tenant isolation is applied by the DbContext global query filter; admin /
-/// cross-tenant reads pass an explicit tenant id and bypass it.
+/// Data access for Permission Groups, their permission-key junction rows, role-composition links, and
+/// group templates.
 /// </summary>
 public interface IPermissionGroupRepository
 {
@@ -65,7 +64,10 @@ public interface IPermissionGroupRepository
     Task<int> CountActiveMembersAsync(
         Guid groupId, Guid tenantId, IEnumerable<Guid>? additionalRoleIds = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Batch current-usage per group (distinct active members), keyed by group id; absent groups have usage 0.</summary>
+    /// <summary>
+    /// Batch current-usage per group (distinct active members), keyed by group id; absent groups have
+    /// usage 0.
+    /// </summary>
     Task<IReadOnlyDictionary<Guid, int>> CountActiveMembersForGroupsAsync(
         IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken = default);
 

@@ -17,10 +17,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// User account management (WO-38). Super Admins manage all users; Tenant Admins manage
-/// Tenant Admins and custom-role users within their active tenant (REQ-ADM-001/002/003/009/010).
-/// </summary>
+/// <summary>User account management (WO-38).</summary>
 [ApiController]
 [Produces("application/json")]
 [Tags("Users")]
@@ -139,9 +136,8 @@ public sealed class UsersController : ControllerBase
             return roleScopeError;
         }
 
-        // Capacity (WO-119): if any target role composes a capped group in the tenant, reject when adding
-        // this new (active) user would push the group past its limit (AC-PG-013.2). Checked before any
-        // persistence so a rejection never leaves a half-created account.
+        // Capacity (WO-119): if any target role composes a capped group in the tenant, reject when adding this
+        // new (active) user would push the group past its limit (AC-PG-013.2).
         var userId = Guid.NewGuid();
         if (tenantId is { } capacityTenant)
         {
@@ -236,9 +232,7 @@ public sealed class UsersController : ControllerBase
             details: $"roles={string.Join(",", targetRoles.Select(r => r.Entity.Name))}; tenant={tenantId}", cancellationToken: cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Optionally email the invitation (with the temporary password) via the tenant's active SMTP
-        // account. The send runs in the background; the flag reflects whether it will be attempted (an
-        // active SMTP account exists), so the caller knows whether to share the password manually.
+        // Optionally email the invitation (with the temporary password) via the tenant's active SMTP account.
         var invitationEmailSent = false;
         if (request.SendInvitation && tenantId is { } inviteTenant)
         {
@@ -276,16 +270,7 @@ public sealed class UsersController : ControllerBase
         page = Math.Max(1, page);
         limit = Math.Clamp(limit, 1, 100);
 
-        // Everyone sees only the ACTIVE tenant's users — a Super Admin included. Listing every tenant at
-        // once made the page a mix of accounts the caller cannot act on in their current context, and
-        // duplicated what switching tenant (or the Super-Admin tenant scope) already does. The middleware
-        // rewrites this claim when a Super Admin is scoped elsewhere, so it follows that selection.
-        //
-        // `tenantId` is the single exception, and it does not lift that rule so much as point it: it names
-        // ONE other tenant, for the tenant-management screen, whose whole job is to show a tenant and the
-        // accounts in it. Restricted to callers who administer tenants at all (tenants.write, i.e. a Super
-        // Admin) — for anyone else it is IGNORED rather than refused, so an ordinary admin who guesses the
-        // parameter simply gets their own tenant back instead of learning that it means something.
+        // Everyone sees only the ACTIVE tenant's users — a Super Admin included.
         var activeTenantId = User.GetActiveTenantId();
         var tenantFilter = tenantId is { } requestedTenantId && User.HasPermission(Permissions.TenantsWrite)
             ? requestedTenantId
@@ -317,12 +302,7 @@ public sealed class UsersController : ControllerBase
             .OrderBy(n => n)
             .ToList();
 
-        // Department placement for this page of users, resolved to labels. Both the placements and the
-        // option set are scoped to the caller's ACTIVE tenant by the ambient query filter — not to
-        // `tenantFilter` — so they are read only when the two are the same tenant. A Super Admin who has
-        // not switched into a tenant sees none (the same guard MapAsync applies to the detail response),
-        // and neither does one listing some OTHER tenant's users from the tenant-management screen: an
-        // empty column is the truth there, where borrowing this tenant's departments would be a fiction.
+        // Department placement for this page of users, resolved to labels.
         var placements = new Dictionary<Guid, UserDepartment>();
         var departmentLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (activeTenantId is not null && tenantFilter == activeTenantId)
@@ -624,8 +604,7 @@ public sealed class UsersController : ControllerBase
         }
 
         // Capacity (WO-119): only roles the user does not already hold in the tenant can add them to a new
-        // group's population. Reject if granting one composes a full capped group and this user would be a
-        // new distinct member beyond the limit (AC-PG-013.2).
+        // group's population.
         var currentAssignments = await _users.GetAssignmentsAsync(id, request.TenantId, cancellationToken);
         var currentRoleIds = currentAssignments.Select(a => a.RoleId).ToHashSet();
         var addedRoleIds = targetRoles.Select(r => r.RoleId).Where(rid => !currentRoleIds.Contains(rid)).ToList();
@@ -738,8 +717,8 @@ public sealed class UsersController : ControllerBase
     // ---- Departments ----
 
     /// <summary>
-    /// Picker data for a user's department placement: the tenant's selectable departments (the effective
-    /// <c>REMS.Department</c> option list) and the current head of each.
+    /// Picker data for a user's department placement: the tenant's selectable departments (the
+    /// effective <c>REMS.Department</c> option list) and the current head of each.
     /// </summary>
     [HttpGet("/api/admin/users/departments")]
     [RequirePermission(Permissions.UsersRead)]
@@ -761,9 +740,7 @@ public sealed class UsersController : ControllerBase
 
     /// <summary>
     /// Sets (or clears, when no department is supplied) the user's department in the caller's active
-    /// tenant. A department has at most one head, so making this user the head demotes the incumbent and
-    /// repoints the tenant's REMS department-director mapping — which is what prefills an engagement's
-    /// Department Director (WO-114).
+    /// tenant.
     /// </summary>
     [HttpPut("/api/admin/users/{id:guid}/department")]
     [RequirePermission(Permissions.UsersWrite)]
@@ -909,8 +886,8 @@ public sealed class UsersController : ControllerBase
     private const string DepartmentOptionSetKey = "REMS.Department";
 
     /// <summary>
-    /// Closed fallback mirroring the seeded <c>REMS.Department</c> values (see <c>DefaultOptionSets</c>), so
-    /// the picker still works on a deployment where the option list has not been seeded.
+    /// Closed fallback mirroring the seeded <c>REMS.Department</c> values (see
+    /// <c>DefaultOptionSets</c>).
     /// </summary>
     private static readonly IReadOnlyList<DepartmentOptionDto> FallbackDepartments = new[]
     {
@@ -991,11 +968,7 @@ public sealed class UsersController : ControllerBase
     private static bool IsSuperAdminRole(ResolvedRole role)
         => string.Equals(role.Entity.Name, Roles.SuperAdmin, StringComparison.Ordinal);
 
-    /// <summary>
-    /// Refuses any role that does not belong in the target tenant. A role a tenant creates never leaves
-    /// it, so only that tenant's users may hold it; the platform roles (TenantId null) fit anywhere,
-    /// including a Super Admin account with no tenant at all.
-    /// </summary>
+    /// <summary>Refuses any role that does not belong in the target tenant.</summary>
     private IActionResult? RolesNotAvailableIn(Guid? tenantId, IReadOnlyList<ResolvedRole> roles)
     {
         var foreign = roles.Where(r => r.Entity.TenantId is { } owner && owner != tenantId)
@@ -1109,7 +1082,10 @@ public sealed class UsersController : ControllerBase
         return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.CapacityLimitReached, block.Message, block.GroupName));
     }
 
-    /// <summary>The tenant whose SMTP account should send a user's email: the caller's active tenant, else the user's first assignment.</summary>
+    /// <summary>
+    /// The tenant whose SMTP account should send a user's email: the caller's active tenant, else the
+    /// user's first assignment.
+    /// </summary>
     private Guid? TenantForUserEmail(User user)
         => User.GetActiveTenantId() ?? user.TenantRoles.FirstOrDefault()?.TenantId;
 
@@ -1124,11 +1100,7 @@ public sealed class UsersController : ControllerBase
         return activeTenant is { } tenant && user.TenantRoles.Any(r => r.TenantId == tenant);
     }
 
-    /// <summary>
-    /// The user detail plus their department placement and headship in the active tenant. A department is
-    /// meaningless outside a tenant, so a caller with no active tenant (a Super Admin who has not switched
-    /// into one) sees none.
-    /// </summary>
+    /// <summary>The user detail plus their department placement and headship in the active tenant.</summary>
     private async Task<UserDetail> MapAsync(User user, CancellationToken cancellationToken)
     {
         var audit = await RecordAudit.ForAsync(_users, user, cancellationToken);

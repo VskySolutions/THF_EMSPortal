@@ -1,12 +1,11 @@
 <template>
   <q-card flat bordered class="app-detail-header q-mb-md">
     <!-- Crumbs on the left and the actions on the right — on one line where there is width for it, and on
-         two once there is not. The row was no-wrap, which on a phone pushed Back (and whatever the page
-         put in the actions slot before it) off the side of the card with nothing to scroll it back. -->
+         two once there is not. -->
     <q-card-section class="app-detail-header__bar q-py-sm">
       <app-breadcrumbs :items="items" no-margin class="app-detail-header__crumbs" />
-      <!-- The page's own actions and Back travel as one group, so they wrap onto a second line together
-           and stay right-aligned there rather than Back dropping away from the buttons it belongs with. -->
+      <!-- The page's own actions and Back travel as one group, so they wrap onto a second line together and
+           stay right-aligned there rather than Back dropping away from the buttons it belongs with. -->
       <div class="app-detail-header__actions">
         <slot name="actions" />
         <q-btn outline no-caps color="primary" icon="o_arrow_back" label="Back" @click="goBack" />
@@ -16,9 +15,8 @@
 </template>
 
 <script setup>
-// Standard header for internal view/manage (detail) pages: breadcrumbs on the left, a Back button
-// on the right (plus an optional `actions` slot for status badges/controls). Reused on every detail
-// page so the layout stays consistent across the application.
+// Standard header for internal view/manage (detail) pages: breadcrumbs on the left, a Back button on the
+// right (plus an optional `actions` slot for status badges/controls).
 import { useRouter } from "vue-router";
 import AppBreadcrumbs from "components/common/AppBreadcrumbs.vue";
 
@@ -31,14 +29,7 @@ const props = defineProps({
 
 const router = useRouter();
 
-// Back means "the page I came from". A detail page is reachable from several places — a list, a search,
-// a notification, another record — and pushing one hardcoded route sent everyone to the same list no
-// matter where they started, which also grew the history instead of unwinding it.
-//
-// `backTo` is the fallback for when there is genuinely nowhere to go back to: a pasted link, a fresh
-// tab, a hard refresh. Vue Router's HTML5 history records the previous in-app entry on history.state,
-// and `back` is null on a first load — precisely the case where router.back() would either do nothing
-// (a dead button) or walk the user out of the application.
+// Back means "the page I came from".
 const goBack = () => {
   if (router.options.history.state?.back) router.back();
   else if (props.backTo) router.push(props.backTo);

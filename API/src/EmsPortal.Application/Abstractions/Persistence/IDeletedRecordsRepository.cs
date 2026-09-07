@@ -13,8 +13,7 @@ public sealed record DeletedRecordRow(Guid EntityId, string Identity, Guid Tenan
 
 /// <summary>
 /// Generic access to soft-deleted records across the entity types that support Deleted Records
-/// Management. Restores and hard-deletes also cascade the associated Universal Feature rows for the
-/// record's <c>(EntityType, EntityId)</c> key.
+/// Management.
 /// </summary>
 public interface IDeletedRecordsRepository
 {
@@ -26,13 +25,16 @@ public interface IDeletedRecordsRepository
         EntityType entityType, Guid? tenantId, SortRequest sort, int page, int limit,
         CancellationToken cancellationToken = default);
 
-    /// <summary>The identity string of a soft-deleted record (for confirmation-token validation), or null when not found.</summary>
+    /// <summary>
+    /// The identity string of a soft-deleted record (for confirmation-token validation), or null when
+    /// not found.
+    /// </summary>
     Task<string?> GetDeletedIdentityAsync(EntityType entityType, Guid entityId, Guid? tenantId, CancellationToken cancellationToken = default);
 
-    /// <summary>Restores a soft-deleted record and its soft-deleted UF rows. Returns false when not found.</summary>
+    /// <summary>Restores a soft-deleted record and its soft-deleted UF rows.</summary>
     Task<bool> RestoreAsync(EntityType entityType, Guid entityId, Guid? tenantId, CancellationToken cancellationToken = default);
 
-    /// <summary>Permanently deletes a soft-deleted record and cascades all its UF rows. Returns false when not found.</summary>
+    /// <summary>Permanently deletes a soft-deleted record and cascades all its UF rows.</summary>
     Task<bool> HardDeleteAsync(EntityType entityType, Guid entityId, Guid? tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>Counts records past their retention period, keyed by supported entity type.</summary>

@@ -1,10 +1,8 @@
 import { ref, onBeforeUnmount } from "vue";
 import { LocalStorage } from "quasar";
 
-// Drag-to-resize width for right-side drawers (form & filter), persisted in LocalStorage —
-// which auth.clearSession() wipes on logout, so the chosen width lasts until logout.
-// getDefault/getMin/getMax return pixel widths (often viewport-relative), evaluated live so
-// the bounds track window size.
+// Drag-to-resize width for right-side drawers (form & filter), persisted in LocalStorage — which
+// auth.clearSession() wipes on logout.
 export function useDrawerResize ({ storageKey, getDefault, getMin, getMax }) {
   const clamp = (w) => Math.min(getMax(), Math.max(getMin(), w));
 

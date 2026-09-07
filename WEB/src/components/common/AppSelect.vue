@@ -48,10 +48,7 @@
       </template>
 
       <!-- Category labels in a grouped list — options carrying `header: true`, as the role picker's
-           System / Operational / REMS Seats / Custom do. Quasar has no option groups, so the labels
-           travel as rows in the list; left to the default rendering they come out as DISABLED OPTIONS,
-           which reads as "a choice you cannot have" rather than as a heading. Only lists that declare a
-           header take this path — every other select keeps Quasar's own option rendering untouched. -->
+           System / Operational / REMS Seats / Custom do. -->
       <template v-if="hasHeaders" #option="scope">
         <q-item-label v-if="scope.opt.header" header class="app-select__group">
           {{ scope.opt.label }}
@@ -123,9 +120,7 @@ const props = defineProps({
   disable: { type: Boolean, default: false },
   // Disable the browser's autofill on the filter input by default (opt back in with "on").
   autocomplete: { type: String, default: "off" },
-  // Type-to-search: opens an input inside the control that narrows the options. Left unset it turns
-  // ITSELF on once the list passes SEARCH_THRESHOLD, so a long dropdown is searchable without every call
-  // site having to remember. Pass it explicitly to force search on (a short list that will grow) or off.
+  // Type-to-search: opens an input inside the control that narrows the options.
   useInput: { type: Boolean, default: undefined },
   // 0 because the lists filtered this way are in-memory (Quasar's own default is 500ms).
   inputDebounce: { type: [Number, String], default: 0 }
@@ -150,10 +145,7 @@ const searchable = computed(() =>
 // instead of beside it. Multi-select keeps its chips and a separate input.
 const typeahead = computed(() => searchable.value && !props.multiple);
 
-// Search is handled HERE rather than through QSelect's `filter` event on purpose. That event hands the
-// parent a done-callback and refuses to open the menu until it is called — within a 10ms window, while
-// the control still has focus. Routing that round trip through a wrapper component is what left these
-// dropdowns opening empty. The options are already in memory, so narrowing them is a computed.
+// Search is handled HERE rather than through QSelect's `filter` event on purpose.
 const search = ref("");
 const optionText = (opt) =>
   String((opt !== null && typeof opt === "object" ? opt[props.optionLabel] : opt) ?? "");
@@ -167,11 +159,7 @@ const selectedKeys = computed(() => {
   return (Array.isArray(val) ? val : [val]).map(optionKey);
 });
 
-// Whatever is selected stays in the list however the search narrows it. QSelect resolves the model
-// against exactly the array handed to it (`props.options.find(...) || cache.find(...) || value`), so an
-// option filtered out of that array stops reading as a selection and falls back to rendering the bare
-// model value — "US" in place of "United States (+1)". Search text outlives the selection it was filled
-// from, so this bites whenever the model is set from code rather than from the dropdown.
+// Whatever is selected stays in the list however the search narrows it.
 const isSelectedOption = (opt) => {
   const key = optionKey(opt);
   return key !== undefined && selectedKeys.value.includes(key);

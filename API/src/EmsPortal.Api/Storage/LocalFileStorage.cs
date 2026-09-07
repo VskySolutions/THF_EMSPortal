@@ -4,9 +4,7 @@ namespace EmsPortal.Api.Storage;
 
 /// <summary>
 /// Local-disk <see cref="IFileStorage"/>: persists uploads under the host content root, at the
-/// canonical path <see cref="StoragePaths"/> builds. Stored paths are relative and forward-slashed so
-/// they are portable across platforms, and every one is resolved back through
-/// <see cref="ResolveAbsolute"/>, which refuses to hand out a path outside the root.
+/// canonical path <see cref="StoragePaths"/> builds.
 /// </summary>
 public sealed class LocalFileStorage : IFileStorage
 {
@@ -55,8 +53,7 @@ public sealed class LocalFileStorage : IFileStorage
 
     /// <summary>
     /// Absolute path for a stored relative path, or throws when it would land outside the content
-    /// root. Stored paths are server-generated today, so this guards against a future caller rather
-    /// than against the current ones — which is the point of having it before that caller exists.
+    /// root.
     /// </summary>
     private string ResolveAbsolute(string storedPath)
         => TryResolveAbsolute(storedPath, out var absolutePath)

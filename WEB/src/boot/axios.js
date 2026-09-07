@@ -49,18 +49,13 @@ export default boot(({ app }) => {
       // Correlation id for request tracing
       config.headers["X-Correlation-Id"] = generateCorrelationId();
 
-      // Tenant Header. "Site" and "tenant" are the same thing under two names, so a Super Admin's
-      // tenant-scope selection simply takes precedence over the user's own site id here — one header, one
-      // meaning (TenantResolutionMiddleware honours it for a Super Admin and ignores it for anyone else).
+      // Tenant Header.
       const siteId = LocalStorage.getItem("adminTenantOverride") || user?.siteId;
       if (siteId) {
         config.headers["X-Site-Id"] = siteId;
       }
 
-      // REMS acting-as. A delegate says whose hat they are wearing per request rather than the server
-      // inferring it — someone holding several delegations would otherwise have their work attributed by
-      // guesswork. It is a CLAIM, not a grant: the API checks it against a live delegation and ignores it
-      // otherwise, so a forged value buys nothing.
+      // REMS acting-as.
       const actingFor = LocalStorage.getItem("remsActingForUserId");
       if (actingFor) {
         config.headers["X-Rems-On-Behalf-Of"] = actingFor;

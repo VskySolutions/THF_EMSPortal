@@ -77,9 +77,8 @@ const { width: currentWidth, startResize, resetWidth } = useDrawerResize({
   getMax: () => Math.round(viewportWidth() * 0.95)
 });
 
-// Any user-initiated close (Cancel, X, backdrop click, ESC) routes through this setter, so the
-// draft is always cleared and `cancel` always fires — letting parents reset their form state.
-// A programmatic close after submit (parent sets the model false directly) does NOT hit this setter.
+// Any user-initiated close (Cancel, X, backdrop click, ESC) routes through this setter, so the draft is
+// always cleared and `cancel` always fires — letting parents reset their form state.
 const open = computed({
   get: () => props.modelValue,
   set: (val) => {

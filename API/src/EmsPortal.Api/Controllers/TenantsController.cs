@@ -14,8 +14,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Tenant management (WO-40): tenant lifecycle — create, update, status, and archive
-/// (Super Admin) — plus tenant detail reads.
+/// Tenant management (WO-40): tenant lifecycle — create, update, status, and archive (Super Admin)
+/// — plus tenant detail reads.
 /// </summary>
 [ApiController]
 [Route("/api/admin/tenants")]
@@ -82,10 +82,7 @@ public sealed class TenantsController : ControllerBase
             ApiResponseFactory.Success(new TenantResponse(tenant.Id, tenant.Identifier, tenant.Status.ToString()), "Tenant created."));
     }
 
-    /// <summary>
-    /// What the Tenants list may be ordered by. Created By / Updated By are absent: they are ids resolved
-    /// to names one page at a time, so there is nothing to order the whole set on.
-    /// </summary>
+    /// <summary>What the Tenants list may be ordered by.</summary>
     private static readonly SortMap<Tenant> Sorts = new SortMap<Tenant>("updatedOnUtc")
         .Add("name", t => t.Name)
         .Add("identifier", t => t.Identifier)

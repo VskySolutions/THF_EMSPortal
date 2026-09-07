@@ -40,9 +40,7 @@
             <app-text-field v-model="form.firstName" label="First Name" class="col-12 col-sm-6" :disable="!canWrite" :rules="nameRules('First name', { required: true })" />
             <app-text-field v-model="form.middleName" label="Middle Name" class="col-12 col-sm-6" :disable="!canWrite" :rules="nameRules('Middle name')" />
             <app-text-field v-model="form.lastName" label="Last Name" class="col-6 col-sm-4" :disable="!canWrite" :rules="nameRules('Last name', { required: true })" />
-            <!-- The generational particle on the name, after the surname where it is read. Held apart
-                 from the name because a person is filed under a given name and a family name, and "Jr."
-                 is neither. -->
+            <!-- The generational particle on the name, after the surname where it is read. -->
             <app-name-suffix-field v-model="form.suffix" class="col-6 col-sm-2" :disable="!canWrite" />
             <app-text-field v-model="form.preferredName" label="Preferred Name" class="col-12 col-sm-6" :disable="!canWrite" :rules="nameRules('Preferred name')" />
             <app-text-field v-model="form.displayName" label="Display Name" class="col-12 col-sm-6" :disable="!canWrite" />

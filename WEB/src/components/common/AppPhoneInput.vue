@@ -1,8 +1,6 @@
 <template>
   <!-- The dial code and the number are ONE answer, so they read as one field: a single label, and the two
-       controls flush beneath it with the seam between them collapsed to a single line. A label each —
-       "Country" beside "Phone Number" — reads as two separate questions and leaves the number looking
-       optional next to it. -->
+       controls flush beneath it with the seam between them collapsed to a single line. -->
   <div class="app-field app-phone">
     <app-field-label :label="label" :required="required" />
     <div class="app-phone__row">
@@ -38,10 +36,7 @@
 </template>
 
 <script setup>
-// Reusable phone field: a country dial-code dropdown + number input. The number is formatted
-// as-you-type using the selected country's pattern (libphonenumber-js AsYouType — e.g. US shows
-// "(213) 373-4253") while the stored model value is normalised to E.164 once valid. Used on every
-// phone field across the app so behaviour, formatting and storage stay identical.
+// Reusable phone field: a country dial-code dropdown + number input.
 import { ref, computed, toRef, watch } from "vue";
 import { AsYouType, isValidPhoneNumber, parsePhoneNumber, getExampleNumber } from "libphonenumber-js";
 import examples from "libphonenumber-js/mobile/examples";
@@ -115,16 +110,13 @@ watch(() => props.modelValue, (v) => {
     if (derived && derived !== iso.value) iso.value = derived;
   }
   display.value = formatNational(v, iso.value);
-  // The guard above asks "is this value already on screen?", so it has to follow what the parent wrote
-  // just as much as what we emitted. A number written in from outside and never typed over leaves it
-  // stale, and the parent's later write of the old value — usually "", a form clearing the field —
-  // then reads as our own echo and is skipped, stranding that number in the box.
+  // The guard above asks "is this value already on screen?", so it has to follow what the parent wrote just
+  // as much as what we emitted.
   lastEmitted = v || "";
 });
 
-// A dial code that already matches the current pick names no new country, so it is left alone: +1 is
-// the US and Canada both, and deriving an ISO back out of our own emitted code would overrule whichever
-// of the two isoFromDial does not favour — the selection would snap back the moment it was made.
+// A dial code that already matches the current pick names no new country, so it is left alone: +1 is the US
+// and Canada both.
 watch(() => props.country, (v) => {
   if (!v || v === dialFromIso(iso.value)) return;
   const next = isoFromDial(v);

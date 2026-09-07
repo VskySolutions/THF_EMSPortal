@@ -4,10 +4,8 @@ using Serilog.Context;
 namespace EmsPortal.Api.Security;
 
 /// <summary>
-/// Registered first in the pipeline (before auth) so the correlation ID is available
-/// to every log entry, including those written during auth failures (REQ-INF-006).
-/// Reads <c>X-Correlation-Id</c> if present, generates a UUID v4 otherwise, stores it
-/// in the scoped <see cref="ICorrelationContext"/>, and echoes it on the response.
+/// Registered first in the pipeline (before auth) so the correlation ID is available to every log
+/// entry, including those written during auth failures (REQ-INF-006).
 /// </summary>
 public sealed class CorrelationIdMiddleware
 {

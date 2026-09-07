@@ -66,8 +66,7 @@
           <q-btn flat round dense color="primary" icon="o_visibility" :to="{ name: 'user_detail', params: { id: cell.row.userId } }">
             <q-tooltip>View / Manage</q-tooltip>
           </q-btn>
-          <!-- One button per action, all of them on the row. Activate and Deactivate are two states of
-               one action, so they are one button that says which way it will go. -->
+          <!-- One button per action, all of them on the row. -->
           <q-btn
             v-if="has(Permissions.UsersWrite)" type="a"
             flat round dense
@@ -91,9 +90,7 @@
       v-if="canManageDeleted" :entity-type="EntityType.User" :show="showDeleted" @restored="load"
     />
 
-    <!-- Create user (promote an existing Person to a login account). The tenant is the caller's own or,
-         for a platform admin, whichever they pick inside the drawer — this list has no one tenant to hand
-         it, unlike a tenant's own page which does. -->
+    <!-- Create user (promote an existing Person to a login account). -->
     <user-create-drawer v-model="formOpen" :person-id="presetPersonId" @created="load" />
 
     <temp-password-dialog v-model="tempPwOpen" :password="tempPassword" />
@@ -140,10 +137,7 @@ const columns = computed(() => [
   { name: "phoneNumber", label: "Phone", field: "phoneNumber", align: "left", sortable: true },
   { name: "roles", label: "Role", field: (r) => (r.roles || []).join(", "), align: "left", sortable: false, default: true },
   { name: "groups", label: "Groups", field: (r) => (r.groups || []).map((g) => g.name).join(", "), align: "left", sortable: false, default: true },
-  // Department placement in the active tenant. Read-only here (it is set on the user's detail page), so
-  // there is no server-side filter behind it — the search box and the detail page cover that. Not sortable
-  // either: the placement is read per page from a separate table, so there is no column to order the whole
-  // set by.
+  // Department placement in the active tenant.
   { name: "department", label: "Department", field: "department", align: "left", default: true, filterable: false },
   { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, default: true, filterOptions: [{ label: "Active", value: true }, { label: "Inactive", value: false }] },
   ...auditColumns(),

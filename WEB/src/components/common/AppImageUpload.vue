@@ -38,10 +38,7 @@
 </template>
 
 <script setup>
-// Standard image upload with cropping (vue-advanced-cropper) and the external top-left label. The
-// avatar/preview is driven by v-model (the current image URL). Picking an image opens the crop dialog;
-// applying it emits `crop` with the cropped PNG File — the parent uploads it and sets the new URL via
-// v-model, then calls the exposed closeCrop(). Used for avatars/photos (square by default).
+// Standard image upload with cropping (vue-advanced-cropper) and the external top-left label.
 import { ref, computed } from "vue";
 import { Cropper } from "vue-advanced-cropper";
 import "vue-advanced-cropper/dist/style.css";
@@ -57,8 +54,7 @@ const props = defineProps({
   size: { type: String, default: "96px" },
   accept: { type: String, default: "image/*" },
   // The server refuses anything larger, so the picker has to as well — see MAX_UPLOAD_MB. This box used
-  // to promise nothing and check nothing: a photograph straight off a phone was accepted here, cropped,
-  // uploaded, and only then refused, which is the one place a size rule is no use.
+  // to promise nothing and check nothing: a photograph straight off a phone was accepted here.
   maxSizeMb: { type: Number, default: MAX_UPLOAD_MB },
   buttonLabel: { type: String, default: "Upload" },
   placeholderIcon: { type: String, default: "o_person" },
@@ -92,9 +88,8 @@ const onSelected = (e) => {
   const file = e.target.files?.[0];
   e.target.value = ""; // allow re-selecting the same file
   if (!file) return;
-  // `accept="image/*"` is a filter on the picker, not a rule: every file dialog offers a way past it, and
-  // a document chosen through that way used to open the cropper on a broken image and export a blank
-  // square. Refused here instead, and said out loud — the alternative is a silently empty avatar.
+  // `accept="image/*"` is a filter on the picker, not a rule: every file dialog offers a way past it, and a
+  // document chosen through that way used to open the cropper on a broken image and export a blank square.
   if (!isImageFile(file)) {
     error.value = `"${file.name}" is not an image.`;
     return;
@@ -115,8 +110,7 @@ const applyCrop = () => {
   result.canvas.toBlob((blob) => {
     if (!blob) { cropOpen.value = false; return; }
     // The CROPPED png is what gets uploaded, and it is not the file that was picked: a large photograph
-    // re-encodes to a png bigger than the jpeg it came from, so a pick that passed the check above can
-    // still hand the server more than it takes. Checked here too, where the bytes are finally known.
+    // re-encodes to a png bigger than the jpeg it came.
     if (maxBytes.value && blob.size > maxBytes.value) {
       error.value = `The cropped image comes to ${formatFileSize(blob.size)}, over the ` +
         `${props.maxSizeMb} MB limit. Crop a smaller area, or start from a smaller picture.`;

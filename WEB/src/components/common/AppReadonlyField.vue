@@ -14,9 +14,6 @@
 
 <script setup>
 // A value the form shows but nobody can type into (server-derived, copied from a submission, …).
-// Deliberately built from the same pieces as AppTextField — the app-field wrapper, AppFieldLabel, a
-// 40px-tall control — so a read-only value sits in a grid row at exactly the same height as the inputs
-// beside it. Hand-rolling these is what makes field rows drift out of alignment.
 import { computed } from "vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
 

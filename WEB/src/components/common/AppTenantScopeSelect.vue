@@ -1,8 +1,5 @@
 <template>
-  <!-- Toolbar control, styled like the tenant switcher beside it. Renders only for a Super Admin: the
-       server ignores the header for anyone else, so showing it to them would be a control that does
-       nothing. Distinct from the switcher — that is limited to tenants you are ASSIGNED to and swaps your
-       token; this reaches any tenant and only re-points what the server reads. -->
+  <!-- Toolbar control, styled like the tenant switcher beside it. -->
   <q-btn-dropdown
     v-if="canScopeTenant"
     flat no-caps dense

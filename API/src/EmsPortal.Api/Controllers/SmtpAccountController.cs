@@ -13,11 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Manage a tenant's SMTP email accounts. Reads require <c>users.read</c>; all writes (create, update,
-/// delete, set-active, test-send) require <c>email.manage</c>. Fully tenant-scoped, with a Super Admin
-/// <c>?tenantId=</c> override. Passwords are write-only and never returned in any response.
-/// </summary>
+/// <summary>Manage a tenant's SMTP email accounts.</summary>
 [ApiController]
 [Authorize]
 [Route("/api/admin/smtp-accounts")]
@@ -74,10 +70,7 @@ public sealed class SmtpAccountController : ControllerBase
         var accounts = await _accounts.ListByTenantAsync(resolvedTenant, isActive, cancellationToken);
         var summaries = await ToSummariesAsync(accounts, cancellationToken);
 
-        // Only when a column was actually named. Left alone, this list arrives in the order the repository
-        // chose — the ACTIVE account pinned above everything, because exactly one account sends the
-        // tenant's mail and burying it under whichever inactive one was edited last is a functional
-        // regression. A reader who clicks a header has asked for something else, and gets it.
+        // Only when a column was actually named.
         var ordered = ListSorts.Knows(sortBy) ? ListSorts.Apply(summaries, sortBy, descending) : summaries;
         return Ok(ApiResponseFactory.Success(ordered, "SMTP accounts retrieved."));
     }
@@ -286,7 +279,7 @@ public sealed class SmtpAccountController : ControllerBase
         _ => BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", ex.Message)),
     };
 
-    /// <summary>Projects accounts to summaries, resolving the audit actor ids to display names. Password is never included.</summary>
+    /// <summary>Projects accounts to summaries, resolving the audit actor ids to display names.</summary>
     private async Task<IReadOnlyList<SmtpAccountSummaryResponse>> ToSummariesAsync(IReadOnlyList<SmtpAccount> accounts, CancellationToken cancellationToken)
     {
         var creatorNames = await _users.GetFullNamesAsync(

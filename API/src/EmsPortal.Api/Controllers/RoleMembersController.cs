@@ -11,15 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Who holds a role, from the role's side — the same (user, tenant, role) rows the user page maintains
-/// one person at a time, reached instead by asking "who has this role, and who else should".
-/// <para>
-/// Membership is tenant data even when the role is not. Holding "Partner" is something a person does in
-/// ONE tenant, so a tenant admin manages the holders of a platform role in their own tenant without
-/// being able to touch the role itself — which is why this is <c>roles.assign</c> and not
-/// <c>roles.write</c>. Everything happens in the caller's active tenant; a Super Admin working in
-/// another tenant switches to it as they do everywhere else.
-/// </para>
+/// Who holds a role, from the role's side — the same (user, tenant, role) rows the user page
+/// maintains one person at a time, reached instead by asking "who has this role, and who else should".
 /// </summary>
 [ApiController]
 [Route("/api/admin/roles/{roleId:guid}/users")]
@@ -77,11 +70,7 @@ public sealed class RoleMembersController : ControllerBase
         return Ok(ApiResponseFactory.Success(rows, "Role members retrieved."));
     }
 
-    /// <summary>
-    /// Who this role could still be given to: the tenant's active users who do not hold it yet. Somebody
-    /// with no role here at all is not among them — a role is HOW a person belongs to a tenant, so their
-    /// first one is granted where that decision is made, on the Users page.
-    /// </summary>
+    /// <summary>Who this role could still be given to: the tenant's active users who do not hold it yet.</summary>
     [HttpGet("candidates")]
     [ProducesResponseType<ApiResponse<IEnumerable<RoleMemberCandidateResponse>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Candidates(Guid roleId, CancellationToken cancellationToken)
@@ -101,13 +90,7 @@ public sealed class RoleMembersController : ControllerBase
         return Ok(ApiResponseFactory.Success(candidates, "Candidates retrieved."));
     }
 
-    /// <summary>
-    /// Grants the role to each of the given users in the caller's active tenant. Saved one at a time on
-    /// purpose: a Permission Group capacity limit counts persisted members, so a batch checked all at
-    /// once against a group with one seat left would let everybody through. If one is refused, the ones
-    /// already granted stand and the message says so — the alternative is discarding good work because
-    /// the last name in a list did not fit.
-    /// </summary>
+    /// <summary>Grants the role to each of the given users in the caller's active tenant.</summary>
     [HttpPost]
     public async Task<IActionResult> Add(Guid roleId, [FromBody] AddRoleMembersRequest request, CancellationToken cancellationToken)
     {
@@ -208,9 +191,7 @@ public sealed class RoleMembersController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("This user does not hold that role in your tenant."));
         }
 
-        // Their last role in a tenant IS their access to it (AC-ADM-006.3). Dropping it from here would
-        // quietly end that access as a side effect of tidying one role's membership; ending somebody's
-        // access is a decision, and it is taken on their own page where it says what it does.
+        // Their last role in a tenant IS their access to it (AC-ADM-006.3).
         if (here.Count == 1)
         {
             return BadRequest(ApiResponseFactory.Error(
@@ -228,12 +209,7 @@ public sealed class RoleMembersController : ControllerBase
 
     // ---- helpers ----
 
-    /// <summary>
-    /// Resolves the role whose membership is being managed, and the tenant it is managed in. A role
-    /// another tenant owns is refused rather than hidden — a Super Admin can legitimately be looking at
-    /// one — and the Super Admin role is refused outright: that assignment is not tenant membership and
-    /// is granted with the account itself.
-    /// </summary>
+    /// <summary>Resolves the role whose membership is being managed, and the tenant it is managed in.</summary>
     private async Task<(Role? Role, Guid TenantId, IActionResult? Error)> ResolveAsync(Guid roleId, CancellationToken cancellationToken)
     {
         if (User.GetActiveTenantId() is not { } tenantId)

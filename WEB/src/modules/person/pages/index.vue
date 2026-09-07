@@ -60,9 +60,7 @@
           <q-btn flat round dense color="primary" icon="o_visibility" :to="{ name: 'person_detail', params: { id: cell.row.id } }">
             <q-tooltip>View / Edit</q-tooltip>
           </q-btn>
-          <!-- One button per action, all of them on the row. A person who is already a user keeps the
-               button, disabled and saying so: that they are one is worth reading off the row, and a
-               button that disappears leaves the reader wondering whether they may do it at all. -->
+          <!-- One button per action, all of them on the row. -->
           <q-btn
             v-if="canCreateUser" type="a"
             flat round dense
@@ -137,9 +135,6 @@ const tenantFilterOptions = computed(() =>
   (canChooseTenant.value && tenantOptions.value.length ? tenantOptions.value : null));
 
 // Filterable columns are server-side; text/date columns are covered by the search box.
-// Where a person record came from. The API sends the EntityType NAME; these are the ones that actually
-// mint persons today — anything else falls through to its own name rather than being hidden, and a row
-// with no source predates provenance tracking (unknown, not "created by nothing").
 const SOURCE_LABELS = {
   Person: "Added manually",
   Rems: "REMS request",

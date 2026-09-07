@@ -13,11 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Person (CRM master record) management. A person holds the canonical personal/contact/professional
-/// profile (WO-61) and is the precursor to a login account: persons are created here, then promoted
-/// to a <see cref="User"/> via <c>POST /api/admin/users</c>.
-/// </summary>
+/// <summary>Person (CRM master record) management.</summary>
 [ApiController]
 [Route("/api/admin/persons")]
 [Produces("application/json")]
@@ -67,10 +63,8 @@ public sealed class PersonsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             PersonCode = await GeneratePersonCodeAsync(cancellationToken),
-            // A non-Super-Admin can only create within their own tenant; a client-supplied TenantId is
-            // honoured only for Super Admins, and when they supply none the person lands in the tenant
-            // they are currently viewing (the claim follows the Super-Admin tenant scope) rather than
-            // nowhere. (Falls back to active-tenant stamping.)
+            // A non-Super-Admin can only create within their own tenant; a client-supplied TenantId is honoured
+            // only for Super Admins.
             TenantId = (User.IsSuperAdmin() ? request.TenantId : null) ?? User.GetActiveTenantId(),
             Suffix = request.Suffix,
             FirstName = request.FirstName,
@@ -148,13 +142,8 @@ public sealed class PersonsController : ControllerBase
     }
 
     /// <summary>
-    /// Selectable persons for the user-create dropdown (already-promoted persons carry <c>IsUser=true</c>).
-    /// <para>
-    /// The caller's own tenant, unless <paramref name="tenantId"/> names another — which the tenant
-    /// management screen does, creating accounts inside a tenant the Super Admin is not switched into.
-    /// Honoured only for a caller who administers tenants at all (tenants.write); ignored for anyone else,
-    /// who is simply shown their own tenant's people as before.
-    /// </para>
+    /// Selectable persons for the user-create dropdown (already-promoted persons carry
+    /// <c>IsUser=true</c>).
     /// </summary>
     [HttpGet("selectable")]
     [RequirePermission(Permissions.PersonsRead)]

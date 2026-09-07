@@ -15,8 +15,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Permission Group management (RBAC composition layer: Permission Keys → Permission Groups →
-/// Roles → Users). Tenant-scoped with a Super Admin <c>?tenantId=</c> override. All mutations
-/// require <c>groups.manage</c>; Tenant Admins may only assign keys within their tenant's ceiling.
+/// Roles → Users).
 /// </summary>
 [ApiController]
 [Route("/api/admin/permission-groups")]
@@ -371,7 +370,7 @@ public sealed class PermissionGroupsController : ControllerBase
         return distinct.Where(Permissions.All.Contains).ToList();
     }
 
-    /// <summary>Enforces the Tenant Admin ceiling (ADR-003). Returns a 403 result when keys escape it; null when allowed.</summary>
+    /// <summary>Enforces the Tenant Admin ceiling (ADR-003).</summary>
     private async Task<IActionResult?> CheckCeilingAsync(Guid tenantId, IReadOnlyList<string> keys, CancellationToken cancellationToken)
     {
         if (User.IsSuperAdmin())

@@ -4,24 +4,16 @@ namespace EmsPortal.Application.Abstractions.Email;
 
 /// <summary>
 /// Enqueues transactional emails for background delivery so the request thread is never blocked on the
-/// SMTP round-trip. The actual send is performed by a Hangfire job that calls
-/// <see cref="IEmailNotificationService"/>. Abstracted so the Api/Application layers can queue an email
-/// without referencing Hangfire directly.
+/// SMTP round-trip.
 /// </summary>
 public interface IEmailDispatcher
 {
-    /// <summary>
-    /// Queues a transactional email for best-effort delivery in the background (fire-and-forget).
-    /// <paramref name="messageId"/> pins the outbound Message-ID for delivery-event correlation (WO-121)
-    /// when supplied; leave it null (the default) for every other email.
-    /// </summary>
+    /// <summary>Queues a transactional email for best-effort delivery in the background (fire-and-forget).</summary>
     void Enqueue(Guid tenantId, EmailTemplateKey key, string? toEmail, IReadOnlyDictionary<string, string?> model, string? messageId = null);
 
     /// <summary>
-    /// As <see cref="Enqueue"/>, but sends a subject / body the caller already composed — what an admin
-    /// edited in a send dialog before confirming. Either may be null to keep the template's version of
-    /// that part. The template is still resolved at send time: it supplies whatever is not overridden,
-    /// and a tenant with no effective template still sends nothing.
+    /// As <see cref="Enqueue"/>, but sends a subject / body the caller already composed — what an
+    /// admin edited in a send dialog before confirming.
     /// </summary>
     void EnqueueComposed(
         Guid tenantId,

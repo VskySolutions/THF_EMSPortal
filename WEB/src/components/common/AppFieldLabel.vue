@@ -2,7 +2,7 @@
   <div v-if="text" class="app-field-label">
     {{ text }}<span v-if="isRequired" class="app-field-label__star" aria-hidden="true">*</span>
     <!-- Explains a rule the control itself cannot show — which group or role a picker is scoped to, where
-         its values come from. Mirrors the info icon AppReadonlyField puts on a derived value. -->
+         its values come from. -->
     <q-icon v-if="info" name="o_info" size="14px" color="grey-6" class="app-field-label__info">
       <q-tooltip anchor="top middle" self="bottom middle" max-width="280px">{{ info }}</q-tooltip>
     </q-icon>
@@ -10,9 +10,7 @@
 </template>
 
 <script setup>
-// Standard external field label: sits at the top-left above the input (not inside it). A mandatory
-// field is marked with a larger red asterisk. Pair it with any App* field control; the controls do
-// this automatically so existing "Label *" strings render correctly with no call-site changes.
+// Standard external field label: sits at the top-left above the input (not inside it).
 import { toRef } from "vue";
 import { useFieldLabel } from "composables/useFieldLabel";
 

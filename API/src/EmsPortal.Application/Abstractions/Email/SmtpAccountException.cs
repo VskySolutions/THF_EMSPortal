@@ -2,7 +2,7 @@ namespace EmsPortal.Application.Abstractions.Email;
 
 /// <summary>
 /// A business-rule violation in SMTP account management (e.g. a duplicate account name or an attempt
-/// to delete the active account). Carries a stable <see cref="Code"/> the API maps to an error envelope.
+/// to delete the active account).
 /// </summary>
 public sealed class SmtpAccountException : Exception
 {

@@ -1,7 +1,5 @@
 <template>
-  <!-- Minimal PUBLIC layout for the anonymous REMS client EMS form (WO-116). Deliberately bare — a brand
-       bar plus a centered page — with NO app menu, navigation drawer or tenant switcher, since it is
-       rendered for logged-out clients following an emailed invite link. -->
+  <!-- Minimal PUBLIC layout for the anonymous REMS client EMS form (WO-116). -->
   <q-layout view="hHh lpR fFf">
     <q-header class="public-header">
       <q-toolbar class="public-toolbar">

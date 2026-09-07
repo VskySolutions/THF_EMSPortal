@@ -57,8 +57,7 @@
           <q-btn type="a" flat round dense color="primary" icon="o_edit" @click="openEdit(cell.row)">
             <q-tooltip>Edit</q-tooltip>
           </q-btn>
-          <!-- One button per action, all of them on the row. Edit is not repeated: it is already the
-               button beside this one. -->
+          <!-- One button per action, all of them on the row. -->
           <q-btn type="a" flat round dense color="primary" icon="o_visibility" @click="previewRow(cell.row)">
             <q-tooltip>Preview</q-tooltip>
           </q-btn>

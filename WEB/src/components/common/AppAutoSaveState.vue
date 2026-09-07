@@ -8,9 +8,7 @@
 </template>
 
 <script setup>
-// What an auto-saving card says about itself. A form that saves on its own has to show it, or the user
-// is left guessing whether their edit landed — and, when it did not, why. Silent success is the one
-// thing auto-save must never be.
+// What an auto-saving card says about itself.
 import { computed } from "vue";
 
 const props = defineProps({

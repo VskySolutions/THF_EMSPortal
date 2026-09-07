@@ -4,8 +4,6 @@ import { useTenantStore } from "stores/tenant";
 import { usePermissions, Permissions } from "composables/usePermissions";
 
 // Tenant-selection helper shared by every form that assigns a tenant (user create, person create/edit).
-// Rule: only platform/super admins (tenants.write) get a tenant dropdown; everyone else is auto-scoped
-// to their current active tenant. Centralised so the rule and option shape stay identical everywhere.
 export function useTenantOptions () {
   const tenantStore = useTenantStore();
   const { has } = usePermissions();

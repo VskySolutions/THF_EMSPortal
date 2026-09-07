@@ -14,12 +14,7 @@ using MediaCategoryEnum = EmsPortal.Domain.Enums.MediaCategory;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Centralized media upload/serving (WO-61). Files are filed under the content root by the record
-/// they belong to — <c>media-uploads/{tenant}/{EntityType}/{recordKey}/{purpose}/</c> — and streamed
-/// back by id; public media (e.g. profile pictures) can be fetched anonymously by their unguessable
-/// id so they render in plain &lt;img&gt; tags.
-/// </summary>
+/// <summary>Centralized media upload/serving (WO-61).</summary>
 [ApiController]
 [Produces("application/json")]
 [Tags("Media")]
@@ -50,11 +45,7 @@ public sealed class MediaController : ControllerBase
         _persons = persons;
     }
 
-    /// <summary>
-    /// Uploads a file. <paramref name="entityType"/> + <paramref name="entityId"/> name the record it
-    /// belongs to and decide the folder it lands in; without them the file is filed under
-    /// <c>_unassigned</c>, which is a holding pen for a cleanup sweep rather than a place to leave things.
-    /// </summary>
+    /// <summary>Uploads a file.</summary>
     [HttpPost("/api/media")]
     [Authorize]
     [RequestSizeLimit(MaxFileSizeBytes)]
@@ -162,12 +153,7 @@ public sealed class MediaController : ControllerBase
         return File(stream, string.IsNullOrWhiteSpace(media.MimeType) ? "application/octet-stream" : media.MimeType);
     }
 
-    /// <summary>
-    /// Whether the caller may file a file under a record. Being able to read the record is the bar,
-    /// so nobody can drop a file into a folder belonging to a record they cannot open — except for
-    /// their own person record, which they reach through the self-service profile screen and without
-    /// holding <c>users.read</c>.
-    /// </summary>
+    /// <summary>Whether the caller may file a file under a record.</summary>
     private async Task<bool> CanFileUnderAsync(EntityTypeEnum entityType, Guid entityId, CancellationToken cancellationToken)
     {
         if (User.CanAccess(entityType))

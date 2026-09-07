@@ -19,9 +19,8 @@
 </template>
 
 <script setup>
-// Shared preview row for a staged File: an image thumbnail for images, a type icon otherwise, with
-// the name + extension + size. Clicking opens the file in a new tab (browser previews images/PDFs).
-// Used by AppSingleFileUpload and AppMultiFileUpload so every upload behaves identically.
+// Shared preview row for a staged File: an image thumbnail for images, a type icon otherwise, with the name
+// + extension + size.
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { formatFileSize, iconForFile, isImageFile, extOf } from "composables/useFileDrop";
 

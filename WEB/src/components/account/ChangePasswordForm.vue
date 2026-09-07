@@ -1,8 +1,8 @@
 <template>
   <q-form greedy @submit.prevent.stop="onSubmit">
     <q-card-section>
-      <!-- The standard password box (label above the field, one eye toggle), so these three read like
-           every other field in the application rather than carrying their labels inside the box. -->
+      <!-- The standard password box (label above the field, one eye toggle), so these three read like every
+           other field in the application rather than carrying their labels inside the box. -->
       <app-password-field
         v-model="model.oldPassword" label="Current Password" required maxlength="20"
         :autofocus="autofocus" class="q-mb-md" autocomplete="current-password"
@@ -49,10 +49,7 @@
 </template>
 
 <script setup>
-// THE change-password form. Both /account/change-password and the card on /account/profile render this, so
-// the rules cannot drift apart — they previously did, and the profile copy was the weaker of the two
-// (no lowercase or special-character requirement). That matters more than it looks: the API applies NO
-// complexity policy of its own, so these rules are the only thing enforcing one.
+// THE change-password form.
 import { ref } from "vue";
 import useVuelidate from "@vuelidate/core";
 import { required, helpers, minLength } from "@vuelidate/validators";
@@ -94,12 +91,6 @@ const rules = {
   confirmPassword: {
     required: helpers.withMessage("Confirm password is required", required),
     // A rule rather than a post-validate check, so the mismatch is reported on the field itself.
-    //
-    // Compared inline rather than with the library's sameAs(): that helper resolves its argument with
-    // `unref`, which unwraps a ref but hands a FUNCTION straight back — so sameAs(() => other) compared
-    // the input against the arrow function itself and could never be equal, rejecting every password
-    // however carefully it was retyped. Reading model.value here keeps the dependency reactive, so the
-    // error also clears when the new password is edited to match, not only when the confirmation is.
     sameAsNew: helpers.withMessage(
       "New password and confirmation do not match",
       (value) => value === model.value.newPassword)

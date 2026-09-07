@@ -4,13 +4,7 @@ import { tenantApi } from "services/api";
 import { useAuthStore } from "stores/auth";
 import { useTenantStore } from "stores/tenant";
 
-// Super-Admin tenant scope. Unlike the tenant SWITCHER (which is limited to the tenants a user is actually
-// assigned to and swaps their token), this re-points the ambient tenant on the server via the X-Tenant-Id
-// header — so a Super Admin can administer a tenant they hold no assignment in.
-//
-// The selection is deliberately GLOBAL: one choice drives every tenant-scoped screen, so Option Sets and
-// REMS can never be looking at different tenants at the same time. State lives at module scope (one shared
-// instance) and in LocalStorage, which is where the axios interceptor reads it from.
+// Super-Admin tenant scope.
 export const TENANT_SCOPE_KEY = "adminTenantOverride";
 
 const scopeTenantId = ref(LocalStorage.getItem(TENANT_SCOPE_KEY) || null);
@@ -23,17 +17,7 @@ let inflight = null;
 // afterwards and fill it back in.
 let generation = 0;
 
-/**
- * Forget everything this module is holding.
- *
- * The state is deliberately at MODULE scope so one selection drives every screen — which also means it
- * OUTLIVES a session: signing out is a router navigation, not a page load, so nothing here is torn down.
- * Left alone, the next person to sign in inherits the last one's scope selection and their cached tenant
- * list, which is why a tenant renamed in one session was still read by its old name in the next.
- *
- * Raised by the auth store as `session-cleared` rather than imported, to keep the store and this
- * composable from importing each other.
- */
+/** Forget everything this module is holding. */
 const forget = () => {
   generation += 1;
   scopeTenantId.value = null;
@@ -79,9 +63,7 @@ export function useTenantScope () {
   const scopedTenantName = computed(() =>
     tenantOptions.value.find((t) => t.value === selectedTenantId.value)?.label || "");
 
-  // `force` re-reads a list already held. Every caller on a page LOAD wants the cheap version — a list
-  // already fetched, or the fetch already running — but a tenant that has just been renamed or created
-  // makes the cached list wrong, and the name shown in the toolbar is read straight out of it.
+  // `force` re-reads a list already held.
   const loadTenants = async ({ force = false } = {}) => {
     if (!canScopeTenant.value) return;
     if (inflight) {
@@ -100,13 +82,7 @@ export function useTenantScope () {
     }
   };
 
-  /**
-   * Re-read the list after a tenant has been created, renamed, deactivated or archived.
-   *
-   * Called by the screens that do those things. The toolbar's label and its menu are rendered from this
-   * list, so without it a rename shows everywhere in the app except the one control that names the
-   * tenant you are looking at.
-   */
+  /** Re-read the list after a tenant has been created, renamed, deactivated or archived. */
   const refreshTenants = () => loadTenants({ force: true });
 
   const setScope = (tenantId) => {

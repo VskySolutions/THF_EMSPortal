@@ -4,8 +4,8 @@ using EmsPortal.Shared.Security;
 namespace EmsPortal.Api.Security;
 
 /// <summary>
-/// Resolves the audit actor from the authenticated user on the current HTTP request,
-/// falling back to the system identity when no user is present (REQ-INF-009 AC-2).
+/// Resolves the audit actor from the authenticated user on the current HTTP request, falling back to
+/// the system identity when no user is present (REQ-INF-009 AC-2).
 /// </summary>
 public sealed class HttpContextActorAccessor : IActorAccessor
 {

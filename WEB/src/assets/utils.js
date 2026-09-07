@@ -18,17 +18,10 @@ export function clearLocalStorage (key) {
   return LocalStorage.remove(key);
 }
 
-// export function showLoader () {
-//   Loading.show({
-//     spinner: DancingLadyLoader, // Use your custom component here
-//     backgroundColor: "grey-8",
-//     message: "" // Leave message empty as the custom component handles it
-//   });
-// }
+// export function showLoader () { Loading.show({ spinner: DancingLadyLoader, // Use your custom component
+// here backgroundColor: "grey-8", message.
 
-// export function hideLoader () {
-//   Loading.hide();
-// }
+// export function hideLoader () { Loading.hide(); }
 
 export function notifySuccess (data) {
   Notify.create({

@@ -5,9 +5,7 @@ import { useConfirm } from "composables/useConfirm";
 import { useNotify } from "composables/useNotify";
 import { widgetsForRole, defaultLayoutForRole, defaultHiddenForRole, WIDGETS_BY_KEY } from "modules/dashboard/widgets/registry";
 
-// Per-user dashboard layout state (WO-73). Persists widget order / hidden / collapsed via the
-// dashboard layout endpoint, with a role-based default when no layout is saved. Every mutation
-// updates the local refs immediately, then debounce-saves to the server.
+// Per-user dashboard layout state (WO-73).
 export function useDashboardLayout (role) {
   const { confirm } = useConfirm();
   const notify = useNotify();

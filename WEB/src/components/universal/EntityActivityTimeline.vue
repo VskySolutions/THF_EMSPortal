@@ -4,21 +4,19 @@
     <div v-if="!loading && !events.length" class="text-grey-6 q-pa-md text-center">No activity yet.</div>
 
     <!-- ONE LINE PER EVENT. A trail is read by scanning it, and the four things every entry says — what
-         happened, what changed, who did it, when — are worth having in four columns that line up all the
-         way down rather than stacked three deep per entry. A grid rather than a flex row: the columns
-         have to agree across every row, which is the whole reason this reads faster than a timeline. -->
+         happened, what changed, who did. -->
     <div v-if="events.length" class="uf-act__list" role="list">
       <div v-for="e in events" :key="e.id" class="uf-act__row" role="listitem">
-        <!-- The rail: a hairline behind the icons, so the list still reads as a sequence without
-             spending a single pixel of row height on saying so. -->
+        <!-- The rail: a hairline behind the icons, so the list still reads as a sequence without spending a
+             single pixel of row height on saying so. -->
         <span class="uf-act__dot">
           <q-icon :name="iconFor(e.eventType)" size="14px" />
         </span>
 
         <span class="uf-act__what ellipsis">
           {{ labelFor(e.eventType) }}
-          <!-- The change itself, held back from the label: "Status changed" is the event, and
-               "draft → awaiting_customer" is the detail somebody looks at only when the event matters. -->
+          <!-- The change itself, held back from the label: "Status changed" is the event, and "draft →
+               awaiting_customer" is the detail somebody looks at only when the event matters. -->
           <span v-if="changeOf(e)" class="uf-act__change">{{ changeOf(e) }}</span>
           <q-tooltip v-if="changeOf(e)" max-width="360px" :delay="400">
             {{ labelFor(e.eventType) }} — {{ changeOf(e) }}

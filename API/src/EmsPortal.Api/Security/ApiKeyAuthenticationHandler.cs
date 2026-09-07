@@ -10,9 +10,8 @@ using AuthenticationOptions = EmsPortal.Shared.Configuration.AuthenticationOptio
 namespace EmsPortal.Api.Security;
 
 /// <summary>
-/// Authenticates machine-to-machine callers by validating the <c>X-Api-Key</c> header
-/// against stored PBKDF2 hashes. Returns no-result when the header is absent so the
-/// JWT scheme can be tried first; fails for present-but-unrecognized keys.
+/// Authenticates machine-to-machine callers by validating the <c>X-Api-Key</c> header against stored
+/// PBKDF2 hashes.
 /// </summary>
 public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {

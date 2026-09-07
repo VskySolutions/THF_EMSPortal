@@ -19,45 +19,19 @@ public interface IPersonRepository
 
     /// <summary>
     /// Paginated list with optional free-text search (name, email, person code) and optional
-    /// structured filters (owning tenant, whether the person is a user, active state, provenance) — all
-    /// applied server-side so pagination/totals reflect the filtered set.
-    /// <para>
-    /// <c>sourceEntityType</c> narrows to persons of one provenance, e.g. <see cref="EntityType.Client"/>
-    /// for the REMS client picker. Null lists every person whatever their source, including the rows that
-    /// predate provenance tracking.
-    /// </para>
+    /// structured filters (owning tenant, whether the person is a user, active state.
     /// </summary>
-    /// <param name="partyType">
-    /// Narrows to people or to organisations. The REMS client picker's whole use for it: a request for an
-    /// Individual must offer individuals, and a request for any other entity type must offer companies —
-    /// offering the wrong kind is offering somebody a client they cannot file the request under.
-    /// </param>
+    /// <param name="partyType"> Narrows to people or to organisations. The REMS client picker's whole use for it: a request for an Individual must offer individuals, and a request for any other entity type must offer companies — offering the wrong kind is offering somebody a client they cannot file the request under. </param>
     Task<(IReadOnlyList<Person> Items, int Total)> ListAsync(
         string? search, Guid? tenantId, bool? isUser, bool? isActive, SortRequest sort, int page, int limit,
         EntityType? sourceEntityType = null, PartyType? partyType = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// The client already holding this email address, if any. An email reaches one inbox, so two client
-    /// records under one address are the same client entered twice — the second is refused rather than
-    /// filed. Scoped to clients (<see cref="EntityType.Client"/>): a colleague and a client may share an
-    /// address without either being a duplicate of the other.
-    /// <para>
-    /// <c>excludingPersonId</c> names a client to disregard — the one the calling request already minted,
-    /// so re-saving it is not a clash with itself.
-    /// </para>
-    /// </summary>
+    /// <summary>The client already holding this email address, if any.</summary>
     Task<Person?> FindClientByEmailAsync(
         string email, Guid? excludingPersonId, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Lightweight projection for the user-create Person dropdown (id, name, email, user-link flag).
-    /// <para>
-    /// Scoped to the caller's active tenant by the ambient filter. <paramref name="tenantId"/> names a
-    /// DIFFERENT tenant instead — for the tenant-management screen, which creates accounts in a tenant its
-    /// Super Admin is not currently inside. Callers must gate it; the repository only obeys.
-    /// </para>
-    /// </summary>
+    /// <summary>Lightweight projection for the user-create Person dropdown (id, name, email, user-link flag).</summary>
     Task<IReadOnlyList<(Person Person, bool IsUser)>> ListSelectableAsync(
         Guid? tenantId = null, CancellationToken cancellationToken = default);
 

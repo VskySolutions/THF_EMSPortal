@@ -11,10 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Sticky Notes — floating notes that are either personal (owned by the creator) or tenant-broadcast to
-/// every user until dismissed. Creating/editing/deleting tenant notes requires <c>settings.manage</c>;
-/// personal notes are open to any user. Per-user position/size/z-order is persisted server-side (ADR-003).
-/// Tenant-scoped via the ambient query filter.
+/// Sticky Notes — floating notes that are either personal (owned by the creator) or tenant-broadcast
+/// to every user until dismissed.
 /// </summary>
 [ApiController]
 [Authorize]

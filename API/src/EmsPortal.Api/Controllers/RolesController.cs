@@ -12,15 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// RBAC role management. Roles come in two scopes and keeping them apart is this controller's whole
-/// job: PLATFORM roles (<see cref="Role.TenantId"/> null) are the Super Admin's — every tenant is
-/// offered them, and only a Super Admin may change one, because a change lands in every tenant at once
-/// — while a Tenant Admin creates and maintains roles inside their OWN tenant, which no other tenant
-/// ever sees. What a tenant admin may put in one is held to their tenant's permission ceiling
-/// (<see cref="RoleAccess.CeilingAsync"/>), so a role can never hand out authority the tenant itself
-/// does not have.
-/// </summary>
+/// <summary>RBAC role management.</summary>
 [ApiController]
 [Produces("application/json")]
 [Tags("Roles")]
@@ -52,8 +44,8 @@ public sealed class RolesController : ControllerBase
     }
 
     /// <summary>
-    /// Resolves the Created/Updated actor ids across a set of rows to display names, so the list's audit
-    /// columns read as people rather than guids. One lookup for the whole page.
+    /// Resolves the Created/Updated actor ids across a set of rows to display names, so the list's
+    /// audit columns read as people rather than guids.
     /// </summary>
     private async Task<Func<Guid?, string?>> AuditNamesAsync(
         IEnumerable<Role> rows, CancellationToken cancellationToken)
@@ -65,10 +57,7 @@ public sealed class RolesController : ControllerBase
         return id => id is { } uid && names.TryGetValue(uid, out var n) ? n : null;
     }
 
-    /// <summary>
-    /// Names the tenants owning the rows on this page, so the list can say where each role comes from.
-    /// Costs nothing when every row is a platform role, which is the usual case.
-    /// </summary>
+    /// <summary>Names the tenants owning the rows on this page, so the list can say where each role comes from.</summary>
     private async Task<Func<Guid?, string?>> TenantNamesAsync(
         IEnumerable<Role> rows, CancellationToken cancellationToken)
     {
@@ -85,9 +74,8 @@ public sealed class RolesController : ControllerBase
     }
 
     /// <summary>
-    /// The permission catalogue the caller may actually build a role from: everything for a Super Admin,
-    /// the tenant's ceiling for anyone else. Filtering it here is what keeps the picker honest — offering
-    /// a key whose save would then be refused is a poor way to say "you may not grant this".
+    /// The permission catalogue the caller may actually build a role from: everything for a Super
+    /// Admin, the tenant's ceiling for anyone else.
     /// </summary>
     [HttpGet("/api/admin/permissions")]
     [RequirePermission(Permissions.RolesRead)]
@@ -134,17 +122,12 @@ public sealed class RolesController : ControllerBase
         var nameOf = await AuditNamesAsync(page, cancellationToken);
         var tenantNameOf = await TenantNamesAsync(page, cancellationToken);
         // Ordered after projecting, because two of the columns the list offers — Scope and Permissions —
-        // only exist on the summary. This list is returned whole, so there is no page for the order to be
-        // wrong across; it is done here so the browser never has to guess an order from rendered text.
+        // only exist on the summary.
         var summaries = ListSorts.Apply(page.Select(r => ToSummary(r, nameOf, tenantNameOf)), sortBy, descending);
         return Ok(ApiResponseFactory.Success(summaries, "Roles retrieved."));
     }
 
-    /// <summary>
-    /// What the Roles list may be ordered by. "Scope" reads as the owning tenant's name, or "Platform"
-    /// for a role that belongs to no tenant — the same string the cell shows, so the order matches what
-    /// is on screen rather than the null behind it.
-    /// </summary>
+    /// <summary>What the Roles list may be ordered by.</summary>
     private static readonly SortMap<RoleSummary> ListSorts = new SortMap<RoleSummary>("updatedOnUtc")
         .Add("name", r => r.Name)
         .Add("description", r => r.Description)
@@ -325,9 +308,7 @@ public sealed class RolesController : ControllerBase
         }
 
         // Everything this tenant's users can hold — the platform roles plus the ones the tenant made for
-        // itself — and the authoritative source for the user role pickers. Another tenant's roles are not
-        // in it: they exist only where they were created. The one further exclusion is the platform-wide
-        // Super Admin system role, which stays hidden from non-Super-Admin callers.
+        // itself — and the authoritative source for the user role pickers.
         var rows = (await _roles.ListVisibleToTenantAsync(tenantId, cancellationToken))
             .Where(r => RoleAccess.CanSee(User, r))
             .OrderBy(r => r.Name)
@@ -398,8 +379,10 @@ public sealed class RolesController : ControllerBase
 
     private const string PlatformOnly = "Only a Super Admin manages which tenants a role is available in.";
 
-    /// <summary>The roles the caller may see at all: every role for a Super Admin, the platform roles plus
-    /// their own tenant's for anyone else.</summary>
+    /// <summary>
+    /// The roles the caller may see at all: every role for a Super Admin, the platform roles plus
+    /// their own tenant's for anyone else.
+    /// </summary>
     private async Task<(IReadOnlyList<Role> Roles, IActionResult? Error)> VisibleRolesAsync(CancellationToken cancellationToken)
     {
         if (User.IsSuperAdmin())
@@ -417,11 +400,7 @@ public sealed class RolesController : ControllerBase
         return (visible, null);
     }
 
-    /// <summary>
-    /// Loads a role for editing or deletion. A role the caller cannot see reads as missing; a platform
-    /// role they can see but not change is a plain refusal, since pretending it is absent would
-    /// contradict their own list, which shows it.
-    /// </summary>
+    /// <summary>Loads a role for editing or deletion.</summary>
     private async Task<(Role? Role, IActionResult? Error)> LoadForWriteAsync(Guid id, CancellationToken cancellationToken)
     {
         var role = await _roles.GetByIdAsync(id, cancellationToken);
@@ -447,7 +426,7 @@ public sealed class RolesController : ControllerBase
 
     /// <summary>
     /// Holds a tenant admin to their tenant's permission ceiling (ADR-003): a role they write can only
-    /// hand out authority the tenant already has. Returns a 403 when a key escapes it; null when allowed.
+    /// hand out authority the tenant already has.
     /// </summary>
     private async Task<IActionResult?> CheckCeilingAsync(Guid tenantId, IEnumerable<string> keys, CancellationToken cancellationToken)
     {
@@ -464,10 +443,7 @@ public sealed class RolesController : ControllerBase
 
     private static string ScopeOf(Role role) => role.TenantId?.ToString() ?? "platform";
 
-    /// <summary>
-    /// The single-role view. Async because it names the owning tenant: the detail page says where a role
-    /// comes from, and a guid is not that.
-    /// </summary>
+    /// <summary>The single-role view.</summary>
     private async Task<RoleResponse> ToResponseAsync(Role r, CancellationToken cancellationToken)
     {
         var tenantName = r.TenantId is { } owner

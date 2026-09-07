@@ -1,27 +1,8 @@
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { usePreferences } from "composables/usePreferences";
 
-// Standard list-page plumbing for AppDataTable (WO-59): data fetching, server
-// pagination AND SORTING state, quick-search/filter-drawer state, refresh, and
-// automatic reload on tenant switch. Page-specific concerns (columns, client-side
-// filtering, CRUD actions) stay in the page.
-//
-//   const list = useListTable({
-//     pageKey: "tenants",
-//     fetcher: ({ page, limit, sortBy, descending }) =>
-//       tenantApi.list({ page, limit, sortBy, descending })
-//         .then((r) => ({ data: r?.data, total: r?.meta?.totalRecords })),
-//     onError: (err) => notify.error(getApiErrorMessage(err))
-//   });
-//
-// `fetcher({ page, limit, sortBy, descending })` must resolve to `{ data: Row[], total: number }`.
-//
-// SORTING IS THE SERVER'S. A list is one page of a larger set, so ordering it in the browser only ever
-// ordered the twenty rows already on screen — "newest first" meant "newest of this page", and page 2 held
-// rows that belonged on page 1. It also compared what the cells DISPLAY, so a column of dates rendered
-// MM/DD/YYYY sorted by month before year. Both go away by asking the server for the order it should
-// return rows in: `sortBy` names a column, the endpoint maps it to a real ORDER BY over the whole set,
-// and an unknown name falls back to that list's default rather than erroring.
+// Standard list-page plumbing for AppDataTable (WO-59): data fetching, server pagination AND SORTING state,
+// quick-search/filter-drawer state, refresh, and automatic reload on tenant switch.
 export function useListTable ({
   fetcher,
   defaultPageSize = 20,
@@ -29,9 +10,7 @@ export function useListTable ({
   // no such column (an event feed, say) names its own.
   defaultSortBy = "updatedOnUtc",
   defaultDescending = true,
-  // Same key the page gives AppDataTable. The reader's chosen sort is remembered per page, and it is kept
-  // HERE rather than in the table because the fetch has to go out already carrying it — a preference the
-  // table restored after the first request would have loaded the wrong page of rows.
+  // Same key the page gives AppDataTable.
   pageKey = "",
   onError,
   reloadOnTenantSwitch = true

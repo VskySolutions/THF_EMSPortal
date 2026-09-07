@@ -1,8 +1,6 @@
 import { Notify } from "quasar";
 
 // Standardized notification templates (UI Development Standards §4.3).
-// Usable both inside and outside component setup since it relies on the
-// Quasar Notify plugin singleton rather than useQuasar().
 const base = {
   multiLine: true,
   html: true,

@@ -2,10 +2,7 @@ using EmsPortal.Domain.Enums;
 
 namespace EmsPortal.Application.Abstractions.Email;
 
-/// <summary>
-/// Decrypted SMTP connection settings handed to <see cref="ISmtpEmailSender"/>. Held in memory only
-/// for the duration of a send; never persisted or logged.
-/// </summary>
+/// <summary>Decrypted SMTP connection settings handed to <see cref="ISmtpEmailSender"/>.</summary>
 public sealed record SmtpAccountCredentials(
     string Host,
     int Port,

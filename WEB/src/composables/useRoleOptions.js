@@ -2,19 +2,13 @@ import { ref, computed } from "vue";
 import { roleApi } from "services/api";
 import { useAuthStore } from "stores/auth";
 
-// WO-123 multi-role picker. Roles are categorised by NAME (stable regardless of the isSystem flag;
-// anything unrecognised is a Custom role) so both the grouped assignment picker and the
-// category-distinguished role chips in the displays agree on how a role is classified.
+// WO-123 multi-role picker.
 export const SYSTEM_ROLE_NAMES = Object.freeze(["SuperAdmin", "TenantAdmin"]);
 // What a person DOES in REMS. There is no Approver role: the add-approvers picker offers every user in
 // the tenant.
 export const OPERATIONAL_ROLE_NAMES = Object.freeze(["Partner", "Admin"]);
-// What a person IS in REMS. They grant nothing: the first three make the user offerable in the picker
-// that fills that seat on an engagement, and Shareholder puts them on every engagement's approver list
-// automatically, alongside the director and the CSE and no more removable than they are. The first three
-// replaced user groups of the same name, which is why they read as phrases rather than as PascalCase:
-// they are the words on the picker. Kept apart from Operational so a long role list still separates
-// "what they can do" from "what they can be picked for".
+// What a person IS in REMS. They grant nothing: the first three make the user offerable in the picker that
+// fills that seat on an engagement.
 export const SEAT_ROLE_NAMES = Object.freeze([
   "CSE", "Engagement Executive", "Billing Manager", "Shareholder"
 ]);
@@ -47,8 +41,7 @@ export function roleCategoryChip (name) {
 }
 
 // Loads the roles assignable within a tenant and exposes them as a grouped option list for a single
-// AppSelect (multiple). Each category is preceded by a disabled, non-selectable header row so one
-// select renders the grouped catalogue without a bespoke component.
+// AppSelect (multiple).
 export function useRoleOptions () {
   const authStore = useAuthStore();
   const roles = ref([]);

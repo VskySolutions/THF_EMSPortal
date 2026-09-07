@@ -11,25 +11,10 @@ export function useFileDrop () {
 
 const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"];
 
-/**
- * The biggest file any upload on this platform accepts, in MB.
- *
- * It is the SERVER's limit — /api/media and /api/attachments both refuse anything larger — stated here so
- * a picker never promises a size the save will reject. A dropzone offering 25 MB over an endpoint that
- * stops at 10 is a form that fails after the upload rather than before it, which is the worst place to
- * find out.
- */
+/** The biggest file any upload on this platform accepts. */
 export const MAX_UPLOAD_MB = 10;
 
-/**
- * The file types a business document can be, as an `accept` list.
- *
- * Every "attach whatever is relevant" field shares this — the REMS request's attachments and the Universal
- * Features attachments panel — so the two cannot drift, and so neither of them is a field that accepts an
- * executable. Fields that want ONE kind of document say so themselves (the signed CAF is ".pdf").
- *
- * Emails are on the list because a referral arrives as one more often than as anything else.
- */
+/** The file types a business document can be, as an `accept` list. */
 export const ATTACHMENT_ACCEPT = [
   ".pdf",
   ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg",
@@ -39,16 +24,7 @@ export const ATTACHMENT_ACCEPT = [
   ".zip"
 ].join(",");
 
-/**
- * The caps on a SET of attachments, and the sentence that states all three.
- *
- * The per-file size is the server's; these two are the platform's own — fifteen files, or a hundred
- * megabytes of them, is already a record nobody wants to open. They live here beside the accept list for
- * the same reason it does: every "attach whatever is relevant" field asks the same question, and a
- * private copy of the numbers in each is a copy that drifts from the sentence promising them.
- *
- * A field with something of its own to add appends to the hint rather than rewriting it.
- */
+/** The caps on a SET of attachments, and the sentence that states all three. */
 export const MAX_ATTACHMENT_FILES = 15;
 export const MAX_ATTACHMENT_TOTAL_MB = 100;
 export const ATTACHMENT_HINT =
@@ -60,14 +36,7 @@ export function extOf (name) {
   return i >= 0 ? String(name).slice(i).toLowerCase() : "";
 }
 
-/**
- * An extension in the one shape the helpers below compare against: lower-cased, with a leading dot.
- *
- * Both shapes are in circulation. A picked File carries its extension inside the name (".pdf"), while a
- * stored Media row keeps it in a column of its own with the dot stripped ("pdf") — so a helper written
- * for one silently answered "unknown file" for the other, which is why every saved attachment used to
- * render the generic document icon whatever it actually was.
- */
+/** An extension in the one shape the helpers below compare against: lower-cased, with a leading dot. */
 export function normalizeExt (ext) {
   const raw = String(ext || "").trim().toLowerCase();
   if (!raw) return "";

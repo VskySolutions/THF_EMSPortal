@@ -7,15 +7,13 @@ namespace EmsPortal.Api.Security;
 
 /// <summary>
 /// The rules every (user, tenant, role) assignment answers to, wherever it is made: the user page,
-/// which reconciles one person's whole role set, and the role page, which hands one role to several
-/// people at once. Both go through here, so a limit enforced on one is enforced on the other.
+/// which reconciles one person's whole role set, and the role page.
 /// </summary>
 internal static class RoleAssignment
 {
     /// <summary>
     /// Maps an RBAC role to a legacy fixed-tier enum for the transition period: system roles map by
-    /// name; custom roles fall back to an explicit enum if given, otherwise the neutral
-    /// <see cref="UserRole.Custom"/> sentinel (the enum is superseded by permission-based authorization).
+    /// name; custom roles fall back to an explicit enum if given.
     /// </summary>
     public static UserRole MapLegacyRole(Role roleEntity, string? explicitRole)
     {
@@ -40,9 +38,7 @@ internal static class RoleAssignment
 
     /// <summary>
     /// Permission Group capacity (WO-119) for a grant about to happen: for each capped group in the
-    /// tenant composed by a newly-granted role, if the user is not already an active member and admitting
-    /// them would push usage past the limit, the blocking group is returned (and the rejection audited —
-    /// the caller saves). Null when every grant fits.
+    /// tenant composed by a newly-granted role.
     /// </summary>
     public static async Task<CapacityBlock?> FindCapacityBlockAsync(
         IPermissionGroupRepository permissionGroups,

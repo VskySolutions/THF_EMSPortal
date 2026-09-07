@@ -25,8 +25,7 @@ public static class ClaimsPrincipalExtensions
 
     /// <summary>
     /// True when the caller holds the given permission — either via an explicit permission claim or,
-    /// as a fallback (API-key/pre-RBAC callers), via the seeded permission set for ANY of their role
-    /// claims. Mirrors <see cref="PermissionAuthorizationHandler"/>.
+    /// as a fallback (API-key/pre-RBAC callers).
     /// </summary>
     public static bool HasPermission(this ClaimsPrincipal principal, string permission)
         => principal.HasClaim(ClaimTypeNames.Permission, permission)

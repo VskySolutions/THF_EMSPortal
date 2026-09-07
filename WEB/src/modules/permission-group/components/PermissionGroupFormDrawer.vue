@@ -55,9 +55,7 @@
           dense
           header-class="pg-group__header"
         >
-          <!-- The whole category in one tick. Ticking the box must not also collapse the section, hence
-               the stopped click; and it only ever reaches the keys a row could reach, so the ceiling
-               still holds. Half-selected renders indeterminate rather than guessing either way. -->
+          <!-- The whole category in one tick. -->
           <template #header>
             <q-item-section side>
               <q-checkbox
@@ -182,8 +180,7 @@ const countSelectedIn = (keys) => keys.filter((k) => selectedKeys.value.includes
 const selectableIn = (keys) => keys.filter((k) => !isDisabled(k));
 
 // Tri-state for the category checkbox: all of them, none of them, or null for some (which Quasar renders
-// indeterminate). Measured over the selectable keys only, so a category whose last key is out of reach
-// still reads as fully selected once the rest are.
+// indeterminate).
 const groupState = (keys) => {
   const selectable = selectableIn(keys);
   if (!selectable.length) return false;
@@ -203,8 +200,7 @@ const toggleGroup = (keys, next) => {
 };
 
 // ---- Tenant ceiling (best-effort, never blocks submit) ----
-// Super Admins see no ceiling. For Tenant Admins, prefer the union of keys across the tenant's
-// roles; fall back to the catalogue minus known elevated keys.
+// Super Admins see no ceiling.
 const ceiling = ref(null); // null → no restriction (super admin)
 
 const computeCeiling = async () => {

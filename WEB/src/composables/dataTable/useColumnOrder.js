@@ -1,8 +1,7 @@
 import { ref } from "vue";
 
-// Column ordering for AppDataTable: holds the user's preferred order of data columns (the
-// "actions" column is always kept last), supports drag/move reordering, and reconciles a
-// persisted order with the live column set (keeps known columns, drops removed, appends new).
+// Column ordering for AppDataTable: holds the user's preferred order of data columns (the "actions" column
+// is always kept last), supports drag/move reordering.
 export default function useColumnOrder ({ columns, initialOrder, saveOrderState }) {
   const dataNames = () => columns.value.filter((c) => c.name !== "actions").map((c) => c.name);
 

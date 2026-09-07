@@ -12,12 +12,12 @@
     <div v-if="loading" class="row flex-center q-pa-xl"><q-spinner color="primary" size="40px" /></div>
 
     <div v-else-if="role">
-      <!-- What this role is, before what it grants: the kind, whose it is, how much it carries and how
-           many people hold it. -->
+      <!-- What this role is, before what it grants: the kind, whose it is, how much it carries and how many
+           people hold it. -->
       <q-card flat bordered class="role-card q-mb-md">
         <q-card-section class="row items-center q-col-gutter-md">
-          <!-- In its own column: a q-col-gutter row pads its direct children, and on an avatar that
-               padding lands inside the circle. -->
+          <!-- In its own column: a q-col-gutter row pads its direct children, and on an avatar that padding
+               lands inside the circle. -->
           <div class="col-auto">
             <q-avatar
               size="72px" :color="role.isSystem ? 'blue-grey-6' : 'primary'" text-color="white"
@@ -117,14 +117,12 @@
             </q-card-section>
           </q-card>
 
-          <!-- Role ↔ Permission Group composition (WO-70). A card in its own right, like the users
-               panel — wrapping one card in another only drew a second border around it. -->
+          <!-- Role ↔ Permission Group composition (WO-70). -->
           <role-permission-groups-panel v-if="role.canManage" :role-id="role.id" class="q-mb-md" />
         </div>
 
         <div class="col-12 col-md-5">
-          <!-- Who holds it, in this tenant. Shown for a platform role too: what the role grants is the
-               platform's, but who has it here is this tenant's to decide. -->
+          <!-- Who holds it, in this tenant. -->
           <role-users-panel
             v-if="canManageMembers" :role-id="role.id" :role-name="role.name" class="q-mb-md"
             @loaded="memberCount = $event"
@@ -155,13 +153,7 @@
 </template>
 
 <script setup>
-// The role, in full: what it is, what it grants, which groups compose it, and who holds it here. Reached
-// from the roles list. A page rather than a drawer: a role is a record people come back to and link each
-// other at, and a drawer is neither addressable nor wide enough for the users beside it.
-//
-// It opens for two quite different callers. A Super Admin, or a tenant admin looking at their own tenant's
-// role, edits everything. A tenant admin looking at a PLATFORM role reads the definition and manages the
-// membership: what the role grants belongs to the platform, who holds it here belongs to them.
+// The role, in full: what it is, what it grants, which groups compose it, and who holds it here.
 import { ref, reactive, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { roleApi, tenantApi, getApiErrorMessage } from "services/api";
@@ -231,9 +223,7 @@ const form = reactive({ name: "", description: "", permissions: [] });
 const prettyPermission = (key) => key.replace(/_/g, " ").replace(/\./g, " · ");
 
 // ---- Load ----
-// `syncFields` seeds the inputs. An auto-save refreshes the stored role — the baseline every dirty check
-// reads — without reseeding them, so a save landing while the next field is being edited cannot take
-// those keystrokes back.
+// `syncFields` seeds the inputs.
 const load = async ({ syncFields = true } = {}) => {
   loading.value = !role.value;
   try {
@@ -268,9 +258,8 @@ const loadPermissions = async () => {
 };
 
 // ---- Auto-save ----
-// The definition saves itself: the name when you leave it, the permissions the moment you change them,
-// the description a beat after you stop typing (a rich-text editor has no blur to hang it on). One state
-// for the card, because it is one record and one endpoint behind all three.
+// The definition saves itself: the name when you leave it, the permissions the moment you change them, the
+// description a beat after you stop typing (a rich-text editor has no blur to hang it on).
 const definitionSave = reactive({ state: "idle", message: "" });
 
 const runAutoSave = async (target, fn) => {
@@ -324,9 +313,8 @@ const autoSavePermissions = async () => {
   }
 };
 
-// The description is a CKEditor field with no blur to hang a save on, so it commits a beat after the
-// typing stops. Long enough not to write on every keystroke, short enough that leaving the page with an
-// unsaved paragraph takes deliberate effort.
+// The description is a CKEditor field with no blur to hang a save on, so it commits a beat after the typing
+// stops.
 let descriptionTimer = null;
 watch(() => form.description, (next) => {
   if (!role.value?.canManage) return;

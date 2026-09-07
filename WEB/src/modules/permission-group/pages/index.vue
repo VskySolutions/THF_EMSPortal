@@ -65,8 +65,7 @@
           <q-btn flat round dense color="primary" icon="o_visibility" :to="{ name: 'permission_group_detail', params: { id: cell.row.id } }">
             <q-tooltip>View</q-tooltip>
           </q-btn>
-          <!-- One button per action, all of them on the row. View is not repeated: it is already the
-               button beside this one. -->
+          <!-- One button per action, all of them on the row. -->
           <q-btn type="a" flat round dense color="primary" icon="o_edit" @click="openEdit(cell.row)">
             <q-tooltip>Edit</q-tooltip>
           </q-btn>
@@ -159,8 +158,7 @@ const { confirm } = useConfirm();
 const { canChooseTenant } = useTenantOptions();
 
 // The tenant in view comes from the toolbar's global scope control rather than a dropdown of its own —
-// one selection drives every tenant-scoped screen. Passed explicitly because this API takes ?tenantId=,
-// and the form drawer needs it for the group it creates.
+// one selection drives every tenant-scoped screen.
 const { selectedTenantId } = useTenantScope();
 
 const STATUS_OPTIONS = [

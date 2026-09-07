@@ -2,17 +2,17 @@ using EmsPortal.Api.Models.Profile;
 
 namespace EmsPortal.Api.Models.Persons;
 
-/// <summary>
-/// Create payload for a standalone <c>Person</c> master record (WO-61). A person is the
-/// canonical CRM record; it can later be promoted to a login account via the users endpoint.
-/// </summary>
+/// <summary>Create payload for a standalone <c>Person</c> master record (WO-61).</summary>
 public sealed class CreatePersonRequest
 {
     /// <summary>Owning tenant (optional).</summary>
     public Guid? TenantId { get; set; }
 
     // Personal
-    /// <summary>The generational particle on the name — Jr., Sr., II, III, IV. Free text; not part of the filed name.</summary>
+    /// <summary>
+    /// The generational particle on the name — Jr., Sr., II, III, IV. Free text; not part of the
+    /// filed name.
+    /// </summary>
     public string? Suffix { get; set; }
 
     public string FirstName { get; set; } = string.Empty;
@@ -44,14 +44,14 @@ public sealed class CreatePersonRequest
     public AddressInput? Address { get; set; }
 }
 
-/// <summary>Update payload for a person. Null fields are left unchanged.</summary>
+/// <summary>Update payload for a person.</summary>
 public sealed class UpdatePersonRequest
 {
     /// <summary>Owning tenant.</summary>
     public Guid? TenantId { get; set; }
 
     // Personal
-    /// <summary>The generational particle on the name. Free text; not part of the filed name.</summary>
+    /// <summary>The generational particle on the name.</summary>
     public string? Suffix { get; set; }
 
     public string? FirstName { get; set; }
@@ -95,9 +95,7 @@ public sealed record PersonSummary(
     string? TenantName,
     bool IsUser,
     bool IsActive,
-    // Where this record came from — the Person screen, a REMS engagement, a client's EMS form. Sent as
-    // the EntityType NAME rather than its integer so the column is readable without a lookup table, and
-    // null when the row predates provenance tracking (unknown, not "created by nothing").
+    // Where this record came from — the Person screen, a REMS engagement, a client's EMS form.
     string? SourceEntityType,
     Guid? SourceEntityId,
     string? CreatedBy,

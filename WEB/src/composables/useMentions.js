@@ -2,11 +2,6 @@ import { ufConversationApi } from "services/api";
 import { escapeHtml } from "utils/richText";
 
 // The single definition of what an @mention IS, shared by every editor that supports them.
-//
-// Two different editors emit mentions — q-editor (the conversation composer, contenteditable + insertHTML) and
-// CKEditor (AppRichTextField, via its Mention plugin) — and both must produce byte-identical markup.
-// If they drift, a mention typed in one renders as plain text in the other and extractMentionIds() returns
-// nothing, so the notification is silently never sent. Hence one module rather than a copy per editor.
 
 /// Class on the rendered token. Styled in app.scss; also the upcast hook for CKEditor.
 export const MENTION_CLASS = "uf-mention";

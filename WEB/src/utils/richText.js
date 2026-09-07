@@ -1,8 +1,4 @@
 // Rich-text helpers shared by every editor-backed field (descriptions, notes).
-//
-// The API sanitizes this HTML on write (IRichTextSanitizer), so what comes back is already safe. These
-// run anyway: rendering through a second allowlist means a value that predates the server sanitizer — or
-// one written straight to the database — still cannot execute in the browser.
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
 

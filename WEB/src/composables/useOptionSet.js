@@ -10,9 +10,8 @@ export function useEntityTypeOptions () {
   return { options };
 }
 
-// Loads the effective, ordered, active values for a (entityType, key) — optionally filtered by a
-// parent item for cascading lists. Re-resolves reactively whenever the inputs change. `getParams`
-// is a getter returning { entityType, key, parentItemId }.
+// Loads the effective, ordered, active values for a (entityType, key) — optionally filtered by a parent
+// item for cascading lists.
 export function useOptionSetOptions (getParams) {
   const options = ref([]);
   const loading = ref(false);

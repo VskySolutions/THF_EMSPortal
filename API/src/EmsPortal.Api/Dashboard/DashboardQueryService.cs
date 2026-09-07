@@ -7,11 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EmsPortal.Api.Dashboard;
 
-/// <summary>
-/// Builds the dashboard read models. All time windows are UTC. Queries bypass the ambient tenant
-/// filter and scope explicitly by tenant id (or not at all, for the platform view) so a single
-/// service serves tenant-scoped and cross-tenant callers. Missing source data degrades to 0/empty.
-/// </summary>
+/// <summary>Builds the dashboard read models.</summary>
 public sealed class DashboardQueryService : IDashboardQueryService
 {
     private readonly EmsPortalDbContext _db;

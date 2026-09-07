@@ -1,14 +1,8 @@
 <template>
   <!-- A conversation read the way a conversation is read: oldest at the top, newest at the bottom, the
-       thread pinned to the latest message, and a box to type in that is always there.
-
-       It was a LIST before — newest first, every message an identical row, and the box to write one
-       hidden behind an "Add message" button. That is a table of messages, not a conversation: a reply
-       read above the thing it answered, and saying anything at all began with a click to reveal the
-       field. -->
+       thread pinned to the latest message, and a box to type in that is always there. -->
   <div class="uf-chat" :style="{ height }">
-    <!-- Only where there is something to search. One message needs no search box, and an empty thread
-         needs the invitation to write rather than a filter over nothing. -->
+    <!-- Only where there is something to search. -->
     <div v-if="searchable" class="uf-chat__head">
       <q-input
         v-model="search"
@@ -44,8 +38,8 @@
           class="uf-chat__row"
           :class="{ 'uf-chat__row--mine': item.mine, 'uf-chat__row--tight': !item.leads }"
         >
-          <!-- Only on the first message of a run, and never on your own: your own messages are the ones
-               on the right, which says whose they are without a picture repeating it. -->
+          <!-- Only on the first message of a run, and never on your own: your own messages are the ones on
+               the right, which says whose they are without a picture repeating it. -->
           <q-avatar
             v-if="!item.mine && item.leads" size="30px"
             :style="avatarStyle(item.message.authorId)" class="uf-chat__avatar"
@@ -85,8 +79,8 @@
               </div>
             </template>
 
-            <!-- Held inside the bubble and revealed on hover, so a thread at rest is messages rather
-                 than messages with two buttons beside each of them. -->
+            <!-- Held inside the bubble and revealed on hover, so a thread at rest is messages rather than
+                 messages with two buttons beside each of them. -->
             <q-btn
               v-if="editingId !== item.message.id && (canEdit(item.message) || canDelete(item.message))"
               flat round dense size="xs" icon="o_more_vert" class="uf-chat__actions"
@@ -148,8 +142,7 @@
         </q-btn>
       </div>
 
-      <!-- @mention autocomplete. Anchored to the composer rather than to the caret: a menu that chases
-           the caret inside a contenteditable jumps about as the line wraps. -->
+      <!-- @mention autocomplete. -->
       <q-menu
         v-model="mentionOpen"
         no-focus no-parent-event no-refocus
@@ -195,9 +188,7 @@ import { mentionTokenHtml, extractMentionIds, fetchMentionCandidates } from "com
 const props = defineProps({
   entityType: { type: Number, required: true },
   entityId: { type: String, required: true },
-  // How tall the whole panel is. A chat owns its scroll — the thread moves and the composer does not —
-  // so it needs a height to divide between them, and a container with none of its own cannot give it
-  // one. Pass "100%" where the parent does have one.
+  // How tall the whole panel is.
   height: { type: String, default: "440px" }
 });
 
@@ -267,8 +258,8 @@ const load = async ({ keepPosition = false } = {}) => {
 const onSearch = () => load({ keepPosition: true });
 
 // ---- the timeline: day headings, and who said what next to each other ----
-// Consecutive messages from one author inside this window are one turn of speech: the avatar and the
-// name are said once at the top of the run rather than over every line of it.
+// Consecutive messages from one author inside this window are one turn of speech: the avatar and the name
+// are said once at the top of the run rather than over every line of it.
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
 const dayLabel = (value) => {
@@ -380,10 +371,8 @@ const fetchCandidates = async (term) => {
   }
 };
 
-// Enter sends and Shift+Enter breaks the line, which is what every chat box does and therefore what
-// fingers already expect. While the mention menu is open Enter belongs to the MENU instead: the arrows
-// walk the list and Enter takes the highlighted name, so reaching for the mouse is never the only way
-// to finish a mention — and so Enter never sends a half-typed "@sam" as a message.
+// Enter sends and Shift+Enter breaks the line, which is what every chat box does and therefore what fingers
+// already expect.
 const onComposerKeydown = (e) => {
   if (mentionOpen.value) {
     if (e.key === "ArrowDown") {
@@ -504,10 +493,7 @@ const renderBody = (body) => {
 
 const initials = (name) => (name || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
-// One colour per person, derived from their id. Not decoration: on a thread with four people in it, the
-// colour of the avatar and of the name is what lets a reader follow one voice down the page without
-// reading every name. Derived rather than stored, so it is the same colour on every screen and for
-// every reader.
+// One colour per person, derived from their id.
 const AVATAR_COLORS = [
   "#1565c0", "#00838f", "#2e7d32", "#6a1b9a", "#c62828",
   "#ad1457", "#4527a0", "#00695c", "#ef6c00", "#37474f"

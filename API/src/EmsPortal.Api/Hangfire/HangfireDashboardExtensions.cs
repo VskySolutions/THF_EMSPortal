@@ -7,9 +7,8 @@ using EmsPortal.Shared.Security;
 namespace EmsPortal.Api.Hangfire;
 
 /// <summary>
-/// Registers Hangfire storage so the Integration API can host the monitoring
-/// dashboard at <c>/hangfire</c>, restricted to admin roles via the authorization
-/// pipeline. The API enqueues jobs; the Background Worker executes them.
+/// Registers Hangfire storage so the Integration API can host the monitoring dashboard at
+/// <c>/hangfire</c>, restricted to admin roles via the authorization pipeline.
 /// </summary>
 public static class HangfireDashboardExtensions
 {

@@ -14,10 +14,7 @@ public sealed record NotificationResponse(
     bool IsGrouped,
     DateTime CreatedOnUtc);
 
-/// <summary>
-/// A single notification-type channel preference. Only the in-app channel is user-configurable
-/// (WO-124, AC-UNI-013.2) — notification types are in-app only and never emailed.
-/// </summary>
+/// <summary>A single notification-type channel preference.</summary>
 public sealed record NotificationPreferenceResponse(NotificationType NotificationType, bool InApp);
 
 /// <summary>Request to update one notification preference row (in-app channel only).</summary>

@@ -8,10 +8,7 @@ import { usePins } from "composables/uf/usePins";
 import { useEntityMeta } from "composables/uf/useEntityMeta";
 import { ROW_COLOUR_PALETTE } from "composables/uf/useColourCodes";
 
-// Shared Universal Features per-record actions — pin, colour, reminder, copy permalink, export PDF.
-// Backs both the detail-header icon bar (EntityHeaderActions) and the list-row "more" menu
-// (EntityRowActionsMenu) so the behaviour stays identical everywhere. Call `loadAll()` when the
-// surface that uses it becomes visible (on mount for the header, on menu-open for a list row).
+// Shared Universal Features per-record actions — pin, colour, reminder, copy permalink.
 export function useEntityActions (entityType, entityId, label = "record", initialPinned = false) {
   const router = useRouter();
   const notify = useNotify();

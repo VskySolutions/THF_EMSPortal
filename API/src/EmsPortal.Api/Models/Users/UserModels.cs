@@ -2,29 +2,32 @@ namespace EmsPortal.Api.Models.Users;
 
 public sealed class CreateUserRequest
 {
-    /// <summary>The existing Person to promote to a login account. Required (people are created first).</summary>
+    /// <summary>The existing Person to promote to a login account.</summary>
     public Guid PersonId { get; set; }
-    /// <summary>Login email/username. Defaults to the person's primary email when omitted.</summary>
+    /// <summary>Login email/username.</summary>
     public string? Email { get; set; }
     /// <summary>Optional phone; when supplied it is written back to the person's mobile number.</summary>
     public string? PhoneNumber { get; set; }
     /// <summary>Optional dial code for <see cref="PhoneNumber"/>, written back to the person.</summary>
     public string? CountryCode { get; set; }
-    /// <summary>Target tenant. Ignored for Tenant Admins (forced to their active tenant).</summary>
+    /// <summary>Target tenant.</summary>
     public Guid? TenantId { get; set; }
-    /// <summary>The RBAC roles to assign in the tenant (multi-role). Each must resolve to a known role.</summary>
+    /// <summary>The RBAC roles to assign in the tenant (multi-role).</summary>
     public List<Guid> RoleIds { get; set; } = new();
-    /// <summary>Legacy single RBAC role. Folded into <see cref="RoleIds"/> for back-compat.</summary>
+    /// <summary>Legacy single RBAC role.</summary>
     public Guid? RoleId { get; set; }
-    /// <summary>Legacy fixed-tier role name. Used only when no role ids are supplied (back-compat).</summary>
+    /// <summary>Legacy fixed-tier role name.</summary>
     public string Role { get; set; } = string.Empty;
-    /// <summary>When true, email the new user an invitation with their temporary password (via the tenant's active SMTP account).</summary>
+    /// <summary>
+    /// When true, email the new user an invitation with their temporary password (via the tenant's
+    /// active SMTP account).
+    /// </summary>
     public bool SendInvitation { get; set; }
 }
 
 public sealed class UpdateUserRequest
 {
-    /// <summary>The generational particle on the person's name (Jr., III, …). Written onto their Person record.</summary>
+    /// <summary>The generational particle on the person's name (Jr., III, …).</summary>
     public string? Suffix { get; set; }
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
@@ -43,19 +46,15 @@ public sealed class UpdateUserStatusRequest
     public bool IsActive { get; set; }
 }
 
-/// <summary>
-/// Reconciles the full set of roles a user holds in a tenant (multi-role). The active assignment set
-/// is made to match <see cref="RoleIds"/> — missing roles are added, absent ones soft-deleted; an
-/// empty resulting set removes tenant access entirely (AC-ADM-006.2/006.3).
-/// </summary>
+/// <summary>Reconciles the full set of roles a user holds in a tenant (multi-role).</summary>
 public sealed class AssignTenantRoleRequest
 {
     public Guid TenantId { get; set; }
-    /// <summary>The RBAC roles the user should hold in the tenant. Each must resolve to a known role.</summary>
+    /// <summary>The RBAC roles the user should hold in the tenant.</summary>
     public List<Guid> RoleIds { get; set; } = new();
-    /// <summary>Legacy single RBAC role. Folded into <see cref="RoleIds"/> for back-compat.</summary>
+    /// <summary>Legacy single RBAC role.</summary>
     public Guid? RoleId { get; set; }
-    /// <summary>Legacy fixed-tier role name. Used only when no role ids are supplied (back-compat).</summary>
+    /// <summary>Legacy fixed-tier role name.</summary>
     public string? Role { get; set; }
 }
 
@@ -89,16 +88,13 @@ public sealed class AssignUserGroupsRequest
 
 // ---- Departments ----
 
-/// <summary>
-/// Sets (or clears) the user's department within the caller's active tenant. Marking the user as head
-/// demotes the department's previous head and repoints the REMS department-director mapping.
-/// </summary>
+/// <summary>Sets (or clears) the user's department within the caller's active tenant.</summary>
 public sealed class SetUserDepartmentRequest
 {
     /// <summary>Department code (option-set <c>REMS.Department</c>), or null/empty to unassign the user.</summary>
     public string? Department { get; set; }
 
-    /// <summary>True to make this user the department's head. Ignored when no department is supplied.</summary>
+    /// <summary>True to make this user the department's head.</summary>
     public bool IsHead { get; set; }
 }
 
@@ -109,8 +105,8 @@ public sealed record DepartmentOptionDto(string Value, string Label);
 public sealed record DepartmentHeadDto(string Department, Guid UserId, string FullName);
 
 /// <summary>
-/// Picker data for the user's department section: the tenant's departments and the head of each — what
-/// the UI needs to name the incumbent before a headship is taken over.
+/// Picker data for the user's department section: the tenant's departments and the head of each —
+/// what the UI needs to name the incumbent before a headship is taken over.
 /// </summary>
 public sealed record DepartmentOptionsResponse(
     IReadOnlyList<DepartmentOptionDto> Departments,
@@ -147,9 +143,8 @@ public sealed record UserSummary(
     IReadOnlyList<string> Roles,
     IReadOnlyList<UserGroupDto> Groups,
     bool IsActive,
-    // The department held in the caller's active tenant — already resolved to its option-set label, and
-    // null when the user is unplaced (or the caller has no active tenant). A head is that department's
-    // REMS director, which the list flags with an icon.
+    // The department held in the caller's active tenant — already resolved to its option-set label, and null
+    // when the user is unplaced (or the caller has no active tenant).
     string? Department,
     bool IsDepartmentHead,
     string? CreatedBy,

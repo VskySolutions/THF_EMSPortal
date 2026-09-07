@@ -3,11 +3,7 @@ using EmsPortal.Domain.Enums;
 
 namespace EmsPortal.Application.Abstractions.OptionSets;
 
-/// <summary>
-/// Manages tenant-configurable option lists and their values. All write operations are scoped to the
-/// caller's resolved tenant; platform-standard (seeded) lists are read-only and cannot be edited,
-/// reordered, or deleted through this service.
-/// </summary>
+/// <summary>Manages tenant-configurable option lists and their values.</summary>
 public interface IOptionSetService
 {
     Task<OptionSet> CreateSetAsync(CreateOptionSetInput input, CancellationToken cancellationToken = default);

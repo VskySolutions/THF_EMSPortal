@@ -6,8 +6,8 @@
       Enter the email address you sign in with and we'll send you a link to choose a new password.
     </div>
 
-    <!-- Deliberately shown for ANY submitted address: confirming only known accounts would let anyone
-         test which email addresses have logins here. -->
+    <!-- Deliberately shown for ANY submitted address: confirming only known accounts would let anyone test
+         which email addresses have logins here. -->
     <q-banner v-if="sent" dense class="bg-green-1 text-green-9 rounded-borders q-mb-md">
       <template #avatar><q-icon name="o_mark_email_read" color="green-9" /></template>
       If that email address has an account, a reset link is on its way. The link expires in 60 minutes.

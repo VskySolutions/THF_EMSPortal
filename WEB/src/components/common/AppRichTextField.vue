@@ -64,10 +64,7 @@ const config = computed(() => ({
       "link", "removeFormat"
     ],
     // Wrap onto a second row rather than fold what does not fit into CKEditor's "Show more items" (⋮)
-    // menu. Grouping is CKEditor's default and it is the wrong one for eleven buttons in a dialog or a
-    // form drawer: the toolbar measures itself once, and in a container that is narrow — or that is not
-    // its final width yet, which is any editor mounted while a dialog is still opening — every button
-    // disappears behind a chevron nobody thinks to open. Two rows of visible buttons is the lesser cost.
+    // menu.
     shouldNotGroupWhenFull: true
   },
   link: {

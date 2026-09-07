@@ -1,17 +1,4 @@
-// Shared permission-key categorisation + humanisation (WO-70). Centralised so the Permission Group
-// form, detail page and role panel group/label permission keys identically.
-//
-// Category derivation (by key prefix):
-//   tenants.*                              → Tenants
-//   users.* / persons.*                    → Users
-//   roles.* / groups.*                     → Access
-//   rems.*                                 → REMS
-//   settings.* / optionSets.* / records.* / email.*  → Settings
-//   (anything else)                        → Other
-//
-// REMS earns a section of its own: it is what the portal is for, and its keys were landing in "Other"
-// beside the tenant-configuration ones — a dozen unrelated things in one bucket, and nothing in the
-// bucket a person looking for "the REMS permissions" would open.
+// Shared permission-key categorisation + humanisation (WO-70).
 
 // Display order for the rendered category sections.
 export const CATEGORY_ORDER = Object.freeze([

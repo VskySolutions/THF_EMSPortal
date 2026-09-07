@@ -14,7 +14,7 @@
     <div class="section-subhead">Name</div>
     <div class="row q-col-gutter-md q-mb-md">
       <!-- Held to what a name is — letters, and the hyphen / apostrophe / period that appear inside real
-           ones. See utils/personName, which the server's PersonNames mirrors. -->
+           ones. -->
       <app-text-field
         v-model="form.firstName" label="First Name *" class="col-12 col-sm-6"
         :disable="disable" :rules="nameRules('First name', { required: true })"
@@ -28,9 +28,7 @@
         :disable="disable" :rules="nameRules('Last name', { required: true })"
       />
       <!-- The generational particle on their name — Jr., Sr., III. It is not part of the name the person
-           is filed under, which is why it is its own box rather than something typed into the surname:
-           "Smith Jr." in that box is somebody nobody finds by searching for their name. It sits after the
-           surname, which is where it is read. -->
+           is filed under. -->
       <app-name-suffix-field v-model="form.suffix" class="col-4 col-sm-2" :disable="disable" />
       <app-text-field
         v-model="form.preferredName" label="Preferred Name" class="col-12 col-sm-6"
@@ -59,9 +57,8 @@
 </template>
 
 <script setup>
-// The Person create/edit field set, defined once and reused (People list drawer + the
-// quick-add dialog on the user form). Binds directly to the reactive `form` object the
-// parent owns; the surrounding q-form validates the nested inputs.
+// The Person create/edit field set, defined once and reused (People list drawer + the quick-add dialog on
+// the user form).
 import { nameRules } from "utils/personName";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";

@@ -5,8 +5,8 @@ using EmsPortal.Domain.Enums;
 namespace EmsPortal.Application.Abstractions.Persistence;
 
 /// <summary>
-/// Data access for <see cref="ConversationMessage"/>s — a record's conversation — and their
-/// <see cref="ConversationMessageMention"/>s.
+/// Data access for <see cref="ConversationMessage"/>s — a record's conversation — and their <see
+/// cref="ConversationMessageMention"/>s.
 /// </summary>
 public interface IConversationMessageRepository
 {
@@ -27,7 +27,10 @@ public interface IConversationMessageRepository
 
     void RemoveMention(ConversationMessageMention mention);
 
-    /// <summary>Paginated @mentions of a user (joined to their message), newest-first; optional entity-type and read filters.</summary>
+    /// <summary>
+    /// Paginated @mentions of a user (joined to their message), newest-first; optional entity-type and
+    /// read filters.
+    /// </summary>
     Task<(IReadOnlyList<(ConversationMessageMention Mention, ConversationMessage Message)> Items, int Total)> ListMentionsForUserAsync(
         Guid userId, EntityType? entityType, bool? isRead, SortRequest sort, int page, int limit,
         CancellationToken cancellationToken = default);

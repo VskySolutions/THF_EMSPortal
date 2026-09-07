@@ -12,8 +12,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Tenant-scoped user groups: a way to segment/tag users (independent of RBAC roles) so they can be
-/// listed and filtered by group name. Listing requires <c>users.read</c>; creating requires
-/// <c>users.write</c> (assigning groups to a user lives on the Users endpoint).
+/// listed and filtered by group name.
 /// </summary>
 [ApiController]
 [Route("/api/admin/user-groups")]

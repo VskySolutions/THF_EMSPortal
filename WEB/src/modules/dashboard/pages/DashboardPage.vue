@@ -140,8 +140,7 @@ const resolveComponent = (widget) => {
 };
 
 // ---- Map a widget to its data slice + loading/error ----
-// Keyed by widget.key so widget WOs can bind exactly the fields they need. Loose props are tolerated
-// by the stubs (extra attrs simply fall through).
+// Keyed by widget.key so widget WOs can bind exactly the fields they need.
 const dataFor = (widget) => {
   switch (widget.category) {
     case "users":
@@ -194,8 +193,8 @@ const refreshAll = () => {
 };
 
 // ---- Drag-to-reorder (only while the customise panel is open) ----
-// Mirrors AppDataTable's native HTML5 column-reorder pattern: dragstart records the source index,
-// dragover marks the hovered target, drop computes the new visible-key order and persists it.
+// Mirrors AppDataTable's native HTML5 column-reorder pattern: dragstart records the source index, dragover
+// marks the hovered target, drop computes the new visible-key order and persists it.
 const dragIndex = ref(null);
 const dragOverIndex = ref(null);
 

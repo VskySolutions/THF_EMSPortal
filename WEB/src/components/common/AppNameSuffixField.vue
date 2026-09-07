@@ -1,8 +1,5 @@
 <template>
-  <!-- The generational particle on a name — Jr., Sr., II, III, IV — in a box of its own.
-       Free text with the common suffixes as suggestions: the list is what most people need, not all any
-       person may have, and one nobody thought to seed is not a reason to file somebody under the wrong
-       name. -->
+  <!-- The generational particle on a name — Jr., Sr., II, III, IV — in a box of its own. -->
   <app-text-field
     v-model="model"
     :label="label"
@@ -44,16 +41,6 @@
 
 <script setup>
 // The name SUFFIX field — Jr., Sr., II, III, IV — asked beside a name.
-//
-// It is a field of its own rather than something typed into the last name because a person is FILED under
-// a given name and a family name, and a generational particle is neither: "Smith Jr." in a surname box is
-// a person nobody finds by searching for their name, and "John Smith Jr." matches no client record when
-// "John Smith" matches the man. It is appended wherever the name is READ.
-//
-// The ONE particle the platform asks for, and so the one box: every screen that asks about a name —
-// the Person record, a user's account, somebody's own profile, the REMS intake form and its contacts —
-// asks it through here, so the suggestions, the cap and the way it clears are the same wherever it is
-// asked. It replaced a courtesy-title box (Mr., Dr.) that used to sit at the other end of the name.
 import { computed, nextTick } from "vue";
 import AppTextField from "components/common/AppTextField.vue";
 import { NAME_SUFFIXES, NAME_SUFFIX_MAX_LENGTH } from "utils/personName";

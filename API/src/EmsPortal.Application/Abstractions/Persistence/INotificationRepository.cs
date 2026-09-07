@@ -16,7 +16,6 @@ public interface INotificationRepository
     /// <summary>
     /// The user's notifications, newest first, with the standard list filters applied server-side so
     /// paging and totals describe the whole filtered set rather than the page in hand.
-    /// <paramref name="search"/> matches the title or body.
     /// </summary>
     Task<(IReadOnlyList<Notification> Items, int Total)> ListAsync(
         Guid userId, bool? isRead, NotificationType? type, string? search,

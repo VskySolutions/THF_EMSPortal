@@ -58,8 +58,7 @@
           <q-btn flat round dense color="primary" icon="o_visibility" :to="{ name: 'tenant_detail', params: { id: cell.row.tenantId } }">
             <q-tooltip>View / Manage</q-tooltip>
           </q-btn>
-          <!-- One button per action, all of them on the row. Activate and Deactivate are two states of
-               one action, so they are one button that says which way it will go. -->
+          <!-- One button per action, all of them on the row. -->
           <q-btn type="a" flat round dense color="primary" icon="o_edit" @click="openEdit(cell.row)">
             <q-tooltip>Edit</q-tooltip>
           </q-btn>

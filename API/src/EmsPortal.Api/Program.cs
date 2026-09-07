@@ -28,9 +28,7 @@ builder.Host.UseSerilog((context, _, loggerConfiguration) =>
         "EmsPortal.Api",
         context.HostingEnvironment.EnvironmentName));
 
-// API host services. Controllers route through the global validation filter, which emits
-// the ApiResponseFactory.ValidationError envelope (ADR-002); the default [ApiController]
-// 400 behavior is suppressed so our envelope is the single validation response shape.
+// API host services.
 builder.Services.AddControllers(options => options.Filters.Add<ValidationActionFilter>());
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(
     options => options.SuppressModelStateInvalidFilter = true);
@@ -93,9 +91,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
     app.MapScalarApiReference(options => options.WithTitle("EMS Portal API"));
 }
 
-// Correlation ID is established first so every downstream log entry — and the 500
-// error body — carries it. Exception handling then wraps all downstream middleware,
-// followed by request/response logging and auth.
+// Correlation ID is established first so every downstream log entry — and the 500 error body — carries it.
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestResponseLoggingMiddleware>();

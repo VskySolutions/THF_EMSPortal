@@ -1,9 +1,7 @@
 <template>
   <div class="column q-gutter-sm">
     <!-- The accepted types, the size and the count are the shared ones (see useFileDrop): this panel and
-         the REMS request's attachments are the same question asked in two places, and a private copy of
-         the rules in each is a copy that drifts. The hint names all three, because a limit the box does
-         not state is one the user meets by hitting it. -->
+         the REMS request's attachments are the same question asked in two places. -->
     <app-multi-file-upload
       v-model="picked"
       label="Upload files"
@@ -25,9 +23,8 @@
     <q-inner-loading :showing="loading && !attachments.length" />
     <div v-if="!loading && !attachments.length" class="text-grey-6 q-pa-md text-center">No attachments yet.</div>
 
-    <!-- Same preview row every other list of saved files uses: the icon for the type, a click that opens
-         it in a new tab, and an ✕ that takes it off the record. Who uploaded it and when goes underneath
-         — it is the one thing this list carries that the others do not. -->
+    <!-- Same preview row every other list of saved files uses: the icon for the type, a click that opens it
+         in a new tab, and an ✕ that takes it off the record. -->
     <div class="column q-gutter-xs">
       <div v-for="a in attachments" :key="a.id">
         <app-stored-file-item

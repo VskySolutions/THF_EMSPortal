@@ -7,8 +7,7 @@ namespace EmsPortal.Api.Filters;
 
 /// <summary>
 /// Intercepts invalid model state before a controller action executes and returns an
-/// <c>ApiResponseFactory.ValidationError()</c> envelope as HTTP 400 (ADR-002). Registered
-/// globally; works with <c>[ApiController]</c> when the default 400 behavior is suppressed.
+/// <c>ApiResponseFactory.ValidationError()</c> envelope as HTTP 400 (ADR-002).
 /// </summary>
 public sealed class ValidationActionFilter : IActionFilter
 {

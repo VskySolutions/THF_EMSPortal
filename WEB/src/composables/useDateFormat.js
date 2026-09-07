@@ -1,35 +1,14 @@
 import { useTenantStore } from "stores/tenant";
 
-/**
- * A calendar date — a DateOnly "YYYY-MM-DD" — as MM/DD/YYYY.
- *
- * Deliberately NOT part of the composable below and deliberately not routed through a time zone. A
- * DateOnly is a date, not an instant: a fiscal year end of 31 December is the 31st of December wherever
- * it is read. Converting one is how it becomes the 30th for everybody west of Greenwich — which is also
- * why this reformats the STRING rather than going near a Date object, since `new Date("2026-12-31")`
- * parses as UTC midnight and reads back a day early in the Americas.
- *
- * Being a plain function rather than a composable member matters too: it needs no tenant store, so the
- * anonymous client-facing screens can use it.
- *
- * Anything that is not a recognisable ISO date is passed through untouched — a value this cannot read is
- * better shown as it stands than swallowed.
- */
+/** A calendar date — a DateOnly "YYYY-MM-DD" — as MM/DD/YYYY. Deliberately NOT part of the composable
+    below and deliberately not routed through a time zone. */
 export function formatDateOnly (value, placeholder = "—") {
   if (!value) return placeholder;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
   return m ? `${m[2]}/${m[3]}/${m[1]}` : String(value);
 }
 
-// Renders UTC timestamps in the active tenant's time zone. The whole app stores
-// and transmits UTC; display conversion happens only here.
-//
-//   const { formatDateTime, tenantTimeZone } = useDateFormat();
-//   formatDateTime(row.updatedOnUtc) // -> "06/24/2025 01:01 AM" in the tenant's tz
-//
-// THE app-wide display format, for every date the application shows: MM/DD/YYYY, with a 12-hour (AM/PM)
-// clock on anything carrying a time. Calendar dates read the same way through formatDateOnly above — the
-// separator does not change between a date and a timestamp, or between one screen and another.
+// Renders UTC timestamps in the active tenant's time zone.
 export function useDateFormat () {
   const tenantStore = useTenantStore();
 
@@ -68,8 +47,7 @@ export function useDateFormat () {
   };
 
   // The clock time alone, for somewhere the DATE is already established — a conversation groups its
-  // messages under a day heading, and repeating "08/28/2026" on every line of a thread read in one
-  // sitting is the date said forty times to no purpose.
+  // messages under a day heading.
   const formatTime = (value, placeholder = "—") => {
     const d = toUtcDate(value);
     if (!d) return placeholder;
@@ -93,10 +71,8 @@ export function useDateFormat () {
     return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - utcMs;
   };
 
-  // The inverse of the formatters above: the UTC instant at which the tenant's clock reads the start
-  // (or end) of the given yyyy-mm-dd. Date-only filters need this — a range picked as tenant-local days
-  // and compared against UTC timestamps otherwise drops or admits rows around each boundary, and a
-  // "to" date taken at face value would exclude everything created during that very day.
+  // The inverse of the formatters above: the UTC instant at which the tenant's clock reads the start (or
+  // end) of the given yyyy-mm-dd.
   const zonedDayBoundaryUtc = (isoDate, edge = "start") => {
     if (!isoDate) return undefined;
     const [y, m, d] = String(isoDate).split("-").map(Number);

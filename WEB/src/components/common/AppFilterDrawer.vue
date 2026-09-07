@@ -63,8 +63,7 @@ const { width, startResize, resetWidth } = useDrawerResize({
   getDefault: () => 360,
   getMin: () => 300,
   // A phone has no width to spare for the backdrop beside it: below sm the drawer takes almost the whole
-  // screen, which is also the only width these inputs are usable at. The 60% cap still applies above it,
-  // where the list behind the drawer is worth keeping in view.
+  // screen, which is also the only width these inputs are usable at.
   getMax: () => Math.round(viewportWidth() * (viewportWidth() < 600 ? 0.92 : 0.6))
 });
 </script>
