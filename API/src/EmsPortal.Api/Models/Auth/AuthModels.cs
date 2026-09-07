@@ -27,7 +27,7 @@ public sealed class ChangePasswordRequest
     public string NewPassword { get; set; } = string.Empty;
 }
 
-/// <summary>Starts the self-service reset. The response never reveals whether the address is known.</summary>
+/// <summary>Starts the self-service reset.</summary>
 public sealed class ForgotPasswordRequest
 {
     public string Email { get; set; } = string.Empty;
@@ -40,9 +40,12 @@ public sealed class ResetPasswordWithTokenRequest
     public string NewPassword { get; set; } = string.Empty;
 }
 
-public sealed record LoginTokenResponse(string AccessToken, int ExpiresIn, string RefreshToken, bool MustChangePassword);
+/// <summary>Lifetimes in seconds.</summary>
+public sealed record LoginTokenResponse(
+    string AccessToken, int ExpiresIn, string RefreshToken, int RefreshExpiresIn, bool MustChangePassword);
 
-public sealed record RefreshTokenResponse(string AccessToken, int ExpiresIn, string RefreshToken);
+/// <summary>As <see cref="LoginTokenResponse"/>, for the rotated pair — the window slides on each refresh.</summary>
+public sealed record RefreshTokenResponse(string AccessToken, int ExpiresIn, string RefreshToken, int RefreshExpiresIn);
 
 public sealed record SwitchTenantResponse(string AccessToken, int ExpiresIn, string TenantIdentifier, IReadOnlyList<string> RoleNames);
 

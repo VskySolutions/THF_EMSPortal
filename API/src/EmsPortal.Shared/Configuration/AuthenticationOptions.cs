@@ -33,10 +33,17 @@ public sealed class AuthenticationOptions
     public string SigningKey { get; set; } = string.Empty;
 
     /// <summary>Access token lifetime in minutes (default 60).</summary>
-    public int AccessTokenMinutes { get; set; } = 60;
+    public int AccessTokenMinutes { get; set; } = DefaultAccessTokenMinutes;
 
-    /// <summary>Refresh token lifetime in days (default 7).</summary>
-    public int RefreshTokenDays { get; set; } = 7;
+    /// <summary>Refresh token lifetime in days — how long someone can stay away and still come back to a
+    /// live session. Slides forward on every refresh.</summary>
+    public int RefreshTokenDays { get; set; } = DefaultRefreshTokenDays;
+
+    /// <summary>Fallback used when the configured value is missing or nonsensical (&lt;= 0).</summary>
+    public const int DefaultAccessTokenMinutes = 60;
+
+    /// <inheritdoc cref="DefaultAccessTokenMinutes"/>
+    public const int DefaultRefreshTokenDays = 30;
 
     /// <summary>Name of the HTTP header carrying the API key.</summary>
     public string ApiKeyHeaderName { get; set; } = "X-Api-Key";

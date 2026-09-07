@@ -28,3 +28,19 @@ export function decodeJwtPermissions (token) {
   if (typeof perms === "string") return [perms];
   return [];
 }
+
+// Slack: a token dying mid-flight counts as dead, so it is refreshed before the request, not after a 401.
+const EXPIRY_SKEW_SECONDS = 60;
+
+// The token's expiry, or null when it carries no `exp`.
+export function jwtExpiresAt (token) {
+  const exp = decodeJwtPayload(token)?.exp;
+  return typeof exp === "number" ? new Date(exp * 1000) : null;
+}
+
+// A token whose expiry cannot be read counts as live — the API is the authority on that.
+export function isJwtExpired (token, skewSeconds = EXPIRY_SKEW_SECONDS) {
+  const expiresAt = jwtExpiresAt(token);
+  if (!expiresAt) return false;
+  return expiresAt.getTime() - (skewSeconds * 1000) <= Date.now();
+}

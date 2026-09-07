@@ -27,7 +27,9 @@
     "PublicKeyPem": "",
     "SigningKey": "",
     "ApiKeyHeaderName": "X-Api-Key",
-    "ClockSkewSeconds": 30
+    "ClockSkewSeconds": 30,
+    "AccessTokenMinutes": 60,
+    "RefreshTokenDays": 30
   },
   "ApiKeys": {
     "Keys": []

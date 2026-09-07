@@ -63,7 +63,9 @@ internal sealed class JwtTokenService : IJwtTokenService
             claims.Add(new Claim(ClaimTypeNames.Permission, permission));
         }
 
-        var expires = DateTime.UtcNow.AddMinutes(_options.AccessTokenMinutes <= 0 ? 60 : _options.AccessTokenMinutes);
+        var expires = DateTime.UtcNow.AddMinutes(_options.AccessTokenMinutes <= 0
+            ? AuthenticationOptions.DefaultAccessTokenMinutes
+            : _options.AccessTokenMinutes);
         var token = new JwtSecurityToken(
             issuer: string.IsNullOrWhiteSpace(_options.Issuer) ? null : _options.Issuer,
             audience: string.IsNullOrWhiteSpace(_options.Audience) ? null : _options.Audience,

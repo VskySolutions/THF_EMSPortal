@@ -1,8 +1,8 @@
 import { route } from "quasar/wrappers";
-import { LocalStorage } from "quasar";
 import { createRouter, createMemoryHistory, createWebHistory, createWebHashHistory } from "vue-router";
 import routes from "./routes";
 import { useAuthStore } from "stores/auth";
+import { isJwtExpired } from "services/jwt";
 import { useNotify } from "composables/useNotify";
 
 /*
@@ -55,23 +55,26 @@ export default route(function ({ store }) {
     history: createHistory(process.env.VUE_ROUTER_BASE)
   });
 
-  Router.beforeEach((to, from, next) => {
-    const token = LocalStorage.getItem("token");
+  Router.beforeEach(async (to, from, next) => {
+    const authStore = useAuthStore(store);
     const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
 
-    // Not logged in and trying to open a protected route → send to login.
-    if (requiresAuth && !token) {
-      return next("/auth/login");
+    // Resolve the session before anything renders: a tab left open overnight holds an expired token,
+    // and checking only that a token EXISTS is what renders the dashboard and then bounces to login.
+    if (requiresAuth) {
+      const signedIn = await authStore.ensureSession();
+      if (!signedIn) {
+        const isDefaultLanding = to.fullPath === "/" || to.fullPath === "/dashboard";
+        return next({ name: "login", query: isDefaultLanding ? {} : { redirect: to.fullPath } });
+      }
     }
 
-    // Already logged in but on an auth page → send to the dashboard (role-appropriate view).
-    if (token && to.path.startsWith("/auth")) {
+    // Already logged in but on an auth page → the dashboard. An expired token does not count.
+    if (to.path.startsWith("/auth") && authStore.isAuthenticated && !isJwtExpired(authStore.token)) {
       return next("/dashboard");
     }
 
-    if (token) {
-      const authStore = useAuthStore(store);
-
+    if (authStore.isAuthenticated) {
       // mustChangePassword gate: force the change-password page first.
       if (authStore.mustChangePassword && to.name !== "change_password") {
         return next({ name: "change_password" });

@@ -18,8 +18,8 @@ using Microsoft.Extensions.Options;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Authentication and session management (WO-39): login, refresh, logout, logout-all,
-/// tenant switch, profile, change-password (Admin User &amp; Role Management).
+/// Authentication and session management (WO-39): login, refresh, logout, logout-all, tenant switch,
+/// profile, change-password (Admin User &amp; Role Management).
 /// </summary>
 [ApiController]
 [Produces("application/json")]
@@ -87,7 +87,8 @@ public sealed class AuthController : ControllerBase
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Ok(ApiResponseFactory.Success(
-            new LoginTokenResponse(access.Token, access.ExpiresInSeconds, refresh, user.MustChangePassword),
+            new LoginTokenResponse(
+                access.Token, access.ExpiresInSeconds, refresh, RefreshExpiresInSeconds, user.MustChangePassword),
             "Login successful."));
     }
 
@@ -118,7 +119,8 @@ public sealed class AuthController : ControllerBase
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Ok(ApiResponseFactory.Success(
-            new RefreshTokenResponse(access.Token, access.ExpiresInSeconds, newRefresh), "Token refreshed."));
+            new RefreshTokenResponse(access.Token, access.ExpiresInSeconds, newRefresh, RefreshExpiresInSeconds),
+            "Token refreshed."));
     }
 
     [HttpPost("/api/auth/logout")]
@@ -275,9 +277,7 @@ public sealed class AuthController : ControllerBase
                 {
                     ["FullName"] = user.DisplayName,
                     // The app's display format, MM/DD/YYYY with a 12-hour clock — this string is read by a
-                    // person in an email, not parsed by anything. Invariant culture so the AM/PM reads the
-                    // same whatever the server's locale happens to be. Still UTC: the token says so, and
-                    // an email dispatched outside any request has no tenant time zone to render against.
+                    // person in an email, not parsed by anything.
                     ["ChangedAtUtc"] = DateTime.UtcNow.ToString("MM/dd/yyyy hh:mm tt", CultureInfo.InvariantCulture),
                 });
         }
@@ -299,6 +299,14 @@ public sealed class AuthController : ControllerBase
         return userId is null ? Task.FromResult<User?>(null) : _users.GetByIdAsync(userId.Value, cancellationToken);
     }
 
+    /// <summary>Configured refresh-token lifetime in days, falling back to the documented default.</summary>
+    private int RefreshTokenDays => _options.RefreshTokenDays <= 0
+        ? AuthenticationOptions.DefaultRefreshTokenDays
+        : _options.RefreshTokenDays;
+
+    /// <summary>The same window in seconds, as returned to the client.</summary>
+    private int RefreshExpiresInSeconds => (int)TimeSpan.FromDays(RefreshTokenDays).TotalSeconds;
+
     private async Task<string> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken)
     {
         var plaintext = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
@@ -307,7 +315,7 @@ public sealed class AuthController : ControllerBase
             Id = Guid.NewGuid(),
             UserId = userId,
             TokenHash = HashToken(plaintext),
-            ExpiresAt = DateTime.UtcNow.AddDays(_options.RefreshTokenDays <= 0 ? 7 : _options.RefreshTokenDays),
+            ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays),
             IsRevoked = false,
             CreatedAt = DateTime.UtcNow,
         }, cancellationToken);
@@ -323,9 +331,8 @@ public sealed class AuthController : ControllerBase
     private const int ResetTokenLifetimeMinutes = 60;
 
     /// <summary>
-    /// Starts the "forgot password" flow: emails a one-time reset link to the address if it belongs to an
-    /// active account. ALWAYS returns 200 with the same body — a different response for a known address
-    /// would turn this endpoint into an account-enumeration oracle.
+    /// Starts the "forgot password" flow: emails a one-time reset link to the address if it belongs to
+    /// an active account.
     /// </summary>
     [HttpPost("/api/auth/forgot-password")]
     [AllowAnonymous]
@@ -378,10 +385,7 @@ public sealed class AuthController : ControllerBase
         return Ok(ApiResponseFactory.Success(new { message = Message }, Message));
     }
 
-    /// <summary>
-    /// Completes the flow: redeems the token and sets the new password. The token is single-use and
-    /// time-limited; success invalidates every existing session, as changing a password does.
-    /// </summary>
+    /// <summary>Completes the flow: redeems the token and sets the new password.</summary>
     [HttpPost("/api/auth/reset-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithTokenRequest request, CancellationToken cancellationToken)

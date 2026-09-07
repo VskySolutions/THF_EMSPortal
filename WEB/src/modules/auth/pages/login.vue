@@ -57,13 +57,14 @@
 import { ref } from "vue";
 import useVuelidate from "@vuelidate/core";
 import { required, helpers, email } from "@vuelidate/validators";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
 import { getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { setLocalStorage, getLocalStorage, clearLocalStorage } from "assets/utils";
 import AppTextField from "components/common/AppTextField.vue";
 import AppPasswordField from "components/common/AppPasswordField.vue";
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
@@ -111,7 +112,7 @@ const login = async () => {
       router.push({ name: "change_password" });
       return;
     }
-    redirectToDashboard();
+    redirectAfterLogin();
   } catch (err) {
     // AC-UI-001.3 (no field hint) / AC-UI-001.4 (inactive) / AC-UI-001.6 (server error).
     const code = getApiErrorCode(err);
@@ -127,10 +128,13 @@ const login = async () => {
   }
 };
 
-const redirectToDashboard = () => {
-  // The dashboard renders the role-appropriate view (super / tenant / common) internally.
-  localStorage.setItem("last_route", "/dashboard");
-  router.push("/dashboard");
+const redirectAfterLogin = () => {
+  // `redirect` returns a lapsed session to where it left off. Internal paths only — never an absolute URL.
+  const target = route.query.redirect;
+  const isInternalPath = typeof target === "string" && target.startsWith("/") && !target.startsWith("//");
+  const destination = isInternalPath ? target : "/dashboard";
+  localStorage.setItem("last_route", destination);
+  router.push(destination);
 };
 </script>
 
