@@ -11,10 +11,10 @@ public sealed class RemsApprovalPolicyOptions
     public bool StaticRouting { get; set; } = true;
 
     /// <summary>
-    /// Who signs as the shareholder, as "First Last", matched against the user's person record. When the
-    /// name resolves to no active user, everyone holding the Shareholder role is asked instead.
+    /// Who signs as the shareholders, as "First Last", matched against the user's person record. When
+    /// none of the names resolves to an active user, everyone holding the Shareholder role is asked instead.
     /// </summary>
-    public string MandatoryShareholder { get; set; } = "Jeff Barbacci";
+    public List<string> MandatoryShareholders { get; set; } = new() { "Jeff Barbacci" };
 
     /// <summary>CSEs whose TAX engagements skip the department director and always need the shareholders.</summary>
     public List<string> TaxExceptionCses { get; set; } = new() { "James Previte", "Stephen Hamic" };

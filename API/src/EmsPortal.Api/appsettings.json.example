@@ -37,7 +37,7 @@
   "Rems": {
     "ApprovalPolicy": {
       "StaticRouting": true,
-      "MandatoryShareholder": "Jeff Barbacci",
+      "MandatoryShareholders": [ "Jeff Barbacci" ],
       "TaxExceptionCses": [ "James Previte", "Stephen Hamic" ],
       "TaxFeeCeilingWithoutShareholder": 10000
     }

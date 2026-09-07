@@ -12,9 +12,9 @@ namespace EmsPortal.Api.Approval;
 // deleting the file and the marker-commented lines elsewhere puts the platform back on its own list.
 
 /// <summary>
-/// The policy resolved against one tenant's people: who signs as the shareholder (the mandatory
-/// shareholder, or the Shareholder role's holders when that name resolves to nobody), which CSEs are the
-/// tax exception.
+/// The policy resolved against one tenant's people: who signs as the shareholders (the mandatory
+/// shareholders, or the Shareholder role's holders when none of those names resolves), which CSEs are
+/// the tax exception.
 /// </summary>
 public sealed record RemsApprovalPolicySnapshot(
     bool StaticRouting,
@@ -50,22 +50,23 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
         }
 
         var people = await _users.ListActiveByTenantAsync(tid, cancellationToken);
-        var exceptions = _options.TaxExceptionCses
-            .Select(name => Find(people, name))
-            .Where(u => u is not null)
-            .Select(u => u!)
-            .DistinctBy(u => u.Id)
-            .ToList();
+        var exceptions = FindAll(people, _options.TaxExceptionCses);
 
-        // The mandatory shareholder is the seat; the Shareholder role's holders fill it only when the
-        // configured name resolves to nobody, so a name nobody carries never blocks a send.
-        var mandatory = Find(people, _options.MandatoryShareholder);
-        IReadOnlyList<User> shareholders = mandatory is not null
-            ? new[] { mandatory }
-            : (await _users.ListByTenantRolesAsync(tid, new[] { Roles.Shareholder }, cancellationToken)).DistinctBy(u => u.Id).ToList();
+        // The mandatory shareholders are the seat; the Shareholder role's holders fill it only when none
+        // of the configured names resolves, so names nobody carries never block a send.
+        var shareholders = FindAll(people, _options.MandatoryShareholders);
+        if (shareholders.Count == 0)
+        {
+            shareholders = (await _users.ListByTenantRolesAsync(tid, new[] { Roles.Shareholder }, cancellationToken))
+                .DistinctBy(u => u.Id).ToList();
+        }
 
         return new RemsApprovalPolicySnapshot(true, _options.TaxFeeCeilingWithoutShareholder, shareholders, exceptions);
     }
+
+    /// <summary>Every configured name that resolves to one user, each once.</summary>
+    private static List<User> FindAll(IReadOnlyList<User> people, IEnumerable<string> fullNames)
+        => fullNames.Select(name => Find(people, name)).Where(u => u is not null).Select(u => u!).DistinctBy(u => u.Id).ToList();
 
     /// <summary>The one user whose name reads as the configured "First Last"; null when nobody or more than one does.</summary>
     public static User? Find(IEnumerable<User> people, string? fullName)
@@ -148,7 +149,7 @@ public static class RemsStaticApprovalRoute
         {
             if (shareholders.Count == 0)
             {
-                return Blocked("There is no shareholder to approve this: the mandatory shareholder is not an active user here and nobody holds the Shareholder role.");
+                return Blocked("There is no shareholder to approve this: none of the mandatory shareholders is an active user here and nobody holds the Shareholder role.");
             }
             Add(shareholders.Select(s => (s, RemsApproverRole.Shareholder)));
         }
