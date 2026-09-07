@@ -2,11 +2,12 @@
   <div>
     <div class="row items-center q-mb-md">
       <div class="text-body2 text-grey-8 col">
-        <!-- STATIC-APPROVAL-POLICY: the staged route reads differently from the single round. -->
+        <!-- STATIC-APPROVAL-POLICY: the fixed rules read differently from the platform list. -->
         <template v-if="staticRouting">
-          Who this engagement routes to, one stage at a time: the commission recipients together, then the
-          CSE, then the Department Director with anyone you add below, then everyone holding the Shareholder role. Each
-          stage is asked only once the one before it has approved. Sending for approval locks the list.
+          Who this engagement routes to, all at the same time: every commission recipient, the CSE, the
+          Department Director, everyone holding the Shareholder role, plus anyone you add below. The
+          Department Director and the Shareholders are skipped by the tax rules. Sending for approval locks
+          the list.
         </template>
         <template v-else>
           Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
@@ -52,21 +53,15 @@
       </div>
 
       <q-list v-if="approvers.length" bordered separator class="rounded-borders">
-        <template v-for="(a, i) in approvers" :key="i">
-          <!-- STATIC-APPROVAL-POLICY: a heading where a new stage starts. -->
-          <q-item-label v-if="stageHeadingBefore(i)" header class="rems-approval__stage">
-            Stage {{ a.stage }} · {{ a.stageName }}
-          </q-item-label>
-          <q-item>
-            <q-item-section avatar>
-              <q-icon :name="roleOption(a.role).icon || 'o_person'" color="primary" />
-            </q-item-section>
-            <q-item-section>
-              <q-item-label class="text-weight-medium">{{ a.user.name || "Unassigned" }}</q-item-label>
-              <q-item-label caption>{{ roleOption(a.role).label }}</q-item-label>
-            </q-item-section>
-          </q-item>
-        </template>
+        <q-item v-for="(a, i) in approvers" :key="i">
+          <q-item-section avatar>
+            <q-icon :name="roleOption(a.role).icon || 'o_person'" color="primary" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label class="text-weight-medium">{{ a.user.name || "Unassigned" }}</q-item-label>
+            <q-item-label caption>{{ roleOption(a.role).label }}</q-item-label>
+          </q-item-section>
+        </q-item>
       </q-list>
       <div v-else class="text-grey-6 q-pa-sm">
         No approvers yet. The automatic ones come from the firm and from the engagement itself — give
@@ -148,16 +143,11 @@ const loading = ref(false);
 const errorMsg = ref("");
 
 // ---- STATIC-APPROVAL-POLICY ----
-// Whether the route is staged, who the seats reserve (kept out of the picker), and why the server says the
-// round cannot go out yet.
+// Whether the fixed rules apply, who the seats reserve (kept out of the picker), and why the server says
+// the round cannot go out yet.
 const staticRouting = ref(false);
 const reservedIds = ref([]);
 const serverBlockedReason = ref("");
-const stageHeadingBefore = (i) => {
-  const a = approvers.value[i];
-  if (!a?.stageName) return false;
-  return i === 0 || approvers.value[i - 1].stage !== a.stage;
-};
 
 // ---- Whether the round can actually go out ----
 // The commission splits divide ONE commission, so a set of them that comes to 90% leaves a tenth of it
@@ -219,7 +209,7 @@ const loadOptions = async () => {
     const rows = await remsApi.approverOptions(props.engagement.id);
     // "Full Name — Role", falling back to the email and then to the name alone.
     approverOptions.value = (rows || [])
-      // STATIC-APPROVAL-POLICY: the seats already approve at their own stage.
+      // STATIC-APPROVAL-POLICY: the seats already approve.
       .filter((r) => !reservedIds.value.includes(r.userId))
       .map((r) => {
         const qualifier = (r.roles || []).join(", ") || r.email;
@@ -305,13 +295,5 @@ const resubmit = async () => {
 .rems-approval__warn {
   background: #fff8e1;
   color: #8a5a00;
-}
-
-/* STATIC-APPROVAL-POLICY: stage headings inside the approver list. */
-.rems-approval__stage {
-  padding-top: 8px;
-  padding-bottom: 4px;
-  font-weight: 600;
-  color: #1f6478;
 }
 </style>

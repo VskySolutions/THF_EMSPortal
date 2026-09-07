@@ -21,10 +21,4 @@ public enum RemsApprovalTaskStatus
     /// not read as though they simply never responded.
     /// </summary>
     Superseded,
-
-    /// <summary>
-    /// STATIC-APPROVAL-POLICY. Not yet asked: a later stage of a staged round. Becomes Pending when the
-    /// stage before it is approved; Superseded if the round closes first.
-    /// </summary>
-    Waiting,
 }

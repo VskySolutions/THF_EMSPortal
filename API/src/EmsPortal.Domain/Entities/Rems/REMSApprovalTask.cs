@@ -32,12 +32,6 @@ public class REMSApprovalTask : AuditableEntity
     /// <summary>Reason captured when the task is rejected.</summary>
     public string? RejectionReason { get; set; }
 
-    /// <summary>
-    /// STATIC-APPROVAL-POLICY. Which stage of the round this task belongs to, 1-based. A task waits until
-    /// every task of the stage before it is approved. Every task is stage 1 when the round is not staged.
-    /// </summary>
-    public int Stage { get; set; } = 1;
-
     // ---- Navigations ----
     public REMSApprovalRound? Round { get; set; }
     public ICollection<REMSApprovalChecklistItem> ChecklistItems { get; set; } = new List<REMSApprovalChecklistItem>();

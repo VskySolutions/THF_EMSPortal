@@ -8,8 +8,8 @@ using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Approval;
 
-// STATIC-APPROVAL-POLICY. Everything in this file exists for the fixed route THF asked for; deleting the
-// file and the marker-commented lines elsewhere puts the platform back on its single parallel round.
+// STATIC-APPROVAL-POLICY. Everything in this file exists for the fixed approver rules THF asked for;
+// deleting the file and the marker-commented lines elsewhere puts the platform back on its own list.
 
 /// <summary>The policy resolved against one tenant's people: who holds the Shareholder role, which CSEs are the tax exception.</summary>
 public sealed record RemsApprovalPolicySnapshot(
@@ -87,27 +87,16 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
             .ToUpperInvariant();
 }
 
-/// <summary>One stage of a staged round: the approvers asked together, in the order the stages run.</summary>
-public sealed record RemsApprovalStage(int Number, string Name, IReadOnlyList<(Guid UserId, RemsApproverRole Role)> Approvers);
-
-/// <summary>The route an engagement takes, or the reason it cannot be sent yet.</summary>
-public sealed record RemsApprovalRoute(IReadOnlyList<RemsApprovalStage> Stages, string? BlockedReason)
-{
-    public IEnumerable<(Guid UserId, RemsApproverRole Role)> Approvers => Stages.SelectMany(s => s.Approvers);
-}
+/// <summary>The approvers an engagement routes to, all asked together, or the reason it cannot be sent yet.</summary>
+public sealed record RemsApprovalRoute(IReadOnlyList<(Guid UserId, RemsApproverRole Role)> Approvers, string? BlockedReason);
 
 /// <summary>
-/// The fixed route: commission recipients together, then the CSE, then the department director (with
-/// anyone added by hand), then the Shareholder role's holders together. Each stage is skipped by the
-/// rules below and a person already asked at an earlier stage is not asked again.
+/// The fixed approver list: every commission recipient, the CSE, the department director (unless the
+/// CSE is the tax exception), anyone added by hand, and the Shareholder role's holders (unless the
+/// engagement is a small tax one). Everyone is asked at the same time; a person in two seats is asked once.
 /// </summary>
 public static class RemsStaticApprovalRoute
 {
-    public const string StageCommission = "Commission";
-    public const string StageCse = "CSE";
-    public const string StageDepartmentDirector = "Department Director";
-    public const string StageShareholder = "Shareholder";
-
     public static RemsApprovalRoute Build(
         REMSEngagement engagement, IReadOnlyList<Guid> pickedApproverIds, RemsApprovalPolicySnapshot policy)
     {
@@ -132,28 +121,19 @@ public static class RemsStaticApprovalRoute
             return Blocked("Pick a department that has a director — this engagement needs the Department Director's approval.");
         }
 
-        var stages = new List<RemsApprovalStage>();
+        var approvers = new List<(Guid UserId, RemsApproverRole Role)>();
         var asked = new HashSet<Guid>();
 
-        void Add(string name, IEnumerable<(Guid UserId, RemsApproverRole Role)> approvers)
-        {
-            var fresh = approvers.Where(a => asked.Add(a.UserId)).ToList();
-            if (fresh.Count > 0)
-            {
-                stages.Add(new RemsApprovalStage(stages.Count + 1, name, fresh));
-            }
-        }
+        void Add(IEnumerable<(Guid UserId, RemsApproverRole Role)> people)
+            => approvers.AddRange(people.Where(a => asked.Add(a.UserId)));
 
-        Add(StageCommission, recipients.Select(r => (r, RemsApproverRole.CommissionRecipient)));
-        Add(StageCse, new[] { (cse.Value, RemsApproverRole.CSE) });
-
-        var directorStage = new List<(Guid, RemsApproverRole)>();
+        Add(recipients.Select(r => (r, RemsApproverRole.CommissionRecipient)));
+        Add(new[] { (cse.Value, RemsApproverRole.CSE) });
         if (director is { } d && !cseIsException)
         {
-            directorStage.Add((d, RemsApproverRole.DepartmentDirector));
+            Add(new[] { (d, RemsApproverRole.DepartmentDirector) });
         }
-        directorStage.AddRange(pickedApproverIds.Distinct().Select(p => (p, RemsApproverRole.Approver)));
-        Add(StageDepartmentDirector, directorStage);
+        Add(pickedApproverIds.Distinct().Select(p => (p, RemsApproverRole.Approver)));
 
         if (NeedsShareholder(engagement, policy, cseIsException))
         {
@@ -161,10 +141,10 @@ public static class RemsStaticApprovalRoute
             {
                 return Blocked("Nobody holds the Shareholder role in this tenant, so this engagement cannot be routed.");
             }
-            Add(StageShareholder, shareholders.Select(s => (s, RemsApproverRole.Shareholder)));
+            Add(shareholders.Select(s => (s, RemsApproverRole.Shareholder)));
         }
 
-        return new RemsApprovalRoute(stages, null);
+        return new RemsApprovalRoute(approvers, null);
     }
 
     /// <summary>Required for every engagement except a tax engagement priced at or under the ceiling, unless the CSE is the tax exception.</summary>
@@ -189,15 +169,5 @@ public static class RemsStaticApprovalRoute
             .Concat(policy.Shareholders.Select(u => u.Id))
             .Distinct().ToList();
 
-    /// <summary>The stage a set of roles reads as, for a round already on file.</summary>
-    public static string StageNameOf(IEnumerable<RemsApproverRole> roles)
-    {
-        var set = roles.ToHashSet();
-        if (set.Contains(RemsApproverRole.CommissionRecipient)) return StageCommission;
-        if (set.Contains(RemsApproverRole.CSE)) return StageCse;
-        if (set.Contains(RemsApproverRole.Shareholder) && set.Count == 1) return StageShareholder;
-        return StageDepartmentDirector;
-    }
-
-    private static RemsApprovalRoute Blocked(string reason) => new(Array.Empty<RemsApprovalStage>(), reason);
+    private static RemsApprovalRoute Blocked(string reason) => new(Array.Empty<(Guid, RemsApproverRole)>(), reason);
 }

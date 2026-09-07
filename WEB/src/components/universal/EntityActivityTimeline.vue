@@ -92,8 +92,7 @@ const ICONS = {
   RemsApprovalResubmitted: "o_replay",
   RemsApproved: "o_check_circle",
   RemsRejected: "o_cancel",
-  RemsFullyApproved: "o_task_alt",
-  RemsApprovalStageAdvanced: "o_low_priority"
+  RemsFullyApproved: "o_task_alt"
 };
 const iconFor = (type) => ICONS[type] || "o_circle";
 
@@ -127,8 +126,7 @@ const LABELS = {
   RemsApprovalResubmitted: "Resubmitted for approval",
   RemsApproved: "Approver signed",
   RemsRejected: "Approver declined",
-  RemsFullyApproved: "Fully approved",
-  RemsApprovalStageAdvanced: "Next approval stage asked"
+  RemsFullyApproved: "Fully approved"
 };
 
 // An unmapped type renders as its own name rather than as a blank: a row nobody has worded yet is still
