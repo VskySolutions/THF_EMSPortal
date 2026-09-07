@@ -7,7 +7,8 @@ namespace EmsPortal.Api.Models.Rems;
 // role-scoped task view.
 
 /// <summary>One suggested approver on the live list (AC-REMS-018): the user and the role they would act in.</summary>
-public sealed record RemsApproverSuggestion(RemsUserRef User, string Role);
+// STATIC-APPROVAL-POLICY: Stage/StageName say when they are asked; 1 and null on an unstaged round.
+public sealed record RemsApproverSuggestion(RemsUserRef User, string Role, int Stage = 1, string? StageName = null);
 
 /// <summary>
 /// The full approver list an engagement will route to (updates until the round is sent): the automatic
@@ -17,7 +18,17 @@ public sealed record RemsApproverList(
     Guid EngagementId,
     string EngagementStatus,
     IReadOnlyList<RemsApproverSuggestion> Approvers,
-    IReadOnlyList<Guid> SelectedApproverIds);
+    IReadOnlyList<Guid> SelectedApproverIds,
+    // STATIC-APPROVAL-POLICY: whether the route is staged, who the seats reserve, and why it cannot go yet.
+    bool StaticRouting = false,
+    IReadOnlyList<Guid>? ReservedApproverIds = null,
+    string? BlockedReason = null);
+
+/// <summary>STATIC-APPROVAL-POLICY. The fixed route as it resolves in this tenant.</summary>
+public sealed record RemsApprovalPolicyView(
+    bool StaticRouting,
+    RemsUserRef? ManagingShareholder,
+    IReadOnlyList<RemsUserRef> TaxExceptionCses);
 
 /// <summary>A user selectable as an extra approver: any active user in the tenant (there is no Approver role).</summary>
 public sealed record RemsApproverOption(
@@ -167,7 +178,10 @@ public sealed record RemsApprovalRoundDecision(
     /// <summary>Their own reason for declining.</summary>
     string? Reason,
     int ChecklistCompleted,
-    int ChecklistTotal);
+    int ChecklistTotal,
+    // STATIC-APPROVAL-POLICY
+    int Stage = 1,
+    string? StageName = null);
 
 /// <summary>The client on the engagement, including the billing block the workspace's client card carries.</summary>
 public sealed record RemsApprovalClientView(
@@ -237,7 +251,10 @@ public sealed record RemsApprovalDecisionView(
     string Status,
     DateTime? DecidedOnUtc,
     string? RejectionReason,
-    bool IsYou);
+    bool IsYou,
+    // STATIC-APPROVAL-POLICY
+    int Stage = 1,
+    string? StageName = null);
 
 /// <summary>Check / uncheck a checklist item on the caller's own task.</summary>
 public sealed class SetChecklistItemRequest

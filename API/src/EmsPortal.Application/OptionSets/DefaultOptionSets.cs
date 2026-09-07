@@ -533,6 +533,10 @@ public static class DefaultOptionSets
                 "The round closed on somebody else's decline before this approver decided, so no decision "
                 + "is needed from them.",
                 BackgroundColor: Grey, TextColor: OnDark),
+            // STATIC-APPROVAL-POLICY: a later stage of a staged round.
+            new ItemDefinition("Waiting", "Waiting", 5, Description:
+                "Not asked yet. Their turn comes once the stage before them has approved.",
+                BackgroundColor: Grey, TextColor: OnDark),
         }, IsClosed: true),
 
         // RemsApprovalRoundStatus — where the whole ROUND stands. `partially_approved` is the one value

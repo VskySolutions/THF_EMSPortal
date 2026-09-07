@@ -1,3 +1,4 @@
+using EmsPortal.Api.Approval;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
@@ -31,6 +32,8 @@ public sealed class RemsEngagementController : ControllerBase
 {
     private const string CodeEngagementLocked = "REMS_ENGAGEMENT_LOCKED";
     private const string CodeCopyInvalid = "REMS_COPY_INVALID";
+    // STATIC-APPROVAL-POLICY
+    private const string CodeCommissionReserved = "REMS_COMMISSION_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
     private const string TaxFormSetKey = "REMS.TaxForm";
@@ -50,6 +53,8 @@ public sealed class RemsEngagementController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
     private readonly IOptionCodeResolver _codes;
+    // STATIC-APPROVAL-POLICY
+    private readonly IRemsApprovalPolicy _policy;
 
     public RemsEngagementController(
         IRemsRepository rems,
@@ -65,8 +70,10 @@ public sealed class RemsEngagementController : ControllerBase
         IUserRepository users,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
-        IOptionCodeResolver codes)
+        IOptionCodeResolver codes,
+        IRemsApprovalPolicy policy)
     {
+        _policy = policy;
         _rems = rems;
         _delegations = delegations;
         _forms = forms;
@@ -1000,6 +1007,17 @@ public sealed class RemsEngagementController : ControllerBase
                 return BadRequest(ApiResponseFactory.Error(
                     ApiErrorCodes.ValidationFailed, "Validation failed.", $"Unknown employeeId {split.EmployeeId}."));
             }
+        }
+
+        // STATIC-APPROVAL-POLICY: the seats approve at their own stage and may not also be paid commission.
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        if (policy.StaticRouting
+            && request.Splits.Select(s => s.EmployeeId).Intersect(RemsStaticApprovalRoute.ReservedUserIds(engagement, policy)).Any())
+        {
+            return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
+                CodeCommissionReserved,
+                "A commission recipient cannot be the CSE, the Department Director or the Managing Shareholder on this request.",
+                "A commission recipient cannot be the CSE, the Department Director or the Managing Shareholder on this request."));
         }
 
         var existing = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();

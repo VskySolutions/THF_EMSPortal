@@ -1,6 +1,7 @@
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Common;
 using EmsPortal.Domain.Entities;
+using EmsPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace EmsPortal.Infrastructure.Persistence.Repositories;
@@ -110,6 +111,12 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
         if (query.Status is { } status)
         {
             tasks = tasks.Where(t => t.Status == status);
+        }
+        else
+        {
+            // STATIC-APPROVAL-POLICY: a later stage is not the reader.s to act on yet, so it stays out of the
+            // inbox until it is asked. Filtering on Waiting explicitly still shows it.
+            tasks = tasks.Where(t => t.Status != RemsApprovalTaskStatus.Waiting);
         }
 
         // Counted AFTER the filters so the pager reflects the filtered set — and, since the collapse above

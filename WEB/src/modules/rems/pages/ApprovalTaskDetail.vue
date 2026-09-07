@@ -399,38 +399,41 @@
                      added by hand — so the list reads the same way every time. -->
                 <div class="rems-subhead">Approvers</div>
                 <q-list bordered separator class="rounded-borders">
-                  <q-item
-                    v-for="d in round.decisions" :key="d.taskId"
-                    :class="{ 'ar--awaiting': awaitingDecision(d), 'ar--you': d.isYou }"
-                  >
-                    <q-item-section avatar>
-                      <!-- The icon on the ROLE's own option — the tenant's, like its name. -->
-                      <q-icon
-                        :name="approverRoleOption(d.role).icon || 'o_person'"
-                        :color="awaitingDecision(d) ? 'amber-9' : 'primary'"
-                      />
-                    </q-item-section>
-                    <q-item-section>
-                      <q-item-label class="text-weight-medium">
-                        {{ d.approver?.name || "—" }}
-                        <q-badge v-if="d.isYou" color="primary" class="q-ml-xs">You</q-badge>
-                        <q-badge
-                          v-if="awaitingDecision(d)" color="amber-9" class="q-ml-xs"
-                          :label="d.isYou ? 'Your turn' : 'Awaiting decision'"
+                  <template v-for="(d, i) in round.decisions" :key="d.taskId">
+                    <!-- STATIC-APPROVAL-POLICY: a heading where a new stage starts. -->
+                    <q-item-label v-if="stageHeadingBefore(i)" header class="ar__stage">
+                      Stage {{ d.stage }} · {{ d.stageName }}
+                    </q-item-label>
+                    <q-item :class="{ 'ar--awaiting': awaitingDecision(d), 'ar--you': d.isYou }">
+                      <q-item-section avatar>
+                        <!-- The icon on the ROLE's own option — the tenant's, like its name. -->
+                        <q-icon
+                          :name="approverRoleOption(d.role).icon || 'o_person'"
+                          :color="awaitingDecision(d) ? 'amber-9' : 'primary'"
                         />
-                      </q-item-label>
-                      <q-item-label caption>
-                        {{ approverRoleLabel(d.role) }}
-                        <template v-if="d.decidedOnUtc"> · {{ fmt.formatDateTime(d.decidedOnUtc) }}</template>
-                      </q-item-label>
-                      <q-item-label v-if="d.rejectionReason" caption class="text-red-9" style="white-space: pre-wrap;">
-                        {{ d.rejectionReason }}
-                      </q-item-label>
-                    </q-item-section>
-                    <q-item-section side>
-                      <app-option-badge :option="approvalStatusOption(d.status)" />
-                    </q-item-section>
-                  </q-item>
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">
+                          {{ d.approver?.name || "—" }}
+                          <q-badge v-if="d.isYou" color="primary" class="q-ml-xs">You</q-badge>
+                          <q-badge
+                            v-if="awaitingDecision(d)" color="amber-9" class="q-ml-xs"
+                            :label="d.isYou ? 'Your turn' : 'Awaiting decision'"
+                          />
+                        </q-item-label>
+                        <q-item-label caption>
+                          {{ approverRoleLabel(d.role) }}
+                          <template v-if="d.decidedOnUtc"> · {{ fmt.formatDateTime(d.decidedOnUtc) }}</template>
+                        </q-item-label>
+                        <q-item-label v-if="d.rejectionReason" caption class="text-red-9" style="white-space: pre-wrap;">
+                          {{ d.rejectionReason }}
+                        </q-item-label>
+                      </q-item-section>
+                      <q-item-section side>
+                        <app-option-badge :option="approvalStatusOption(d.status)" />
+                      </q-item-section>
+                    </q-item>
+                  </template>
                 </q-list>
 
                 <!-- What the approvers objected to BEFORE now. -->
@@ -611,6 +614,14 @@ const engagementStatus = computed(() => engagementStatusOption(engagement.value.
 
 // Whose signature the round is still waiting on.
 const awaitingDecision = (d) => round.value.status === "Pending" && d?.status === "Pending";
+
+// STATIC-APPROVAL-POLICY: a heading where a new stage of a staged round starts.
+const stageHeadingBefore = (i) => {
+  const list = round.value.decisions || [];
+  const d = list[i];
+  if (!d?.stageName) return false;
+  return i === 0 || list[i - 1].stage !== d.stage;
+};
 
 // ---- Where the whole round stands ----
 // Counted off the decisions the packet carries rather than taken from the round's own status alone: the
@@ -951,6 +962,14 @@ onMounted(load);
 .ar--awaiting.ar--you {
   background: #fff3d6;
   box-shadow: inset 4px 0 0 var(--q-primary);
+}
+
+/* STATIC-APPROVAL-POLICY: stage headings inside the approver list. */
+.ar__stage {
+  padding-top: 8px;
+  padding-bottom: 4px;
+  font-weight: 600;
+  color: #1f6478;
 }
 /* Marks a value that carries an explanation on hover; muted so it hints rather than competes. */
 .rems-value__info { margin-left: 4px; color: var(--ink-300); cursor: help; vertical-align: text-bottom; }

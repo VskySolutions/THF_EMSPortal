@@ -39,6 +39,8 @@ internal sealed class RemsApprovalTaskConfiguration : IEntityTypeConfiguration<R
         builder.Property(t => t.ApproverRole).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(t => t.RejectionReason).HasMaxLength(500);
+        // STATIC-APPROVAL-POLICY: every task on file predates staging and is stage 1.
+        builder.Property(t => t.Stage).IsRequired().HasDefaultValue(1);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(t => t.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(t => t.TenantId);

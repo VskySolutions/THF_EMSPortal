@@ -68,6 +68,9 @@ const props = defineProps({
   engagement: { type: Object, required: true },
   // Selectable recipients — the holders of the "CSE" role, as [{ label, value }].
   recipientOptions: { type: Array, default: () => [] },
+  // STATIC-APPROVAL-POLICY: the CSE, Department Director and Managing Shareholder on this request, who
+  // approve at their own stage and so may not also be paid commission.
+  excludedRecipientIds: { type: Array, default: () => [] },
   editable: { type: Boolean, default: true }
 });
 // The page saves this section for the user, so every change to the splits is announced.
@@ -92,7 +95,8 @@ watch(splits, () => { if (!syncing) emit("change"); }, { deep: true });
 
 const pick = ref(null);
 const availableRecipients = computed(() =>
-  props.recipientOptions.filter((s) => !splits.value.some((x) => x.employeeId === s.value)));
+  props.recipientOptions.filter((s) =>
+    !splits.value.some((x) => x.employeeId === s.value) && !props.excludedRecipientIds.includes(s.value)));
 
 // An empty picker means the group has no members; name it so the fix is obvious rather than the dropdown
 // just being blank (mirrors the setup form's executive / billing-manager hints).

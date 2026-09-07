@@ -2,9 +2,17 @@
   <div>
     <div class="row items-center q-mb-md">
       <div class="text-body2 text-grey-8 col">
-        Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
-        the setup, and every commission recipient — all automatically, and none of them removable — plus
-        anyone you add below. Sending for approval locks the list.
+        <!-- STATIC-APPROVAL-POLICY: the staged route reads differently from the single round. -->
+        <template v-if="staticRouting">
+          Who this engagement routes to, one stage at a time: the commission recipients together, then the
+          CSE, then the Department Director with anyone you add below, then the Managing Shareholder. Each
+          stage is asked only once the one before it has approved. Sending for approval locks the list.
+        </template>
+        <template v-else>
+          Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
+          the setup, and every commission recipient — all automatically, and none of them removable — plus
+          anyone you add below. Sending for approval locks the list.
+        </template>
       </div>
       <app-option-badge :option="statusMeta" class="q-pa-sm text-body2" />
     </div>
@@ -44,15 +52,21 @@
       </div>
 
       <q-list v-if="approvers.length" bordered separator class="rounded-borders">
-        <q-item v-for="(a, i) in approvers" :key="i">
-          <q-item-section avatar>
-            <q-icon :name="roleOption(a.role).icon || 'o_person'" color="primary" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label class="text-weight-medium">{{ a.user.name || "Unassigned" }}</q-item-label>
-            <q-item-label caption>{{ roleOption(a.role).label }}</q-item-label>
-          </q-item-section>
-        </q-item>
+        <template v-for="(a, i) in approvers" :key="i">
+          <!-- STATIC-APPROVAL-POLICY: a heading where a new stage starts. -->
+          <q-item-label v-if="stageHeadingBefore(i)" header class="rems-approval__stage">
+            Stage {{ a.stage }} · {{ a.stageName }}
+          </q-item-label>
+          <q-item>
+            <q-item-section avatar>
+              <q-icon :name="roleOption(a.role).icon || 'o_person'" color="primary" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label class="text-weight-medium">{{ a.user.name || "Unassigned" }}</q-item-label>
+              <q-item-label caption>{{ roleOption(a.role).label }}</q-item-label>
+            </q-item-section>
+          </q-item>
+        </template>
       </q-list>
       <div v-else class="text-grey-6 q-pa-sm">
         No approvers yet. The automatic ones come from the firm and from the engagement itself — give
@@ -133,6 +147,18 @@ const approvers = ref([]);
 const loading = ref(false);
 const errorMsg = ref("");
 
+// ---- STATIC-APPROVAL-POLICY ----
+// Whether the route is staged, who the seats reserve (kept out of the picker), and why the server says the
+// round cannot go out yet.
+const staticRouting = ref(false);
+const reservedIds = ref([]);
+const serverBlockedReason = ref("");
+const stageHeadingBefore = (i) => {
+  const a = approvers.value[i];
+  if (!a?.stageName) return false;
+  return i === 0 || approvers.value[i - 1].stage !== a.stage;
+};
+
 // ---- Whether the round can actually go out ----
 // The commission splits divide ONE commission, so a set of them that comes to 90% leaves a tenth of it
 // allocated to nobody — and every recipient is a required approver.
@@ -146,6 +172,7 @@ const commissionProblem = computed(() => {
 });
 
 const blockedReason = computed(() => {
+  if (serverBlockedReason.value) return serverBlockedReason.value;
   if (!approvers.value.length) {
     return "There is nobody to route this to yet — name a CSE, pick a department with a director, or add " +
       "approvers above.";
@@ -166,6 +193,9 @@ const picked = ref([]);
 const adopt = (list) => {
   approvers.value = list?.approvers || [];
   picked.value = [...(list?.selectedApproverIds || [])];
+  staticRouting.value = !!list?.staticRouting;
+  reservedIds.value = list?.reservedApproverIds || [];
+  serverBlockedReason.value = list?.blockedReason || "";
 };
 
 const load = async () => {
@@ -186,10 +216,13 @@ const loadOptions = async () => {
   try {
     const rows = await remsApi.approverOptions(props.engagement.id);
     // "Full Name — Role", falling back to the email and then to the name alone.
-    approverOptions.value = (rows || []).map((r) => {
-      const qualifier = (r.roles || []).join(", ") || r.email;
-      return { label: qualifier ? `${r.name} — ${qualifier}` : r.name, value: r.userId };
-    });
+    approverOptions.value = (rows || [])
+      // STATIC-APPROVAL-POLICY: the seats already approve at their own stage.
+      .filter((r) => !reservedIds.value.includes(r.userId))
+      .map((r) => {
+        const qualifier = (r.roles || []).join(", ") || r.email;
+        return { label: qualifier ? `${r.name} — ${qualifier}` : r.name, value: r.userId };
+      });
   } catch (err) {
     notify.error(getApiErrorMessage(err));
   } finally {
@@ -212,7 +245,8 @@ const savePicks = async () => {
   }
 };
 
-const reload = async () => { await Promise.all([load(), loadOptions()]); };
+// The list first: the picker's options are filtered by the seats the list reports.
+const reload = async () => { await load(); await loadOptions(); };
 
 onMounted(reload);
 watch(() => props.engagement.id, reload);
@@ -269,5 +303,13 @@ const resubmit = async () => {
 .rems-approval__warn {
   background: #fff8e1;
   color: #8a5a00;
+}
+
+/* STATIC-APPROVAL-POLICY: stage headings inside the approver list. */
+.rems-approval__stage {
+  padding-top: 8px;
+  padding-bottom: 4px;
+  font-weight: 600;
+  color: #1f6478;
 }
 </style>

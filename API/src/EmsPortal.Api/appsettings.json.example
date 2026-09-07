@@ -34,6 +34,14 @@
   "ApiKeys": {
     "Keys": []
   },
+  "Rems": {
+    "ApprovalPolicy": {
+      "StaticRouting": true,
+      "ManagingShareholder": "Jeff Barbacci",
+      "TaxExceptionCses": [ "James Previte", "Stephen Hamic" ],
+      "TaxFeeCeilingWithoutManagingShareholder": 10000
+    }
+  },
   "Serilog": {
     "MinimumLevel": "Information",
     "WriteTo": []

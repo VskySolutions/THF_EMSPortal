@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EmsPortal.Api.Approval;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
@@ -40,6 +41,10 @@ public sealed class RemsApprovalController : ControllerBase
     private const string CodeRoundClosed = "REMS_ROUND_CLOSED";
     private const string CodeChecklistIncomplete = "REMS_CHECKLIST_INCOMPLETE";
     private const string CodeApproversLocked = "REMS_APPROVERS_LOCKED";
+    // STATIC-APPROVAL-POLICY
+    private const string CodeRouteBlocked = "REMS_ROUTE_BLOCKED";
+    private const string CodeTaskWaiting = "REMS_TASK_WAITING";
+    private const string CodeApproverReserved = "REMS_APPROVER_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
     private const string TaxFormSetKey = "REMS.TaxForm";
@@ -57,6 +62,8 @@ public sealed class RemsApprovalController : ControllerBase
     private readonly IActivityEventWriter _activity;
     private readonly INotificationDispatcher _notifications;
     private readonly IOptionCodeResolver _codes;
+    // STATIC-APPROVAL-POLICY
+    private readonly IRemsApprovalPolicy _policy;
 
     public RemsApprovalController(
         IRemsRepository rems,
@@ -70,8 +77,10 @@ public sealed class RemsApprovalController : ControllerBase
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
-        IOptionCodeResolver codes)
+        IOptionCodeResolver codes,
+        IRemsApprovalPolicy policy)
     {
+        _policy = policy;
         _rems = rems;
         _delegations = delegations;
         _engagements = engagements;
@@ -103,9 +112,27 @@ public sealed class RemsApprovalController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
         }
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS approvers retrieved."));
+    }
+
+    /// <summary>STATIC-APPROVAL-POLICY. The fixed route as it resolves in the caller's tenant.</summary>
+    [HttpGet("approval-policy")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsApprovalPolicyView>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApprovalPolicy(CancellationToken cancellationToken)
+    {
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        var ids = policy.TaxExceptionCses.Select(u => u.Id).ToList();
+        if (policy.ManagingShareholder is { } ms) ids.Add(ms.Id);
+        var names = await _users.GetFullNamesAsync(ids, cancellationToken);
+
+        var view = new RemsApprovalPolicyView(
+            policy.StaticRouting,
+            RemsWorkspaceMapper.UserRef(policy.ManagingShareholder?.Id, names),
+            policy.TaxExceptionCses.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList());
+        return Ok(ApiResponseFactory.Success(view, "REMS approval policy retrieved."));
     }
 
     /// <summary>
@@ -163,6 +190,14 @@ public sealed class RemsApprovalController : ControllerBase
                 return BadRequest(ApiResponseFactory.Error(
                     ApiErrorCodes.ValidationFailed, "Validation failed.", "One or more selected approvers are not active users of this tenant."));
             }
+
+            // STATIC-APPROVAL-POLICY: the seats already route; picking one of them again is refused.
+            var policy = await _policy.ForTenantAsync(tenantId, cancellationToken);
+            if (policy.StaticRouting && requested.Intersect(RemsStaticApprovalRoute.ReservedUserIds(engagement, policy)).Any())
+            {
+                return ConflictResult(CodeApproverReserved,
+                    "The CSE, the Department Director and the Managing Shareholder already approve at their own stage and cannot be added again.");
+            }
         }
 
         // Reconcile to exactly the requested set.
@@ -183,8 +218,8 @@ public sealed class RemsApprovalController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS approvers updated."));
     }
 
@@ -221,15 +256,19 @@ public sealed class RemsApprovalController : ControllerBase
             return prereqError;
         }
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
-        if (approvers.Count == 0)
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        if (route.BlockedReason is { } blocked)
+        {
+            return ConflictResult(CodeRouteBlocked, blocked);
+        }
+        if (!route.Approvers.Any())
         {
             return ConflictResult(CodeNoApprovers, "There are no approvers for this engagement; name a CSE, a department director or a commission recipient first, or add approvers on the Approval tab.");
         }
 
-        await CreateRoundAsync(engagement, approvers, me, isResubmission: false, cancellationToken);
+        await CreateRoundAsync(engagement, route, me, isResubmission: false, cancellationToken);
 
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS engagement sent for approval."));
     }
 
@@ -264,15 +303,19 @@ public sealed class RemsApprovalController : ControllerBase
             return prereqError;
         }
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
-        if (approvers.Count == 0)
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        if (route.BlockedReason is { } blocked)
+        {
+            return ConflictResult(CodeRouteBlocked, blocked);
+        }
+        if (!route.Approvers.Any())
         {
             return ConflictResult(CodeNoApprovers, "There are no approvers for this engagement.");
         }
 
-        await CreateRoundAsync(engagement, approvers, me, isResubmission: true, cancellationToken);
+        await CreateRoundAsync(engagement, route, me, isResubmission: true, cancellationToken);
 
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS engagement resubmitted for approval."));
     }
 
@@ -349,9 +392,10 @@ public sealed class RemsApprovalController : ControllerBase
                     RemsApprovalThreshold.EffectiveFor(tasks.Count),
                     tasks.Count(t => t.Status == RemsApprovalTaskStatus.Rejected),
                     tasks
-                        // The firm's own order — shareholder, director, CSE, commission recipient, then
-                        // anyone added by hand — and NOT the enum's declaration order.
-                        .OrderBy(t => DisplayRank(t.ApproverRole))
+                        // Stage first (STATIC-APPROVAL-POLICY), then the firm's own order — shareholder,
+                        // director, CSE, commission recipient, then anyone added by hand.
+                        .OrderBy(t => t.Stage)
+                        .ThenBy(t => DisplayRank(t.ApproverRole))
                         .ThenBy(t => t.CreatedOnUtc)
                         .Select(t =>
                         {
@@ -359,7 +403,8 @@ public sealed class RemsApprovalController : ControllerBase
                             return new RemsApprovalRoundDecision(
                                 t.Id, Name(t.ApproverId), t.ApproverRole.ToString(), t.Status.ToString(),
                                 t.DecidedOnUtc, t.RejectionReason,
-                                items.Count(i => i.IsCompleted), items.Count);
+                                items.Count(i => i.IsCompleted), items.Count,
+                                t.Stage, StageNameOf(tasks, t.Stage));
                         })
                         .ToList());
             })
@@ -515,6 +560,10 @@ public sealed class RemsApprovalController : ControllerBase
         {
             return NotFound(ApiResponseFactory.NotFound("Approval task not found."));
         }
+        if (task.Status == RemsApprovalTaskStatus.Waiting)
+        {
+            return ConflictResult(CodeTaskWaiting, "Not your turn yet — the stage before you has not approved.");
+        }
         if (task.Status != RemsApprovalTaskStatus.Pending)
         {
             return ConflictResult(CodeTaskDecided, "This task has already been decided.");
@@ -553,6 +602,10 @@ public sealed class RemsApprovalController : ControllerBase
         }
 
         var round = task.Round!;
+        if (task.Status == RemsApprovalTaskStatus.Waiting)
+        {
+            return ConflictResult(CodeTaskWaiting, "Not your turn yet — the stage before you has not approved.");
+        }
         if (task.Status != RemsApprovalTaskStatus.Pending)
         {
             return ConflictResult(CodeTaskDecided, "This task has already been decided.");
@@ -577,8 +630,30 @@ public sealed class RemsApprovalController : ControllerBase
         _approvals.UpdateTask(task);
         await _activity.WriteAsync(new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsApproved, null, task.ApproverRole.ToString()), cancellationToken);
 
-        // The round is settled once nobody is still deciding.
-        var fullyApproved = round.Tasks.All(t => t.Id == task.Id || t.Status != RemsApprovalTaskStatus.Pending);
+        // STATIC-APPROVAL-POLICY: a stage is settled once nobody in it is still deciding; the round once
+        // there is no later stage waiting. An unstaged round is one stage, so this reads as it always did.
+        var stageDone = round.Tasks.All(t => t.Stage != task.Stage || t.Id == task.Id || t.Status != RemsApprovalTaskStatus.Pending);
+        var nextStage = round.Tasks.Where(t => t.Status == RemsApprovalTaskStatus.Waiting).Select(t => (int?)t.Stage).Min();
+        var fullyApproved = stageDone && nextStage is null;
+        if (stageDone && nextStage is { } next)
+        {
+            var asked = round.Tasks.Where(t => t.Stage == next && t.Status == RemsApprovalTaskStatus.Waiting).ToList();
+            foreach (var waiting in asked)
+            {
+                waiting.Status = RemsApprovalTaskStatus.Pending;
+                _approvals.UpdateTask(waiting);
+            }
+            foreach (var userId in asked.Select(t => t.ApproverId).Distinct())
+            {
+                await _notifications.DispatchAsync(new CreateNotificationDto(
+                    userId, NotificationType.RemsApprovalRequested,
+                    "A REMS engagement needs your approval",
+                    $"{rems.REMSNumber} — {rems.ClientDisplayName}", EntityType.Rems, rems.Id), cancellationToken);
+            }
+            await _activity.WriteAsync(new CreateActivityEventDto(
+                EntityType.Rems, rems.Id, ActivityEventTypes.RemsApprovalStageAdvanced,
+                StageNameOf(round.Tasks, task.Stage), StageNameOf(round.Tasks, next)), cancellationToken);
+        }
         if (fullyApproved)
         {
             round.Status = RemsApprovalRoundStatus.Approved;
@@ -613,7 +688,10 @@ public sealed class RemsApprovalController : ControllerBase
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildTaskViewAsync(task, cancellationToken);
-        return Ok(ApiResponseFactory.Success(view, fullyApproved ? "Task approved; engagement fully approved." : "Task approved."));
+        var message = fullyApproved
+            ? "Task approved; engagement fully approved."
+            : nextStage is { } n && stageDone ? $"Task approved; the {StageNameOf(round.Tasks, n)} stage has been asked." : "Task approved.";
+        return Ok(ApiResponseFactory.Success(view, message));
     }
 
     /// <summary>Decline the caller's own task with a required reason (AC-REMS-020).</summary>
@@ -634,6 +712,10 @@ public sealed class RemsApprovalController : ControllerBase
         }
 
         var round = task.Round!;
+        if (task.Status == RemsApprovalTaskStatus.Waiting)
+        {
+            return ConflictResult(CodeTaskWaiting, "Not your turn yet — the stage before you has not approved.");
+        }
         if (task.Status != RemsApprovalTaskStatus.Pending)
         {
             return ConflictResult(CodeTaskDecided, "This task has already been decided.");
@@ -676,9 +758,10 @@ public sealed class RemsApprovalController : ControllerBase
         round.RejectionReason = reason;
         _approvals.UpdateRound(round);
 
-        // Everyone who had not decided by the time the round closed. Their task is over, but they did not
-        // decline it — Superseded is the difference.
-        foreach (var pending in round.Tasks.Where(t => t.Id != task.Id && t.Status == RemsApprovalTaskStatus.Pending))
+        // Everyone who had not decided by the time the round closed — including a later stage never asked
+        // (STATIC-APPROVAL-POLICY). Their task is over, but they did not decline it — Superseded is the difference.
+        foreach (var pending in round.Tasks.Where(t => t.Id != task.Id
+                     && t.Status is RemsApprovalTaskStatus.Pending or RemsApprovalTaskStatus.Waiting))
         {
             pending.Status = RemsApprovalTaskStatus.Superseded;
             pending.DecidedOnUtc = now;
@@ -768,24 +851,42 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     /// <summary>
-    /// The approver set to route to (AC-REMS-018): the automatic approvers, plus whoever was added on
-    /// the Approval tab.
+    /// The route to send on. STATIC-APPROVAL-POLICY: the fixed staged route while the policy is on;
+    /// otherwise the platform's own single stage — the automatic approvers (AC-REMS-018) plus whoever was
+    /// added on the Approval tab.
     /// </summary>
-    private async Task<IReadOnlyList<(Guid UserId, RemsApproverRole Role)>> BuildApproverListAsync(
-        REMSEngagement engagement, CancellationToken cancellationToken)
+    private async Task<RemsApprovalRoute> BuildRouteAsync(REMSEngagement engagement, CancellationToken cancellationToken)
     {
+        var picked = (await _engagements.ListApproversAsync(engagement.Id, cancellationToken)).Select(a => a.UserId).ToList();
+
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        if (policy.StaticRouting)
+        {
+            return RemsStaticApprovalRoute.Build(engagement, picked, policy);
+        }
+
         var shareholders = await ShareholderIdsAsync(cancellationToken);
-        var picked = await _engagements.ListApproversAsync(engagement.Id, cancellationToken);
 
         // Added approvers come ON TOP of the automatic ones — picking somebody never removes an approver
         // who holds their place by standing on the engagement.
-        var userIds = AutomaticApproverIds(engagement, shareholders).Concat(picked.Select(a => a.UserId));
-
-        return userIds
+        var approvers = AutomaticApproverIds(engagement, shareholders).Concat(picked)
             .Distinct()
             .Select(userId => (UserId: userId, Role: RoleFor(engagement, shareholders, userId)))
             .OrderBy(a => DisplayRank(a.Role))
             .ToList();
+
+        return new RemsApprovalRoute(new[] { new RemsApprovalStage(1, "Approval", approvers) }, null);
+    }
+
+    /// <summary>The name of a stage of a round already on file, read off the roles asked in it.</summary>
+    private static string? StageNameOf(IEnumerable<REMSApprovalTask> tasks, int stage)
+    {
+        var all = tasks.ToList();
+        if (all.All(t => t.Stage == 1))
+        {
+            return null;
+        }
+        return RemsStaticApprovalRoute.StageNameOf(all.Where(t => t.Stage == stage).Select(t => t.ApproverRole));
     }
 
     /// <summary>Where each role sits in the approver list, most senior first.</summary>
@@ -868,13 +969,14 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     private async Task<RemsApproverList> ToApproverListAsync(
-        REMSEngagement engagement, IReadOnlyList<(Guid UserId, RemsApproverRole Role)> approvers,
-        CancellationToken cancellationToken)
+        REMSEngagement engagement, RemsApprovalRoute route, CancellationToken cancellationToken)
     {
-        var names = await _users.GetFullNamesAsync(approvers.Select(a => a.UserId), cancellationToken);
-        var suggestions = approvers
-            .Select(a => new RemsApproverSuggestion(
-                new RemsUserRef(a.UserId, names.TryGetValue(a.UserId, out var n) ? n : string.Empty), a.Role.ToString()))
+        var names = await _users.GetFullNamesAsync(route.Approvers.Select(a => a.UserId), cancellationToken);
+        var staged = route.Stages.Count > 1 || route.BlockedReason is not null;
+        var suggestions = route.Stages
+            .SelectMany(s => s.Approvers.Select(a => new RemsApproverSuggestion(
+                new RemsUserRef(a.UserId, names.TryGetValue(a.UserId, out var n) ? n : string.Empty), a.Role.ToString(),
+                s.Number, staged ? s.Name : null)))
             .ToList();
 
         // Only the approvers somebody ADDED. The automatic ones — shareholders, director, CSE, commission
@@ -883,7 +985,13 @@ public sealed class RemsApprovalController : ControllerBase
             .Select(a => a.UserId)
             .ToList();
 
-        return new RemsApproverList(engagement.Id, engagement.Status.ToString(), suggestions, selected);
+        // STATIC-APPROVAL-POLICY
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        var reserved = policy.StaticRouting ? RemsStaticApprovalRoute.ReservedUserIds(engagement, policy) : Array.Empty<Guid>();
+
+        return new RemsApproverList(
+            engagement.Id, engagement.Status.ToString(), suggestions, selected,
+            policy.StaticRouting, reserved, route.BlockedReason);
     }
 
     /// <summary>
@@ -958,11 +1066,15 @@ public sealed class RemsApprovalController : ControllerBase
     /// locks the list, sets the engagement to PendingApproval, notifies every approver once.
     /// </summary>
     private async Task CreateRoundAsync(
-        REMSEngagement engagement, IReadOnlyList<(Guid UserId, RemsApproverRole Role)> approvers,
+        REMSEngagement engagement, RemsApprovalRoute route,
         Guid actorId, bool isResubmission, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
         var rems = engagement.Rems!;
+        // STATIC-APPROVAL-POLICY: every stage's task is created now, but only the first is asked; the rest
+        // wait their turn and are asked as each stage before them approves.
+        var approvers = route.Stages.SelectMany(s => s.Approvers.Select(a => (a.UserId, a.Role, Stage: s.Number))).ToList();
+        var firstStage = route.Stages.Count > 0 ? route.Stages[0].Number : 1;
 
         var roundNumber = await _approvals.GetNextRoundNumberAsync(engagement.Id, cancellationToken);
         var round = new REMSApprovalRound
@@ -976,7 +1088,7 @@ public sealed class RemsApprovalController : ControllerBase
         };
         await _approvals.AddRoundAsync(round, cancellationToken);
 
-        foreach (var (userId, role) in approvers)
+        foreach (var (userId, role, stage) in approvers)
         {
             var task = new REMSApprovalTask
             {
@@ -984,7 +1096,8 @@ public sealed class RemsApprovalController : ControllerBase
                 REMSApprovalRoundId = round.Id,
                 ApproverId = userId,
                 ApproverRole = role,
-                Status = RemsApprovalTaskStatus.Pending,
+                Status = stage == firstStage ? RemsApprovalTaskStatus.Pending : RemsApprovalTaskStatus.Waiting,
+                Stage = stage,
             };
             await _approvals.AddTaskAsync(task, cancellationToken);
 
@@ -1006,8 +1119,8 @@ public sealed class RemsApprovalController : ControllerBase
         _engagements.Update(engagement);
         await SyncRequestStatusAsync(rems, engagement, cancellationToken);
 
-        // Notify every approver (once per user, even if they hold multiple role tasks).
-        foreach (var userId in approvers.Select(a => a.UserId).Distinct())
+        // Notify every approver asked NOW (once per user, even if they hold multiple role tasks).
+        foreach (var userId in approvers.Where(a => a.Stage == firstStage).Select(a => a.UserId).Distinct())
         {
             await _notifications.DispatchAsync(new CreateNotificationDto(
                 userId, NotificationType.RemsApprovalRequested,
@@ -1015,7 +1128,7 @@ public sealed class RemsApprovalController : ControllerBase
                 $"{rems.REMSNumber} — {rems.ClientDisplayName}", EntityType.Rems, rems.Id), cancellationToken);
         }
 
-        var listText = string.Join(", ", approvers.Select(a => $"{a.UserId}:{a.Role}"));
+        var listText = string.Join(", ", approvers.Select(a => route.Stages.Count > 1 ? $"{a.UserId}:{a.Role}@{a.Stage}" : $"{a.UserId}:{a.Role}"));
         await _activity.WriteAsync(new CreateActivityEventDto(
             EntityType.Rems, rems.Id,
             isResubmission ? ActivityEventTypes.RemsApprovalResubmitted : ActivityEventTypes.RemsApprovalSent,
@@ -1079,11 +1192,13 @@ public sealed class RemsApprovalController : ControllerBase
         // By ROLE — shareholder, director, CSE, commission recipient, then anyone added by hand — which is
         // the order the Approval tab lists and the order the history reads in.
         var decisions = round.Tasks
-            .OrderBy(t => DisplayRank(t.ApproverRole))
+            .OrderBy(t => t.Stage)
+            .ThenBy(t => DisplayRank(t.ApproverRole))
             .ThenBy(t => t.CreatedOnUtc)
             .Select(t => new RemsApprovalDecisionView(
                 t.Id, RemsWorkspaceMapper.UserRef(t.ApproverId, names)!, t.ApproverRole.ToString(),
-                t.Status.ToString(), t.DecidedOnUtc, t.RejectionReason, t.Id == task.Id))
+                t.Status.ToString(), t.DecidedOnUtc, t.RejectionReason, t.Id == task.Id,
+                t.Stage, StageNameOf(round.Tasks, t.Stage)))
             .ToList();
 
         var roundView = new RemsApprovalRoundView(

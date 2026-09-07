@@ -34,6 +34,8 @@ public static class DependencyInjection
         services.Configure<ApiKeysOptions>(configuration.GetSection(ConfigurationSections.ApiKeys));
         services.Configure<AppOptions>(configuration.GetSection(ConfigurationSections.App));
         services.Configure<RemsWebhookOptions>(configuration.GetSection(ConfigurationSections.RemsEmailWebhook));
+        // STATIC-APPROVAL-POLICY
+        services.Configure<RemsApprovalPolicyOptions>(configuration.GetSection(ConfigurationSections.RemsApprovalPolicy));
 
         services.AddSecurity();
         services.AddEmail();

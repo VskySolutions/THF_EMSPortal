@@ -27,4 +27,7 @@ public static class ConfigurationSections
 
     /// <summary>REMS provider email-event webhook (shared secret) configuration (WO-121).</summary>
     public const string RemsEmailWebhook = "Rems:EmailWebhook";
+
+    // STATIC-APPROVAL-POLICY
+    public const string RemsApprovalPolicy = "Rems:ApprovalPolicy";
 }

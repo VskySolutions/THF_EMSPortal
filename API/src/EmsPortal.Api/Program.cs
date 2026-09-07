@@ -59,6 +59,8 @@ builder.Services.AddScoped<EmsPortal.Api.Storage.IUploadRecordKeyResolver, EmsPo
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<EmsPortal.Api.Dashboard.IDashboardCacheService, EmsPortal.Api.Dashboard.DashboardCacheService>();
 builder.Services.AddScoped<EmsPortal.Api.Dashboard.IDashboardQueryService, EmsPortal.Api.Dashboard.DashboardQueryService>();
+// STATIC-APPROVAL-POLICY
+builder.Services.AddScoped<EmsPortal.Api.Approval.IRemsApprovalPolicy, EmsPortal.Api.Approval.RemsApprovalPolicy>();
 
 // CORS for the browser SPA (WEB/). Allowed origins come from configuration
 // (Cors:AllowedOrigins); falls back to the local Quasar dev server ports.

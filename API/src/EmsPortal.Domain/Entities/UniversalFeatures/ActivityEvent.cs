@@ -93,4 +93,6 @@ public static class ActivityEventTypes
     public const string RemsApproved = "RemsApproved";
     public const string RemsRejected = "RemsRejected";
     public const string RemsFullyApproved = "RemsFullyApproved";
+    // STATIC-APPROVAL-POLICY: a stage of a staged round was approved and the next one was asked.
+    public const string RemsApprovalStageAdvanced = "RemsApprovalStageAdvanced";
 }

@@ -555,6 +555,9 @@ export const remsApi = {
   // The full approver list: { engagementId, engagementStatus, approvers:[{ user:{id,name}, role }],
   // selectedApproverIds }. approvers = the automatic ones (the firm's shareholders.
   approvers: (id) => api.get(`/api/rems/engagements/${id}/approvers`).then(unwrap),
+  // STATIC-APPROVAL-POLICY: the fixed route as it resolves in this tenant —
+  // { staticRouting, managingShareholder:{id,name} or null, taxExceptionCses:[{id,name}] }.
+  approvalPolicy: () => api.get("/api/rems/approval-policy").then(unwrap),
   // Users selectable as EXTRA approvers — every active user in the tenant, with the roles they hold there
   // for the picker label → [{ userId, name, email, roles: [] }].
   approverOptions: (id) => api.get(`/api/rems/engagements/${id}/approver-options`).then(unwrap),

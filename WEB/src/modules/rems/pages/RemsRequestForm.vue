@@ -315,6 +315,7 @@
                   v-else
                   ref="commissionRef"
                   :engagement="setupEngagement" :recipient-options="cseOptions" :editable="canEditSetup"
+                  :excluded-recipient-ids="reservedCommissionIds"
                   @change="markDirty('commission')"
                 />
               </q-tab-panel>
@@ -1042,15 +1043,30 @@ const toOptions = (rows) => (rows || []).map((r) => ({ label: r.name, value: r.i
 // The unscoped admin list is not fetched any more: it fed the "Assign to Admin" picker, and every picker
 // left here names the seat it fills.
 const loadPickers = async () => {
-  const [cse, execs, billing] = await Promise.all([
+  const [cse, execs, billing, policy] = await Promise.all([
     remsApi.admins(REMS_SEAT_ROLES.CSE).catch(() => []),
     remsApi.admins(REMS_SEAT_ROLES.ENGAGEMENT_EXECUTIVE).catch(() => []),
-    remsApi.admins(REMS_SEAT_ROLES.BILLING_MANAGER).catch(() => [])
+    remsApi.admins(REMS_SEAT_ROLES.BILLING_MANAGER).catch(() => []),
+    remsApi.approvalPolicy().catch(() => null)
   ]);
   cseOptions.value = toOptions(cse);
   executiveOptions.value = toOptions(execs);
   billingManagerOptions.value = toOptions(billing);
+  approvalPolicy.value = policy;
 };
+
+// ---- STATIC-APPROVAL-POLICY ----
+// The seats on this request approve at their own stage and may not also be paid commission, so the
+// Commission tab does not offer them.
+const approvalPolicy = ref(null);
+const reservedCommissionIds = computed(() => {
+  if (!approvalPolicy.value?.staticRouting) return [];
+  return [
+    setupForm.cseUserId,
+    setupEngagement.value?.departmentDirector?.id,
+    approvalPolicy.value?.managingShareholder?.id
+  ].filter(Boolean);
+});
 
 // The CSE, the Entity Type and the Industry as they were picked BEFORE the request existed.
 let pendingSetupPick = null;
