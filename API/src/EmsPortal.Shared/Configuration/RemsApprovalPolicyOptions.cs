@@ -13,7 +13,7 @@ public sealed class RemsApprovalPolicyOptions
     /// <summary>The managing shareholder, as "First Last". Matched against the user's person record.</summary>
     public string ManagingShareholder { get; set; } = "Jeff Barbacci";
 
-    /// <summary>CSEs whose engagements skip the department director and always need the managing shareholder.</summary>
+    /// <summary>CSEs whose TAX engagements skip the department director and always need the managing shareholder.</summary>
     public List<string> TaxExceptionCses { get; set; } = new() { "James Previte", "Stephen Hamic" };
 
     /// <summary>A tax engagement whose first-year fee is at or under this skips the managing shareholder.</summary>

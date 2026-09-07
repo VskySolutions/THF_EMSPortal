@@ -113,7 +113,9 @@ public static class RemsStaticApprovalRoute
         var director = engagement.DepartmentDirectorId;
         var managing = policy.ManagingShareholder?.Id;
         var recipients = engagement.CommissionSplits.Where(s => !s.Deleted).Select(s => s.EmployeeId).Distinct().ToList();
-        var cseIsException = policy.IsTaxExceptionCse(cse);
+        // The exception is the TAX department's: one of its named CSEs on an engagement placed anywhere
+        // else is routed like everybody.
+        var cseIsException = policy.IsTaxExceptionCse(cse) && RemsEngagementCodes.IsTax(engagement.Department?.Value);
 
         if (cse is null)
         {
@@ -163,7 +165,7 @@ public static class RemsStaticApprovalRoute
         return new RemsApprovalRoute(stages, null);
     }
 
-    /// <summary>Required for every engagement except a tax engagement priced at or under the ceiling, unless the CSE is the exception.</summary>
+    /// <summary>Required for every engagement except a tax engagement priced at or under the ceiling, unless the CSE is the tax exception.</summary>
     private static bool NeedsManagingShareholder(REMSEngagement engagement, RemsApprovalPolicySnapshot policy, bool cseIsException)
     {
         if (cseIsException)
