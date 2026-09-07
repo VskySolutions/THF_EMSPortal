@@ -11,7 +11,11 @@ namespace EmsPortal.Api.Approval;
 // STATIC-APPROVAL-POLICY. Everything in this file exists for the fixed approver rules THF asked for;
 // deleting the file and the marker-commented lines elsewhere puts the platform back on its own list.
 
-/// <summary>The policy resolved against one tenant's people: who holds the Shareholder role, which CSEs are the tax exception.</summary>
+/// <summary>
+/// The policy resolved against one tenant's people: who signs as the shareholder (the mandatory
+/// shareholder, or the Shareholder role's holders when that name resolves to nobody), which CSEs are the
+/// tax exception.
+/// </summary>
 public sealed record RemsApprovalPolicySnapshot(
     bool StaticRouting,
     decimal TaxFeeCeilingWithoutShareholder,
@@ -45,7 +49,6 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
             return new RemsApprovalPolicySnapshot(false, _options.TaxFeeCeilingWithoutShareholder, Array.Empty<User>(), Array.Empty<User>());
         }
 
-        var shareholders = await _users.ListByTenantRolesAsync(tid, new[] { Roles.Shareholder }, cancellationToken);
         var people = await _users.ListActiveByTenantAsync(tid, cancellationToken);
         var exceptions = _options.TaxExceptionCses
             .Select(name => Find(people, name))
@@ -54,8 +57,14 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
             .DistinctBy(u => u.Id)
             .ToList();
 
-        return new RemsApprovalPolicySnapshot(
-            true, _options.TaxFeeCeilingWithoutShareholder, shareholders.DistinctBy(u => u.Id).ToList(), exceptions);
+        // The mandatory shareholder is the seat; the Shareholder role's holders fill it only when the
+        // configured name resolves to nobody, so a name nobody carries never blocks a send.
+        var mandatory = Find(people, _options.MandatoryShareholder);
+        IReadOnlyList<User> shareholders = mandatory is not null
+            ? new[] { mandatory }
+            : (await _users.ListByTenantRolesAsync(tid, new[] { Roles.Shareholder }, cancellationToken)).DistinctBy(u => u.Id).ToList();
+
+        return new RemsApprovalPolicySnapshot(true, _options.TaxFeeCeilingWithoutShareholder, shareholders, exceptions);
     }
 
     /// <summary>The one user whose name reads as the configured "First Last"; null when nobody or more than one does.</summary>
@@ -139,7 +148,7 @@ public static class RemsStaticApprovalRoute
         {
             if (shareholders.Count == 0)
             {
-                return Blocked("Nobody holds the Shareholder role in this tenant, so this engagement cannot be routed.");
+                return Blocked("There is no shareholder to approve this: the mandatory shareholder is not an active user here and nobody holds the Shareholder role.");
             }
             Add(shareholders.Select(s => (s, RemsApproverRole.Shareholder)));
         }

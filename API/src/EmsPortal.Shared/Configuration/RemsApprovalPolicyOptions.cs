@@ -10,6 +10,12 @@ public sealed class RemsApprovalPolicyOptions
     /// <summary>Stage the approvals — commission, then CSE, then department director, then the Shareholder role.</summary>
     public bool StaticRouting { get; set; } = true;
 
+    /// <summary>
+    /// Who signs as the shareholder, as "First Last", matched against the user's person record. When the
+    /// name resolves to no active user, everyone holding the Shareholder role is asked instead.
+    /// </summary>
+    public string MandatoryShareholder { get; set; } = "Jeff Barbacci";
+
     /// <summary>CSEs whose TAX engagements skip the department director and always need the shareholders.</summary>
     public List<string> TaxExceptionCses { get; set; } = new() { "James Previte", "Stephen Hamic" };
 
