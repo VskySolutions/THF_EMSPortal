@@ -1,23 +1,22 @@
 namespace EmsPortal.Api.Models.Rems;
 
-/// <summary>
-/// Build/save the EMS onboarding form for a REMS request (WO-112, AC-REMS-007). Both the CSE and the
-/// industry group are required before the form can be saved (AC-REMS-007.7); changing the industry group
-/// before the form is sent regenerates the invite link (AC-REMS-007.5), and both are locked once sent.
-/// </summary>
+/// <summary>Build/save the EMS onboarding form for a REMS request (WO-112, AC-REMS-007).</summary>
 public sealed class SaveRemsFormRequest
 {
     /// <summary>The Client Service Executive to assign to the request (User id) — required.</summary>
     public Guid CseUserId { get; set; }
 
-    /// <summary>Industry group (option-set <c>REMS.IndustryGroup</c> code: individual/business/government) — required.</summary>
-    public string IndustryGroup { get; set; } = string.Empty;
+    /// <summary>
+    /// Industry group (option-set <c>REMS.EntityType</c> code: individual/business/government) —
+    /// required.
+    /// </summary>
+    public string EntityType { get; set; } = string.Empty;
 }
 
-/// <summary>The current EMS form state on a request (WO-112). Null on <see cref="RemsFormBuildScreen.Form"/> when no form has been built yet.</summary>
+/// <summary>The current EMS form state on a request (WO-112).</summary>
 public sealed record RemsFormInfo(
     Guid Id,
-    string IndustryGroup,
+    string EntityType,
     string InviteCode,
     string FormLink,
     string Status,
@@ -28,8 +27,7 @@ public sealed record RemsFormInfo(
 
 /// <summary>
 /// The EMS form build-screen model (WO-112, AC-REMS-007.1): the REMS request context plus the current
-/// form (if any). The CSE lives on the request (<c>REMS.CSEId</c>); the invite code / link / status live
-/// on the form.
+/// form (if any).
 /// </summary>
 public sealed record RemsFormBuildScreen(
     Guid RemsId,
@@ -41,13 +39,15 @@ public sealed record RemsFormBuildScreen(
     RemsUserRef? Cse,
     RemsFormInfo? Form);
 
-/// <summary>The pre-send preview (WO-112, AC-REMS-008.1): where the form link will be emailed, and the link itself.</summary>
+/// <summary>
+/// The pre-send preview (WO-112, AC-REMS-008.1): where the form link will be emailed, and the link
+/// itself.
+/// </summary>
 public sealed record RemsFormPreview(
     string? DestinationEmail,
     string FormLink,
-    // The effective template rendered with this request's values — exactly what the client would receive
-    // if the admin sent without touching it. Null when the tenant has no effective RemsFormLink template,
-    // which is also why nothing would be sent.
+    // The effective template rendered with this request's values — exactly what the client would receive if
+    // the admin sent without touching it.
     string? Subject,
     string? Body);
 
@@ -58,18 +58,7 @@ public sealed class SendRemsFormRequest
     public string? Body { get; set; }
 }
 
-/// <summary>
-/// A single email-delivery event row in the form email log (WO-112, AC-REMS-008.6), newest first.
-/// <paramref name="Detail"/> explains a Failed event this portal recorded itself (no SMTP account,
-/// rejected credentials, …) and is null for everything else — raw provider payloads are never surfaced.
-/// <para>
-/// <paramref name="Subject"/> and <paramref name="Body"/> are the message as it was sent, present on the
-/// rows this portal raised (Sent, Reminder) and null on provider callbacks and on anything sent before
-/// they were recorded. The <c>ProviderMessageId</c> is deliberately NOT on this record: it is a transport
-/// identifier of the form <c>…@localhost</c>, meaningless to the reader, and the message itself is what
-/// they came to see.
-/// </para>
-/// </summary>
+/// <summary>A single email-delivery event row in the form email log (WO-112, AC-REMS-008.6), newest first.</summary>
 public sealed record RemsEmailEventRow(
     Guid Id,
     string EventType,
@@ -84,22 +73,9 @@ public sealed record RemsEmailEventRow(
 
 /// <summary>
 /// The email log as one screen: the delivery events, and whether THIS caller can nudge the client from
-/// it. <paramref name="CanRemind"/> is the same test the reminder endpoint itself applies — the
-/// rems.forms.send permission, the record rule about whose request this is, and the state window a
-/// reminder makes sense in — so the button is offered exactly when pressing it would work.
-/// <para>
-/// <paramref name="RemindBlockedReason"/> explains a refusal only where knowing it changes what the
-/// reader would do: the request's own state ("the client has already submitted this"), or its being with
-/// somebody else. A caller who simply does not hold rems.forms.send gets null and no button — that they
-/// cannot send is not news to them.
-/// </para>
+/// it.
 /// </summary>
-/// <para>
-/// <paramref name="ClientFormLink"/> is the client's own intake link, offered for copying in exactly the
-/// window where it is theirs to follow: the form has been sent and they have not answered yet. Null before
-/// that (the link is dead until the form is Sent, and a staff member opening it first is how a request ends
-/// up filled in by the wrong hand) and null after (there is nothing left to fill in).
-/// </para>
+/// <paramref name="ClientFormLink"/>
 public sealed record RemsEmailLog(
     bool CanRemind,
     string? RemindBlockedReason,

@@ -1,8 +1,6 @@
 <template>
   <div>
-    <!-- Yes / No, and No to start with. Two buttons rather than a switch because it is a QUESTION with
-         two answers, not a setting: a client who has nobody else to declare should be able to say so and
-         move on, and an unticked switch looks the same as a question nobody read. -->
+    <!-- Yes / No, and No to start with. -->
     <div class="ai-ask">
       <div class="ai-ask__label">Will we be preparing a return for anyone else?</div>
       <q-btn-toggle
@@ -16,9 +14,7 @@
       <q-card v-for="(row, i) in rows" :key="row.sourceKey" flat bordered class="ai-block">
         <q-card-section class="row items-center no-wrap q-pb-none">
           <!-- Named by who they are as soon as they are named, and by their position until then: a card
-               headed "Individual 2" is one a reader has to count to find. Truncated rather than allowed
-               to set the row's width — the remove button beside it is fixed, and a long name would
-               otherwise push it off a phone-width card. -->
+               headed "Individual 2" is one a reader has to count to find. -->
           <div class="text-subtitle2 text-weight-medium col ellipsis">{{ individualLabel(row, i) }}</div>
           <q-btn
             flat round dense color="negative" icon="o_delete"
@@ -29,9 +25,7 @@
         </q-card-section>
         <q-card-section>
           <div class="row q-col-gutter-sm">
-            <!-- What they are to the client. It decides the two rules below it, so it is asked first.
-                 Two across on a tablet and three only from md: a "Joint | Individual" pair of buttons in
-                 a third of a 600px card has no room for the word "Individual". -->
+            <!-- What they are to the client. -->
             <app-select
               v-model="row.type" :options="INDIVIDUAL_TYPES" label="Type" required :clearable="false"
               class="col-12 col-sm-6 col-md-4"
@@ -40,14 +34,11 @@
             />
 
             <!-- Locked to Individual for a child: a child files their own return, and offering "Joint"
-                 beside a child's name is offering an answer the firm cannot act on. The disabled button
-                 stays visible rather than disappearing, so the client can see the choice was made and
-                 why. -->
+                 beside a child's name is offering an answer the firm cannot act on. -->
             <div class="col-12 col-sm-6 col-md-4">
               <app-field-label label="Filing Type" required />
-              <!-- The rules are re-applied on change, because this box decides one of them: a spouse
-                   moving off a joint return opens the billing choice, and moving back onto one closes it
-                   again and puts the answer back to the primary client. -->
+              <!-- The rules are re-applied on change, because this box decides one of them: a spouse moving
+                   off a joint return opens the billing choice. -->
               <q-btn-toggle
                 v-model="row.filingType" :options="filingOptions(row)" spread
                 no-caps unelevated dense toggle-color="primary" color="grey-3" text-color="grey-8"
@@ -56,9 +47,7 @@
               <div v-if="individualFilingLocked(row)" class="ai-note">A child files individually.</div>
             </div>
 
-            <!-- Asked of a child and nobody else, because the answer changes who pays. A line of its own
-                 until md, where it completes the row of three — half-width it would have shared a line
-                 with First Name, which reads as though the question were about the name beside it. -->
+            <!-- Asked of a child and nobody else, because the answer changes who pays. -->
             <div v-if="individualAsksMinor(row)" class="col-12 col-md-4">
               <app-field-label
                 label="Is this child a minor?"
@@ -77,9 +66,7 @@
               :error="!!err(i, 'firstName')" :error-message="err(i, 'firstName')"
             />
             <!-- Last Name and Suffix share a line the way they do on the client's own block: the particle
-                 goes after the family name it belongs to, and it gets a particle's width rather than a
-                 half-row of its own. On a phone the pair still shares its line — split apart they read as
-                 two questions instead of one answer. -->
+                 goes after the family name it belongs. -->
             <app-text-field
               v-model="row.lastName" label="Last Name" required class="col-8 col-sm-4"
               :rules="nameRules('Last Name')"
@@ -119,10 +106,7 @@
                 </q-btn>
               </template>
             </app-text-field>
-            <!-- The email is required; the phone is not. Everyone the firm prepares a return for needs an
-                 address it can be reached at, and where a person has none of their own — a young child —
-                 the client gives the one the firm should use for them, which is the answer the firm needs
-                 either way. -->
+            <!-- The email is required; the phone is not. -->
             <app-text-field
               v-model="row.email" label="Email Address" type="email" required class="col-12 col-sm-6"
               :error="!!err(i, 'email')" :error-message="err(i, 'email')"
@@ -131,12 +115,8 @@
               <app-phone-input v-model="row.phone" label="Phone Number" />
             </div>
 
-            <!-- Who is invoiced for this person's return. Decided for them where the firm's rules decide
-                 it — a spouse on a joint return and a minor child are billed to the primary client — and
-                 open otherwise, which now includes a spouse who files individually. -->
-            <!-- A line to itself until md, where the two billing name boxes join it: 6 + 3 + 3. Below
-                 that they take a line of their own, which keeps "who pays" and "who it is addressed to"
-                 from being cut across the middle by a wrap. -->
+            <!-- Who is invoiced for this person's return. -->
+            <!-- A line to itself until md, where the two billing name boxes join it: 6 + 3 + 3. -->
             <div class="col-12 col-md-6">
               <app-field-label label="Billing Preference" required />
               <q-btn-toggle
@@ -148,12 +128,7 @@
             </div>
 
             <!-- "Bill Separately" used to open two more boxes here — Billing First Name and Billing Last
-                 Name — asking who the separate invoice was addressed to. They are not asked any more:
-                 the answer is the person the row is already about, and asking a client to type a second
-                 name for their own child's invoice was asking them to repeat themselves.
-                 The COLUMNS stay (see REMSAdditionalIndividual), and a submission that carries an answer
-                 still shows it wherever that submission is read back — this stops the question being put,
-                 it does not unsay what anybody has already told us. -->
+                 Name — asking who the separate invoice was addressed to. -->
           </div>
         </q-card-section>
       </q-card>
@@ -174,15 +149,6 @@
 
 <script setup>
 // "Spouse & More Individuals" — the other people on an individual client's return.
-//
-// It replaced the Self and Spouse contact roles this form used to ask an individual for. Those asked for
-// a name, an email and a phone: "Self" was the client re-typing what the first card had just asked them,
-// and "Spouse" said nothing about the two things the firm actually needs to know about a second person
-// on a return — how it is filed, and who pays for it. One spouse also fitted, and children did not.
-//
-// The RULES live in useRemsIntakeForm, not here, because three things enforce them: this component
-// (which disables the controls), the completeness gate the Review button reads, and the server. A
-// disabled button is a courtesy; the rule is the shared predicate.
 import { computed } from "vue";
 import { nameRules } from "utils/personName";
 import {
@@ -202,9 +168,7 @@ import AppPhoneInput from "components/common/AppPhoneInput.vue";
 const rows = defineModel({ type: Array, required: true });
 
 const props = defineProps({
-  // The client's own surname, used to prefill each new person's. A spouse and children nearly always
-  // share it, and the alternative is asking a client to type their own family name once per child.
-  // Read at the moment a block is added and never again — see newAdditionalIndividual.
+  // The client's own surname, used to prefill each new person's.
   defaultLastName: { type: String, default: "" },
   // Per-field server messages, keyed by payload path ("additionalIndividuals[0].firstName").
   errors: { type: Object, default: () => ({}) }
@@ -246,9 +210,7 @@ const billingOptions = (row) => INDIVIDUAL_BILLING_PREFERENCES.map((o) => ({
   disable: individualBillingLocked(row) && o.value !== "primary"
 }));
 
-// Why the choice was made for them, where it was. Says which ANSWER did it, so the client can see that
-// changing that answer opens the choice back up — a spouse moved off the joint return can be billed
-// separately, and the note is the only thing that says so.
+// Why the choice was made for them, where it was.
 const billingNote = (row) => {
   if (individualBillingLocked(row)) {
     return row.type === "spouse"
@@ -268,9 +230,7 @@ function remove (i) {
   rows.value.splice(i, 1);
 }
 
-// The firm's rules are re-applied the moment the answer they depend on changes, so a client who picks
-// "Bill Separately" and then changes the Type to Spouse does not leave a separate-billing answer sitting
-// behind a control that has just been disabled.
+// The firm's rules are re-applied the moment the answer they depend on changes.
 function onRuleChange (row) {
   applyIndividualRules(row);
 }

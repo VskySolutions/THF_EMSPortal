@@ -21,9 +21,7 @@
     <app-filter-drawer v-model="filterOpen" :chips="allChips" @remove="onRemoveFilter" @clear="onClearFilters">
       <app-column-filters v-model="filters" :columns="filterableColumns" />
       <!-- Server filters with no column of their own: contact matches email or mobile at once, which no
-           single column stands for, and a created range is two controls, not one.
-           Each sits as its own full-width slot child, like every control above it — AppFilterDrawer
-           already spaces and aligns what it is given, so no row wrapper or margin class is wanted here. -->
+           single column stands for, and a created range is two controls, not one. -->
       <app-text-field v-model="extras.contact" label="Contact (email or mobile)" clearable :dense="false" />
       <app-date-field v-model="extras.createdFrom" label="Created From" :dense="false" />
       <app-date-field v-model="extras.createdTo" label="Created To" :dense="false" />
@@ -50,12 +48,8 @@
       @request="onRequest"
       @refresh="load"
     >
-      <!-- The admins' second reading of this list, beside the column picker where EMS Review keeps the
-           same pair. Only they are offered it: for everybody else the two views return the same rows, so
-           a toggle that never changed anything would be a control asking to be pressed for nothing.
-           "Created By Me" leads because it is the default and this page is still their own work first;
-           "All" is the whole tenant, including the drafts colleagues have left half-written. Server-side,
-           like every other filter here, so it widens the whole set rather than the loaded page. -->
+      <!-- The admins' second reading of this list, beside the column picker where EMS Review keeps the same
+           pair. -->
       <template v-if="isRemsAdmin" #actions>
         <q-btn-toggle
           v-model="ownership"
@@ -65,8 +59,8 @@
         />
       </template>
 
-      <!-- The pin the reader put on this row, beside the number rather than only on the button that set
-           it: the button is at the far right and the reason the row is at the top is here. -->
+      <!-- The pin the reader put on this row, beside the number rather than only on the button that set it:
+           the button is at the far right and the reason the row is at the top is here. -->
       <template #body-cell-remsNumber="cell">
         <q-td :props="cell">
           <entity-pinned-mark :pinned="isPinned(cell.row.id)" />
@@ -74,9 +68,8 @@
         </q-td>
       </template>
 
-      <!-- The particle after the name and in bold: a column of "John Smith" rows is told apart by
-           the "Jr." and the "III" alone. The column still SORTS and searches on `clientName`, which is
-           the two joined. -->
+      <!-- The particle after the name and in bold: a column of "John Smith" rows is told apart by the "Jr."
+           and the "III" alone. -->
       <template #body-cell-clientName="cell">
         <q-td :props="cell">
           <app-name-with-suffix :name="cell.row.clientName" :suffix="cell.row.clientNameSuffix" />
@@ -94,8 +87,7 @@
       </template>
 
       <!-- The stage, and what that stage means — the tooltip is the status option's own Description,
-           maintained in Administration → Option Sets, so a tenant who rewords a status rewords its
-           explanation in the same place. -->
+           maintained in Administration → Option Sets. -->
       <template #body-cell-status="cell">
         <q-td :props="cell">
           <app-option-badge :option="requestStatusOption(cell.row)" />
@@ -108,10 +100,18 @@
         </q-td>
       </template>
 
+      <!-- What kind of entity the client is, as the badge Related Entities draws for the same value — the
+           tenant's word for it in the tenant's colour, rather than the stored code. -->
+      <template #body-cell-entityType="cell">
+        <q-td :props="cell">
+          <app-option-badge v-if="cell.row.entityType" :option="entityTypeOption(cell.row.entityType)" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- View and Edit are the same page in two modes. Separate actions because they are separate
-               intentions: reading a request should never put a form on screen. -->
+          <!-- View and Edit are the same page in two modes. -->
           <q-btn flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)">
             <q-tooltip>View</q-tooltip>
           </q-btn>
@@ -121,9 +121,7 @@
           >
             <q-tooltip>Edit</q-tooltip>
           </q-btn>
-          <!-- What has been emailed to the client about this request, and the way to chase them again.
-               Only once something has actually gone out: before the intake link is sent there is no
-               history to read and nobody to remind. -->
+          <!-- What has been emailed to the client about this request, and the way to chase them again. -->
           <q-btn
             v-if="canReadEmailLog && emsFormActivity(cell.row)" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click="openEmailLog(cell.row)"
@@ -134,8 +132,7 @@
             <q-tooltip>Conversation</q-tooltip>
           </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
-               everything before them acts on the REQUEST, and these two are private to whoever is
-               looking. -->
+               everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
           <entity-row-marks
             v-if="canMarkRows"
             :pinned="isPinned(cell.row.id)"
@@ -216,28 +213,20 @@ const { has } = usePermissions();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 // The *Option helpers hand back the whole value — label, description, colour, icon — which is what
-// AppOptionBadge renders. submissionStateLabel is the label-only form, for a column that shows the value
-// as plain text rather than as a badge.
+// AppOptionBadge renders. submissionStateLabel is the label-only form.
 const {
   typeLabel, typeHint, requestStatusOption, formStatusOption, submissionStateLabel, emsFormActivity,
-  statusFilterOptions, typeOptions
+  entityTypeLabel, entityTypeOption, statusFilterOptions, typeOptions
 } = useRemsMeta();
 
 const canCreate = computed(() => has(Permissions.RemsRequestsCreate));
 const canReadEmailLog = computed(() => has(Permissions.RemsEmailLogRead));
 
-// Who gets the two views. A ROLE rather than a permission, deliberately: it mirrors the server's
-// RemsSetupAccess.IsRemsAdmin, which is what actually decides whether "All" returns anything more than
-// "Created By Me" — the SPA only has to agree with it, or it offers a button that does nothing.
+// Who gets the two views.
 const isRemsAdmin = computed(() =>
   auth.roles.includes("SuperAdmin") || auth.roles.includes("Admin"));
 
-// Which of the two readings of this list is on screen. NOT one of the drawer's column filters: those each
-// carry a chip and a Clear, and this is neither — there is always one of the two selected.
-//
-// "Created By Me" is authorship: what this admin raised, or had raised for them by a delegate. It does NOT
-// include the requests that merely name them as CSE or reviewing admin — those are colleagues' referrals
-// that landed on their desk, and the queue for them is EMS Review. "All" is the tenant.
+// Which of the two readings of this list is on screen.
 const OWNERSHIP_FILTERS = [
   { label: "Created By Me", value: "mine" },
   { label: "All", value: "all" }
@@ -245,9 +234,7 @@ const OWNERSHIP_FILTERS = [
 const ownership = ref("mine");
 
 // The Assigned Admin filter needs the admin list, so it is offered only to callers who may read it —
-// which is the same right as reading requests, since the endpoint stopped being gated on assigning when
-// the "Assign to Admin" picker it fed was removed. Nothing on this list re-points an admin: a request
-// gains one by that admin picking it up from EMS Review.
+// which is the same right as reading requests.
 const canSeeAdmins = computed(() => has(Permissions.RemsRequestsRead));
 const adminFilterOptions = ref([]);
 onMounted(async () => {
@@ -262,9 +249,7 @@ onMounted(async () => {
 });
 
 // Ordered as the list reads: what the request is, then who it is for, then where it has got to, then the
-// trail behind it. Everything between Created On and Actions is off by default, so the visible sequence is
-// Request ID → Type → Client → Status → Assigned Admin → CSE → EMS State → Created By → Created On →
-// Actions, and switching a hidden column on slots it in before Actions rather than after.
+// trail behind it.
 const columns = computed(() => [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "type", label: "Type", field: "type", align: "left", default: true, filterOptions: typeOptions.value },
@@ -290,7 +275,9 @@ const columns = computed(() => [
   // unreachable.
   { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", default: false, filterable: false },
   { name: "customerMobileNumber", label: "Client Phone Number", field: (r) => r.customerMobileNumber || "—", align: "left", default: false, filterable: false },
-  { name: "industryGroup", label: "Entity Type", field: (r) => r.industryGroup || "—", align: "left", default: false, filterable: false },
+  // The cell draws the badge; the field is the LABEL so the column reads as its wording rather than as
+  // the stored code (`not_for_profit`) wherever the field is what is read.
+  { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", default: false, filterable: false },
   { name: "clientSubmissionState", label: "Client Submission", field: (r) => submissionStateLabel(r.clientSubmissionState), align: "left", default: false, filterable: false },
   // All four from the shared set: Updated By / Updated On visible and last, the created pair a click
   // away. None is filterable — the created range is the From/To pair in the drawer, not a text box.
@@ -312,9 +299,7 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
       sortBy,
       descending,
       scope: "partner",
-      // Only the admins choose. Everybody else asks for "all", which for them is what this list has
-      // always been — what they raised plus what names them as CSE or reviewing admin. Sending "mine"
-      // for them would quietly drop the second half from a list nothing on screen offers to widen again.
+      // Only the admins choose.
       ownership: isRemsAdmin.value ? ownership.value : "all",
       page,
       limit,
@@ -357,11 +342,7 @@ const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters, extras, ownership], reload, { deep: true });
 
 // ---- The reader's own marks on these rows ----
-// A pin floats a row to the top of the page and a colour tints it, both stored against the USER, so
-// neither is visible to anybody else — which is what makes them safe on a list an admin can widen to the
-// whole tenant. Offered only to a caller who may read REMS requests, which is what the UF endpoints gate
-// on (UniversalFeatureEntityAccess maps EntityType.Rems to rems.requests.read); this page itself is open
-// to everyone, so without the check some readers would be handed two buttons that 403.
+// A pin floats a row to the top of the page and a colour tints.
 const canMarkRows = computed(() => has(Permissions.RemsRequestsRead));
 
 const {
@@ -375,16 +356,12 @@ watch(rows, (list) => {
   if (canMarkRows.value) syncMarks(list.map((r) => r.id));
 });
 
-// Straight to the form. A partner's request IS the form — there is no separate detail screen worth
-// landing on first now that client details and engagement setup live on one page. The mode decides
-// whether it opens as a record or as something you can type into.
+// Straight to the form.
 const viewRoute = (row) => ({ name: "rems_request", params: { id: row.id } });
 const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.id } });
 
 // ---- Create ----
-// The same page as Edit, on its own path. There is no create drawer any more: it only ever held the intake
-// half, so a partner had to fill it, save, and then find the engagement setup on the page it dropped them
-// on — two steps for one referral. The form asks for all of it across its tabs.
+// The same page as Edit, on its own path.
 const openCreate = () => {
   router.push({ name: "rems_request_new" });
 };

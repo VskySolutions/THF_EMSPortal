@@ -18,20 +18,7 @@ using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// The public, unauthenticated REMS client onboarding form (WO-113). A client follows the emailed invite
-/// link (<c>{inviteCode}</c>) to load, auto-save, review and finally submit their EMS form; the submission
-/// transactionally materialises the client, entities, addresses, contacts and blank engagements.
-/// <para>
-/// These endpoints are <see cref="AllowAnonymousAttribute">anonymous</see>: there is NO resolved tenant and
-/// NO current user. The form is resolved by invite code ALONE (a 128-bit unguessable value); the form's own
-/// <see cref="REMSForm.TenantId"/> is then the authoritative tenant for everything read or written. Because
-/// <c>EmsPortalDbContext.StampTenant()</c> no-ops without a resolved tenant, the tenant is established from
-/// the form (<see cref="ITenantContext.Set"/>) and, defensively, <c>TenantId</c> is ALSO set explicitly on
-/// every REMS / Person row created — never <see cref="Guid.Empty"/>. Responses disclose only this form's own
-/// prefill / draft; a bad or inactive link returns a generic state with no other-tenant information.
-/// </para>
-/// </summary>
+/// <summary>The public, unauthenticated REMS client onboarding form (WO-113).</summary>
 [ApiController]
 [Route("api/rems/public/forms")]
 [AllowAnonymous]
@@ -104,9 +91,7 @@ public sealed class RemsPublicFormController : ControllerBase
 
     /// <summary>
     /// Resolve the public form and return its load state (WO-113): <c>Invalid</c> (bad link),
-    /// <c>Unavailable</c> (request deleted, cancelled, or not yet sent), <c>Submitted</c> (thank-you), or
-    /// <c>Editable</c> (industry group + locked prefill + any saved draft). Always HTTP 200; the state — not
-    /// the status code — drives the client, and nothing about other requests is disclosed.
+    /// <c>Unavailable</c> (request deleted, cancelled, or not yet sent).
     /// </summary>
     [HttpGet("{inviteCode}")]
     [ProducesResponseType<ApiResponse<RemsPublicFormResponse>>(StatusCodes.Status200OK)]
@@ -133,7 +118,7 @@ public sealed class RemsPublicFormController : ControllerBase
             RemsFormStatus.Sent => Ok(ApiResponseFactory.Success(
                 new RemsPublicFormResponse(
                     RemsPublicFormStates.Editable,
-                    IndustryGroup: form.IndustryGroup!.Value,
+                    EntityType: form.EntityType!.Value,
                     Prefill: BuildPrefill(rems),
                     DraftPayload: RemsFormPayloadJson.TryDeserialize(CurrentDraft(form)?.DraftPayload),
                     ReferralSources: await ResolvePublicOptionsAsync(rems.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken)),
@@ -145,12 +130,8 @@ public sealed class RemsPublicFormController : ControllerBase
     }
 
     /// <summary>
-    /// Resolves an option list for the anonymous form, scoped to the REQUEST's tenant rather than to an
-    /// ambient one — this caller holds an invite code, not a session, so there is no tenant context to
-    /// read. Falls back to the tenant's effective list (their own copy, else the platform standard),
-    /// exactly as the staff resolve endpoint does, so the client sees the same wording staff maintain.
-    /// An absent list yields null and the form falls back to its built-in copy rather than showing an
-    /// empty picker.
+    /// Resolves an option list for the anonymous form, scoped to the REQUEST's tenant rather than to
+    /// an ambient one — this caller holds an invite code, not a session.
     /// </summary>
     private async Task<IReadOnlyList<RemsPublicOption>?> ResolvePublicOptionsAsync(
         Guid tenantId, string key, CancellationToken cancellationToken)
@@ -177,11 +158,7 @@ public sealed class RemsPublicFormController : ControllerBase
 
     // -------------------- Draft (auto-save / explicit save) --------------------
 
-    /// <summary>
-    /// Upsert the single in-progress draft (WO-113). Accepts a partial <see cref="RemsFormPayloadV1"/> — no
-    /// industry-group validation runs here — and stores it durably so it survives across visits. Allowed only
-    /// while the form is editable (Sent); rejected once submitted or otherwise unavailable.
-    /// </summary>
+    /// <summary>Upsert the single in-progress draft (WO-113).</summary>
     [HttpPut("{inviteCode}/draft")]
     [ProducesResponseType<ApiResponse<RemsDraftSavedResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SaveDraft(string inviteCode, [FromBody] RemsFormPayloadV1 payload, CancellationToken cancellationToken)
@@ -225,10 +202,8 @@ public sealed class RemsPublicFormController : ControllerBase
     // -------------------- Review --------------------
 
     /// <summary>
-    /// Validate the supplied (or stored) payload against the full industry-group rules and return the
-    /// read-only review presentation, grouped as Contact · Contract Details (Government only) · Other
-    /// Entities · Address · Additional Contacts · Billing (AC-REMS-024.7). On any failure the validation
-    /// errors are returned instead, so the client cannot reach review with an invalid form (AC-REMS-024.8).
+    /// Validate the supplied (or stored) payload against the full entity-type rules and return the
+    /// read-only review presentation.
     /// </summary>
     [HttpPost("{inviteCode}/review")]
     [ProducesResponseType<ApiResponse<RemsReviewModel>>(StatusCodes.Status200OK)]
@@ -248,26 +223,19 @@ public sealed class RemsPublicFormController : ControllerBase
         }
 
         var effective = ResolvePayload(payload, form);
-        var validation = PayloadValidator.Validate(effective, form.IndustryGroup!.Value);
+        var validation = PayloadValidator.Validate(effective, form.EntityType!.Value);
         if (!validation.IsValid)
         {
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        var model = BuildReviewModel(form.Rems!, effective!, form.IndustryGroup!.Value);
+        var model = BuildReviewModel(form.Rems!, effective!, form.EntityType!.Value);
         return Ok(ApiResponseFactory.Success(model, "REMS form review ready."));
     }
 
     // -------------------- Submit --------------------
 
-    /// <summary>
-    /// Transactionally submit the form (WO-113). Re-validates server-side, then in one transaction snapshots
-    /// the immutable submission, locks the form (Status=Submitted), flips the request to
-    /// <c>customer_submitted</c>, and materialises the client, its entities, addresses, contacts and blank
-    /// engagements (plus the government contract detail). Idempotent: an already-submitted form returns the
-    /// thank-you state without creating anything. After commit, best-effort in-app + email notifications go to
-    /// the assigned Admin and CSE.
-    /// </summary>
+    /// <summary>Transactionally submit the form (WO-113).</summary>
     [HttpPost("{inviteCode}/submit")]
     [ProducesResponseType<ApiResponse<RemsPublicFormResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Submit(
@@ -298,7 +266,7 @@ public sealed class RemsPublicFormController : ControllerBase
         var effective = ResolvePayload(payload, form);
 
         // Re-validate everything server-side (AC-REMS-024.8) before any write.
-        var validation = PayloadValidator.Validate(effective, form.IndustryGroup!.Value);
+        var validation = PayloadValidator.Validate(effective, form.EntityType!.Value);
         if (!validation.IsValid)
         {
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
@@ -317,9 +285,8 @@ public sealed class RemsPublicFormController : ControllerBase
     // -------------------- Cancel --------------------
 
     /// <summary>
-    /// Acknowledge a client's cancellation of the form (AC-REMS-010.9) — a client-side confirmation only.
-    /// Non-destructive: the draft is kept and the form is NOT locked, so the client can return via the same
-    /// link and continue. Returns a simple acknowledgement.
+    /// Acknowledge a client's cancellation of the form (AC-REMS-010.9) — a client-side confirmation
+    /// only.
     /// </summary>
     [HttpPost("{inviteCode}/cancel")]
     [ProducesResponseType<ApiResponse<RemsPublicCancelResponse>>(StatusCodes.Status200OK)]
@@ -341,15 +308,10 @@ public sealed class RemsPublicFormController : ControllerBase
     {
         var now = DateTime.UtcNow;
 
-        // Build the ENTIRE object graph up front (stable, pre-generated ids). Persisting a fully-built graph
-        // means a re-executed transaction (connection resiliency) re-adds the SAME instances rather than
-        // duplicate-keyed new ones, and keeps the transaction body a flat, ordered sequence of inserts.
-        // The request's one engagement, created when the initiator first saved it. Only the Government
-        // contract dates need it — they come from the client's answers but belong to the engagement.
+        // Build the ENTIRE object graph up front (stable, pre-generated ids).
         var engagement = await _engagements.GetByRemsIdAsync(form.REMSId, cancellationToken);
-        // The referral source is a foreign key to an option item, so the CODE the client picked is
-        // resolved before the graph is staged. The tenant was pinned when the form was loaded, so this
-        // resolves against that tenant's own list even though the caller is anonymous.
+        // The referral source is a foreign key to an option item, so the CODE the client picked is resolved
+        // before the graph is staged.
         var referralSourceId = await _codes.IdOfAsync(
             EntityType.Rems, RemsOptionSetKeys.ReferralSource, payload.ReferralSource, cancellationToken);
         var graph = BuildSubmitGraph(form, payload, now, engagement?.Id, referralSourceId);
@@ -397,9 +359,7 @@ public sealed class RemsPublicFormController : ControllerBase
                 await _engagements.AddGovernmentDetailAsync(graph.GovernmentDetail, ct);
             }
 
-            // 3. Lock the form + flip the request status. The form and its request were loaded tracked, so
-            // mutating their scalars is picked up by change tracking — no explicit Update (which would also
-            // needlessly re-write the loaded draft rows through graph traversal).
+            // 3.
             form.Status = RemsFormStatus.Submitted;
             form.SubmittedOnUtc = now;
             form.InviteLockedOnUtc ??= now;
@@ -414,16 +374,15 @@ public sealed class RemsPublicFormController : ControllerBase
     }
 
     /// <summary>
-    /// Materialises the whole submit graph (submission, client, entities, addresses, contacts, engagements,
-    /// government detail) with explicit TenantId on every REMS/Person row and pre-generated ids. Pure (no
-    /// I/O) so it can run outside the transaction.
+    /// Materialises the whole submit graph (submission, client, entities, addresses, contacts,
+    /// engagements.
     /// </summary>
     private SubmitGraph BuildSubmitGraph(
         REMSForm form, RemsFormPayloadV1 payload, DateTime now, Guid? engagementId, Guid? referralSourceId)
     {
         var tenantId = form.TenantId;
-        var isBusiness = RemsFormPayloadValidator.IsBusinessGroup(form.IndustryGroup!.Value);
-        var isGovernment = string.Equals(form.IndustryGroup!.Value, RemsFormPayloadValidator.Government, StringComparison.Ordinal);
+        var isBusiness = RemsFormPayloadValidator.IsBusinessGroup(form.EntityType!.Value);
+        var isGovernment = string.Equals(form.EntityType!.Value, RemsFormPayloadValidator.Government, StringComparison.Ordinal);
 
         var submissionId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
@@ -439,14 +398,8 @@ public sealed class RemsPublicFormController : ControllerBase
             },
         };
 
-        // Billing ADDRESSES are not staged here — they are the main entity's, and there may be several
-        // (see StageEntityAddresses). Email is LOCKED to the request; the payload email is never read on
-        // submit.
-        //
-        // BillingContactName / BillingEmail are only ever filled from a payload that predates the billing
-        // CONTACT block, which the intake form no longer has: whoever an invoice is addressed to travels
-        // on the billing address itself now. The columns stay for the older submissions that carry that
-        // answer, and for staff editing them by hand afterwards.
+        // Billing ADDRESSES are not staged here — they are the main entity's, and there may be several (see
+        // StageEntityAddresses).
         graph.Client = new REMSClient
         {
             Id = clientId,
@@ -464,9 +417,7 @@ public sealed class RemsPublicFormController : ControllerBase
             BillingEmail = Clean(payload.BillingEmail),
         };
 
-        // Main entity + its addresses, role contacts and (Government) contract detail. No engagement is
-        // staged: the request already has one, created when the initiator first saved it, and the
-        // government contract dates simply attach to it.
+        // Main entity + its addresses, role contacts and (Government) contract detail.
         var mainEntityId = Guid.NewGuid();
         graph.Entities.Add(new REMSEntity
         {
@@ -481,13 +432,10 @@ public sealed class RemsPublicFormController : ControllerBase
             graph, tenantId, mainEntityId,
             payload.PhysicalAddress, payload.EffectiveMailingAddress, payload.EffectiveBillingAddresses);
         StageRoleContacts(
-            graph, tenantId, form.REMSId, form.IndustryGroup!.Value, mainEntityId, payload.Roles,
+            graph, tenantId, form.REMSId, form.EntityType!.Value, mainEntityId, payload.Roles,
             payload.AdditionalBillingContacts);
-        // Everyone else on this client's return. Asked of an individual only, and staged for an individual
-        // only: a payload that carries them under another entity type is one whose type was changed after
-        // the client answered, and those answers stay in the submission rather than becoming rows against
-        // a business.
-        if (string.Equals(form.IndustryGroup!.Value, RemsFormPayloadValidator.Individual, StringComparison.Ordinal))
+        // Everyone else on this client's return.
+        if (string.Equals(form.EntityType!.Value, RemsFormPayloadValidator.Individual, StringComparison.Ordinal))
         {
             StageAdditionalIndividuals(graph, tenantId, form.REMSId, mainEntityId, payload.AdditionalIndividuals);
         }
@@ -511,9 +459,6 @@ public sealed class RemsPublicFormController : ControllerBase
         }
 
         // The client's other businesses, as contacts on the REQUEST rather than entities under the client.
-        // Each one is a prompt for its own REMS request, raised by hand from the Partner/CSE list — so
-        // there is no entity, no address and no engagement to stage here, and nothing that fans this
-        // request out into several approvals.
         var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "main" };
         var fallbackIndex = 0;
         foreach (var related in payload.RelatedEntities)
@@ -533,19 +478,7 @@ public sealed class RemsPublicFormController : ControllerBase
         return graph;
     }
 
-    /// <summary>
-    /// Stages the entity's physical and mailing addresses and every billing address the client gave.
-    /// Each is written whenever the client supplied it — the form offers "copy from" rather than a
-    /// differs/hide toggle, and a copied address is a snapshot the client can then edit, so each one is
-    /// stored in its own right. Under the old toggle an unticked "mailing differs" wrote no mailing row
-    /// at all, which meant correcting the physical address silently moved the mailing address with it.
-    /// <para>
-    /// Billing arrives as a LIST and every row is staged, in the order the client gave them —
-    /// REMSEntityAddress's unique index exempts Billing for exactly this reason. A billing row is present
-    /// on the strength of its ADDRESSEE as well as its postal lines: "invoice this to Jane Smith at
-    /// accounts@acme.com" is an answer even with no street behind it.
-    /// </para>
-    /// </summary>
+    /// <summary>Stages the entity's physical and mailing addresses and every billing address the client gave.</summary>
     private static void StageEntityAddresses(
         SubmitGraph graph, Guid tenantId, Guid entityId,
         RemsAddressPayload? physical, RemsAddressPayload? mailing,
@@ -571,23 +504,8 @@ public sealed class RemsPublicFormController : ControllerBase
     }
 
     /// <summary>
-    /// Stages the other people on an individual client's return — a spouse, a child, anyone else the firm
-    /// is preparing for.
-    /// <para>
-    /// Each becomes a <see cref="Person"/> AND a <see cref="REMSAdditionalIndividual"/>. The Person is so
-    /// they are findable in the CRM like anybody else the platform captures; the row beside it is the
-    /// record of what was DECLARED — the relation, the filing type, who is invoiced — none of which is a
-    /// property of a person, and all of which must survive somebody editing that person afterwards.
-    /// </para>
-    /// <para>
-    /// Not <see cref="REMSEntityContact"/> rows: an entity holds at most one contact per role, and a
-    /// client with three children has three people of one kind.
-    /// </para>
-    /// <para>
-    /// Every value is the EFFECTIVE one, so what is stored is what the firm's rules say rather than
-    /// whatever reached the endpoint: a child files individually, and a spouse on a joint return is
-    /// billed to the primary client, however the payload was assembled.
-    /// </para>
+    /// Stages the other people on an individual client's return — a spouse, a child, anyone else the
+    /// firm is preparing for.
     /// </summary>
     private static void StageAdditionalIndividuals(
         SubmitGraph graph, Guid tenantId, Guid sourceRemsId, Guid entityId,
@@ -611,10 +529,7 @@ public sealed class RemsPublicFormController : ControllerBase
                 SourceEntityId = sourceRemsId,
                 FirstName = Clean(individual.FirstName) ?? string.Empty,
                 LastName = Clean(individual.LastName) ?? string.Empty,
-                // The particle onto the Person's own column, not just into the display name. That column
-                // is what Persons.ClientDisplayName composes the surname-first reading from, so without it
-                // a related client the firm later opens a request for reads "Smith John" on every list
-                // beside the father he was declared to be distinct from.
+                // The particle onto the Person's own column, not just into the display name.
                 Suffix = Clean(individual.Suffix),
                 DisplayName = Clean(individual.DisplayName) ?? string.Empty,
                 PrimaryEmail = Clean(individual.Email),
@@ -650,7 +565,7 @@ public sealed class RemsPublicFormController : ControllerBase
     }
 
     private static void StageRoleContacts(
-        SubmitGraph graph, Guid tenantId, Guid sourceRemsId, string industryGroup, Guid entityId,
+        SubmitGraph graph, Guid tenantId, Guid sourceRemsId, string entityType, Guid entityId,
         RemsRolesPayload? roles, IReadOnlyList<RemsRolePayload>? additionalBillingContacts = null)
     {
         if (roles is null)
@@ -658,14 +573,12 @@ public sealed class RemsPublicFormController : ControllerBase
             return;
         }
 
-        foreach (var (role, roleName, isRequired) in EnumerateRoles(industryGroup, roles.Normalized()))
+        foreach (var (role, roleName, isRequired) in EnumerateRoles(entityType, roles.Normalized()))
         {
             Stage(role, roleName, isRequired);
         }
 
-        // The extra billing contacts an older payload carries. Retired with the Billing Contact block —
-        // whoever an invoice is addressed to travels on the billing ADDRESS now — but still staged, and
-        // never marked required: the form asks for none of them.
+        // The extra billing contacts an older payload carries.
         foreach (var extra in additionalBillingContacts ?? Array.Empty<RemsRolePayload>())
         {
             Stage(extra, nameof(RemsContactRole.BillingContact), isRequired: false);
@@ -694,21 +607,12 @@ public sealed class RemsPublicFormController : ControllerBase
 
     /// <summary>
     /// Satisfies the required <c>REMSEntityContact.PersonId</c> FK by creating a minimal tenant-scoped
-    /// <see cref="Person"/> from the role's name / email / phone. The public form collects a contact, not a
-    /// platform account, so this is the lightest record that satisfies the FK: TenantId is set EXPLICITLY
-    /// (no stamping without a resolved tenant) and PersonCode is a fresh GUID-derived code (globally unique
-    /// by the filtered unique index, so no existence pre-check is needed).
-    /// <para>
-    /// Provenance is stamped with the originating request. These are the least deliberate persons the
-    /// platform creates — a client typed them into a public form — so being able to tell them apart from
-    /// staff-entered records, and trace them back to the form they came off, matters most here.
-    /// </para>
+    /// <see cref="Person"/> from the role's name / email / phone.
     /// </summary>
     private static Person BuildContactPerson(Guid tenantId, Guid sourceRemsId, RemsRolePayload role)
     {
-        // The form asks for the two parts, so the Person is filed under what the client actually typed
-        // into them. Splitting on the first space is now only the fallback, for a payload written before
-        // the name was two boxes — see RemsRolePayload.EffectiveFirstName.
+        // The form asks for the two parts, so the Person is filed under what the client actually typed into
+        // them.
         var first = role.EffectiveFirstName;
         var last = role.EffectiveLastName;
         return new Person
@@ -718,14 +622,7 @@ public sealed class RemsPublicFormController : ControllerBase
             TenantId = tenantId,
             SourceEntityType = EntityType.Rems,
             SourceEntityId = sourceRemsId,
-            // The generational particle the client gave for this contact. Stored beside the name, not
-            // folded into FirstName / LastName — those two columns are what the person is filed and
-            // searched under — and joined back on in DisplayName, which is the "as it reads" field and is
-            // what every REMS surface shows a contact by.
-            //
-            // A courtesy title on a submission saved while the form asked for one is NOT carried here:
-            // Person holds one particle, and it is the suffix. It stays recoverable in full from the
-            // submission, which is the immutable record of what the client typed.
+            // The generational particle the client gave for this contact.
             Suffix = Clean(role.Suffix),
             FirstName = first,
             LastName = last,
@@ -737,9 +634,8 @@ public sealed class RemsPublicFormController : ControllerBase
         };
     }
 
-    // No engagement is minted on submit: the initiator fills the engagement setup before the client is
-    // ever contacted, so by the time a submission arrives the request already has its one engagement and
-    // this path only attaches the client's answers to it.
+    // No engagement is minted on submit: the initiator fills the engagement setup before the client is ever
+    // contacted.
 
     /// <summary>The staged submit graph — every row carries an explicit TenantId and a pre-generated id.</summary>
     private sealed class SubmitGraph
@@ -759,17 +655,14 @@ public sealed class RemsPublicFormController : ControllerBase
     // -------------------- Post-commit (best-effort) --------------------
 
     /// <summary>
-    /// After the submission is durably committed, notify the assigned Admin and CSE in-app and by email
-    /// (AC-REMS ...). Best-effort: any failure here is logged and swallowed and never rolls the submission
-    /// back. The tenant context was established from the form, so the staged notification/activity rows
-    /// stamp with the correct tenant.
+    /// After the submission is durably committed, notify the assigned Admin and CSE in-app and by
+    /// email (AC-REMS ...).
     /// </summary>
     private async Task DispatchPostSubmitAsync(REMSForm form, RemsFormPayloadV1 payload, CancellationToken cancellationToken)
     {
         var rems = form.Rems!;
         // Assigned admin, CSE, and the requester — the customer coming back is the milestone the person who
-        // raised the request is waiting on. The admin half is empty on a request nobody has picked up yet,
-        // which is the ordinary case: the broadcast below is what tells the admins about those.
+        // raised the request is waiting on.
         var recipients = new[] { rems.AdminAssignedToId, rems.CSEId, rems.CreatedById }
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
@@ -790,9 +683,7 @@ public sealed class RemsPublicFormController : ControllerBase
             }
 
             // Nobody has claimed this request, so the answers that just landed are on no admin's desk in
-            // particular. Every admin in the tenant is told it is waiting, which is the in-app half of what
-            // EMS Review shows as "Waiting for pickup" — without it a submission on an unclaimed request
-            // would reach the initiator and the CSE and no admin at all.
+            // particular.
             if (rems.AdminAssignedToId is null)
             {
                 var admins = await _users.ListByTenantRolesAsync(
@@ -838,14 +729,14 @@ public sealed class RemsPublicFormController : ControllerBase
 
     // -------------------- Review model --------------------
 
-    private RemsReviewModel BuildReviewModel(REMS rems, RemsFormPayloadV1 payload, string industryGroup)
+    private RemsReviewModel BuildReviewModel(REMS rems, RemsFormPayloadV1 payload, string entityType)
     {
         var contact = new RemsReviewContact(
             Clean(payload.EffectiveClientName), Clean(payload.ClientSuffix),
             Clean(payload.ClientFirstName), Clean(payload.ClientLastName),
             rems.CustomerEmail ?? string.Empty, Clean(payload.MobileNumber), Clean(payload.ReferralSource));
 
-        var contract = string.Equals(industryGroup, RemsFormPayloadValidator.Government, StringComparison.Ordinal)
+        var contract = string.Equals(entityType, RemsFormPayloadValidator.Government, StringComparison.Ordinal)
             ? new RemsReviewContractDetails(
                 payload.ContractStartDate, payload.ContractEndDate, Clean(payload.OriginalTerm),
                 Clean(payload.RenewalTerms), payload.PoStartDate, payload.PoEndDate)
@@ -856,10 +747,8 @@ public sealed class RemsPublicFormController : ControllerBase
                 Clean(r.SourceKey), Clean(r.FullName), Clean(r.EmailAddress), Clean(r.PhoneNumber)))
             .ToList();
 
-        // Every address is shown as it will be recorded, which for the mailing one means the physical
-        // address wherever the client ticked "same as physical" — the flag decides which node is the
-        // answer, and review reports the answer rather than the box it came out of. Billing is however
-        // many places the client named, each with its own addressee.
+        // Every address is shown as it will be recorded, which for the mailing one means the physical address
+        // wherever the client ticked "same as physical" — the flag decides which node is the answer.
         var address = new RemsReviewAddressGroup(
             NonEmpty(payload.PhysicalAddress), NonEmpty(payload.EffectiveMailingAddress),
             payload.EffectiveBillingAddresses);
@@ -870,7 +759,7 @@ public sealed class RemsPublicFormController : ControllerBase
                 Clean(role.EffectiveFirstName), Clean(role.EffectiveLastName), Clean(role.DisplayName),
                 Clean(role.Email), Clean(role.Phone));
 
-        var additionalContacts = EnumerateRoles(industryGroup, payload.EffectiveRoles)
+        var additionalContacts = EnumerateRoles(entityType, payload.EffectiveRoles)
             .Where(t => t.Role is { HasAny: true })
             .Select(t => Row(t.Role!, t.RoleName, t.IsRequired))
             .ToList();
@@ -889,7 +778,7 @@ public sealed class RemsPublicFormController : ControllerBase
 
         // The other people on an individual's return, with the firm's rules already applied — review
         // shows what will be recorded, not what the boxes happened to hold.
-        var individuals = string.Equals(industryGroup, RemsFormPayloadValidator.Individual, StringComparison.Ordinal)
+        var individuals = string.Equals(entityType, RemsFormPayloadValidator.Individual, StringComparison.Ordinal)
             ? payload.AdditionalIndividuals
                 .Where(x => x is { HasAny: true })
                 .Select(x => new RemsReviewIndividual(
@@ -907,7 +796,10 @@ public sealed class RemsPublicFormController : ControllerBase
 
     // -------------------- Helpers --------------------
 
-    /// <summary>Loads the form by invite code (unscoped) and, once resolved, pins the tenant context to its tenant.</summary>
+    /// <summary>
+    /// Loads the form by invite code (unscoped) and, once resolved, pins the tenant context to its
+    /// tenant.
+    /// </summary>
     private async Task<REMSForm?> LoadFormAsync(string inviteCode, CancellationToken cancellationToken)
     {
         var form = await _forms.GetByInviteCodeUnscopedAsync(inviteCode?.Trim() ?? string.Empty, cancellationToken);
@@ -921,19 +813,10 @@ public sealed class RemsPublicFormController : ControllerBase
         return form;
     }
 
-    /// <summary>
-    /// The locked prefill for the editable form. The client's name arrives both whole and split: staff
-    /// intake asks for it in one box, an individual's form asks for it in two, and doing the split here
-    /// keeps it the same split their Person record and their contacts already get.
-    /// </summary>
+    /// <summary>The locked prefill for the editable form.</summary>
     private static RemsPublicPrefill BuildPrefill(REMS rems)
     {
-        // STRAIGHT OFF THE CLIENT'S OWN RECORD, no splitting. The first and last name are two columns on
-        // the client's Person now, so the guess this used to make — first word given, the rest family —
-        // is not needed and was never right for "Van Der Berg". The particle is prefilled into the form's
-        // own Suffix box beside them, so it is carried across without ever landing in a name column.
-        //
-        // An ORGANISATION has neither: its legal name goes in the name box whole.
+        // STRAIGHT OFF THE CLIENT'S OWN RECORD, no splitting.
         var person = rems.ClientPerson;
         var first = person?.IsOrganisation == true ? string.Empty : person?.FirstName ?? string.Empty;
         var last = person?.IsOrganisation == true ? string.Empty : person?.LastName ?? string.Empty;
@@ -955,7 +838,10 @@ public sealed class RemsPublicFormController : ControllerBase
     private static bool IsEditable(REMSForm form)
         => !IsUnavailable(form) && form.Status == RemsFormStatus.Sent;
 
-    /// <summary>The single active draft for the form (query filters were ignored on load, so exclude soft-deleted).</summary>
+    /// <summary>
+    /// The single active draft for the form (query filters were ignored on load, so exclude
+    /// soft-deleted).
+    /// </summary>
     private static REMSFormDraft? CurrentDraft(REMSForm form)
         => form.Drafts.FirstOrDefault(d => !d.Deleted);
 
@@ -965,33 +851,29 @@ public sealed class RemsPublicFormController : ControllerBase
 
     /// <summary>The relevant (role, canonical role name, required?) tuples for an industry group.</summary>
     private static IEnumerable<(RemsRolePayload? Role, string RoleName, bool IsRequired)> EnumerateRoles(
-        string industryGroup, RemsRolesPayload roles)
+        string entityType, RemsRolesPayload roles)
     {
         // Mirrors RemsFormPayloadValidator's branches — the roles it REQUIRES are staged as required here.
-        // if/else rather than a switch because the business branch matches a family of codes. Takes the
-        // roles already NORMALIZED (see RemsRolesPayload.Normalized) — a form filled in under the old
-        // business role names still stages its contacts, under the names they are known by now.
-        //
-        // Three roles are RETIRED and none of them is required: the form asks for none of them, and a
-        // payload only carries one if it was started before the question was dropped. They are still
-        // staged, because the contact a client gave is a contact whether or not the box is still on the
-        // page.
-        if (industryGroup == RemsFormPayloadValidator.Individual)
+        // if/else rather than a switch because the business branch matches a family of codes.
+        if (entityType == RemsFormPayloadValidator.Individual)
         {
             yield return (roles.Self, nameof(RemsContactRole.Self), true);
             yield return (roles.Spouse, nameof(RemsContactRole.Spouse), false);
             yield return (roles.BillingContact, nameof(RemsContactRole.BillingContact), false);   // retired
         }
-        else if (RemsFormPayloadValidator.IsBusinessGroup(industryGroup))
+        else if (RemsFormPayloadValidator.IsBusinessGroup(entityType))
         {
             yield return (roles.PrimaryContact, nameof(RemsContactRole.PrimaryClientContact), true);
             yield return (roles.FinancialContact, nameof(RemsContactRole.FinancialContact), true);
+            // Trust and Estate only. Yielded for the whole family — a null role stages nothing, and an
+            // answer given before the entity type changed is still an answer (as with the retired roles).
+            yield return (roles.TrustEstateContact, nameof(RemsContactRole.TrustEstateContact), false);
             yield return (roles.OtherContact, nameof(RemsContactRole.OtherContact), false);
             yield return (roles.BillingContact, nameof(RemsContactRole.BillingContact), false);   // retired
             yield return (roles.Banker, nameof(RemsContactRole.Banker), false);                   // retired
             yield return (roles.Lawyer, nameof(RemsContactRole.Lawyer), false);                   // retired
         }
-        else if (industryGroup == RemsFormPayloadValidator.Government)
+        else if (entityType == RemsFormPayloadValidator.Government)
         {
             yield return (roles.FinanceDirector, nameof(RemsContactRole.FinanceDirector), true);
             yield return (roles.OtherContact, nameof(RemsContactRole.OtherContact), false);
@@ -1000,10 +882,8 @@ public sealed class RemsPublicFormController : ControllerBase
     }
 
     /// <summary>
-    /// A per-request-unique source key for a declared individual, on the same terms as
-    /// <see cref="UniqueEntityKey"/> — the unique index on (tenant, request, key) is what it protects, and
-    /// a duplicate key would fail the insert at the end of a submit that had already built everything else.
-    /// "main" is not reserved here: that name means something on an ENTITY and nothing on a person.
+    /// A per-request-unique source key for a declared individual, on the same terms as <see
+    /// cref="UniqueEntityKey"/> — the unique index on (tenant, request.
     /// </summary>
     private static string UniqueIndividualKey(string? supplied, HashSet<string> used, ref int fallbackIndex)
     {
@@ -1022,7 +902,10 @@ public sealed class RemsPublicFormController : ControllerBase
         return candidate;
     }
 
-    /// <summary>A per-client-unique, non-"main" source key for a related entity; never trusts the client value blindly.</summary>
+    /// <summary>
+    /// A per-client-unique, non-"main" source key for a related entity; never trusts the client value
+    /// blindly.
+    /// </summary>
     private static string UniqueEntityKey(string? supplied, HashSet<string> used, ref int fallbackIndex)
     {
         var candidate = supplied?.Trim();

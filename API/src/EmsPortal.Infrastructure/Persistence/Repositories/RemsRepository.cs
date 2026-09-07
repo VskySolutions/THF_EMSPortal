@@ -224,7 +224,7 @@ internal sealed class RemsRepository : IRemsRepository
             .Where(f => remsIds.Contains(f.REMSId))
             .Select(f => new RemsFormStateInfo(
                 f.REMSId,
-                f.IndustryGroup!.Value,
+                f.EntityType!.Value,
                 f.Status,
                 f.SentOnUtc,
                 f.SubmittedOnUtc,
@@ -330,7 +330,7 @@ internal sealed class RemsRepository : IRemsRepository
         if (!string.IsNullOrWhiteSpace(query.EntityType))
         {
             var entityType = query.EntityType.Trim();
-            rows = rows.Where(x => x.Form.IndustryGroup!.Value == entityType);
+            rows = rows.Where(x => x.Form.EntityType!.Value == entityType);
         }
 
         if (!string.IsNullOrWhiteSpace(query.RelatedStatus))
@@ -359,7 +359,7 @@ internal sealed class RemsRepository : IRemsRepository
         var sorts = SortMap.For(rows, "updatedOnUtc")
             .Add("remsNumber", x => x.Rems.REMSNumber)
             .Add("clientName", x => x.Rems.ClientPerson!.ClientDisplayName, x => x.Rems.REMSNumber)
-            .Add("entityType", x => x.Form.IndustryGroup!.Value, x => x.Rems.REMSNumber)
+            .Add("entityType", x => x.Form.EntityType!.Value, x => x.Rems.REMSNumber)
             .Add("submittedOnUtc", x => x.Form.SubmittedOnUtc, x => x.Rems.REMSNumber)
             .Add(
                 "relatedCount",
@@ -381,7 +381,7 @@ internal sealed class RemsRepository : IRemsRepository
                 x.Rems.ClientPerson!.ClientDisplayName,
                 x.Rems.ClientPerson!.Suffix,
                 x.Rems.ClientPerson!.PrimaryEmail,
-                x.Form.IndustryGroup!.Value,
+                x.Form.EntityType!.Value,
                 x.Rems.Status!.Value,
                 x.Rems.AdminAssignedToId,
                 x.Form.SubmittedOnUtc,

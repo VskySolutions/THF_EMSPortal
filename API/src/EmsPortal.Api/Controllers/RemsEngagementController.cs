@@ -15,17 +15,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// REMS engagement workspace backend (WO-114 Part A + B): the submitted-form view, the editable
-/// client/entity/engagement workspace, the audit/government/tax conditional details, and the
-/// marketing/commission steps that gate approval. Tenant isolation is ambient, so a request/engagement
-/// outside the caller's tenant is simply a 404. The approval workflow itself lives in
-/// <see cref="RemsApprovalController"/>.
-/// <para>
-/// NOT one permission for the whole controller any more. The client's own record and its entities stay
-/// Admin-only (<see cref="Permissions.RemsEngagementsManage"/>) — they are the intake the Admin reviews —
-/// but the ENGAGEMENT is filled by the initiator before the client is ever contacted, so its endpoints
-/// take <c>rems.requests.update</c> as well, and every one of them is additionally record-scoped by
-/// <see cref="RemsSetupAccess"/>: the setup belongs to whoever the request is with at this stage.
-/// </para>
+/// client/entity/engagement workspace, the audit/government/tax conditional details.
 /// </summary>
 [ApiController]
 [Route("api/rems")]
@@ -97,13 +87,7 @@ public sealed class RemsEngagementController : ControllerBase
 
     /// <summary>
     /// EMS Review (AC-REMS-013.1): every submitted request that has an EMS form, indicating
-    /// submitted/not-submitted, client name, submission date and the assigned Admin/CSE.
-    /// <para>
-    /// This is the admins' shared queue, not one admin's own list — a request nobody has picked up yet
-    /// comes back with a null <c>assignedAdmin</c>, which is what the list renders as "Waiting for
-    /// pickup". <paramref name="assignment"/> is the quick filter over that: <c>mine</c> narrows to the
-    /// requests this caller holds, anything else (the default) is the whole queue.
-    /// </para>
+    /// submitted/not-submitted, client name.
     /// </summary>
     [HttpGet("client-forms")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
@@ -160,15 +144,9 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload as
-    /// plain fields — distinct from the editable workspace data.
+    /// The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload
+    /// as plain fields — distinct from the editable workspace data.
     /// </summary>
-    /// <remarks>
-    /// Open to the initiator as well as the Admin: it is their client who filled this in, and after a
-    /// send-back it is the answers they have to work the setup against. Only an Admin may CORRECT them —
-    /// see <see cref="UpdateSubmission"/>, whose right is reported here as <c>canEdit</c> so the screen
-    /// offers the action exactly where the save would be accepted.
-    /// </remarks>
     [HttpGet("requests/{remsId:guid}/submission")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsRead)]
     [ProducesResponseType<ApiResponse<RemsSubmissionView>>(StatusCodes.Status200OK)]
@@ -197,31 +175,7 @@ public sealed class RemsEngagementController : ControllerBase
             "REMS submitted form retrieved."));
     }
 
-    /// <summary>
-    /// Correct the client's submitted answers, in place (Admin only). The client filled this in once, from
-    /// an emailed link that is spent the moment they send it — so when a digit of the EIN is wrong, or a
-    /// contact's email has a typo in it, the alternative to an Admin fixing it is issuing a whole second
-    /// intake form for one character.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The correction OVERWRITES the stored payload rather than filing a second submission: one submission
-    /// per form is a unique index, and the point here is that the record should say what is true about the
-    /// client, not that it should say two things. The audit columns carry who changed it and when, and the
-    /// view reports both — so a reader can always tell a corrected snapshot from an untouched one.
-    /// </para>
-    /// <para>
-    /// It is validated exactly as the client's own submit is, against the entity type the form was built
-    /// for: a corrected form must still be a complete one. Two fields are not the Admin's to change and are
-    /// forced back: the echoed email (the request's customer email is authoritative, as it is on submit)
-    /// and the payload version.
-    /// </para>
-    /// <para>
-    /// What it deliberately does NOT do is re-materialise the client record, its entities, addresses or
-    /// contact Persons. Those were written by the submit transaction and are edited through their own
-    /// endpoints; rewriting them from here would silently reach into shared Person rows.
-    /// </para>
-    /// </remarks>
+    /// <summary>Correct the client's submitted answers, in place (Admin only).</summary>
     [HttpPut("requests/{remsId:guid}/submission")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<RemsSubmissionView>>(StatusCodes.Status200OK)]
@@ -267,15 +221,13 @@ public sealed class RemsEngagementController : ControllerBase
         payload.Email = rems.CustomerEmail;
         payload.Version = 1;
 
-        var validation = new RemsFormPayloadValidator().Validate(payload, form.IndustryGroup!.Value);
+        var validation = new RemsFormPayloadValidator().Validate(payload, form.EntityType!.Value);
         if (!validation.IsValid)
         {
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        // Mutated, not Update()d. The submission was loaded TRACKED (with its form), so change tracking
-        // picks the new payload up on its own — where an explicit Update would walk the graph and mark the
-        // owning REMSForm modified too, stamping its audit columns for a change that is not its.
+        // Mutated, not Update()d.
         submission.SubmittedPayload = RemsFormPayloadJson.Serialize(payload);
         await _activity.WriteAsync(
             new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsFormCorrected),
@@ -288,9 +240,8 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// The submitted-form view, with the correction trail resolved and this caller's own right to correct
-    /// it. <c>UpdatedById</c> is null on a snapshot the client sent and nobody has touched — the submit
-    /// runs anonymously, so there is no actor to stamp — which is what makes it the signal here.
+    /// The submitted-form view, with the correction trail resolved and this caller's own right to
+    /// correct it.
     /// </summary>
     private async Task<RemsSubmissionView> BuildSubmissionViewAsync(
         REMS rems, REMSForm form, REMSFormSubmission submission, CancellationToken cancellationToken)
@@ -305,7 +256,7 @@ public sealed class RemsEngagementController : ControllerBase
         }
 
         return new RemsSubmissionView(
-            submission.Id, rems.Id, rems.REMSNumber, form.IndustryGroup!.Value, rems.CustomerEmail,
+            submission.Id, rems.Id, rems.REMSNumber, form.EntityType!.Value, rems.CustomerEmail,
             rems.ClientNameSuffix,
             submission.SubmittedOnUtc, payload,
             editedBy,
@@ -319,14 +270,7 @@ public sealed class RemsEngagementController : ControllerBase
 
     /// <summary>
     /// The engagement workspace (AC-REMS-014): the request's engagement with its audit/government/tax
-    /// detail, and — once the client has answered — the client record and its entities with their
-    /// addresses and contacts.
-    /// <para>
-    /// The client half is null until the intake form comes back, and that is a normal state rather than a
-    /// 404: the engagement exists from the moment the request does, because the initiator fills its setup
-    /// BEFORE the client is contacted. Refusing the whole workspace for want of a client is what used to
-    /// make the setup unreachable until after submission.
-    /// </para>
+    /// detail.
     /// </summary>
     [HttpGet("requests/{remsId:guid}/engagement")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsRead)]
@@ -387,13 +331,13 @@ public sealed class RemsEngagementController : ControllerBase
 
         var workspace = RemsWorkspaceMapper.Workspace(
             rems, client, engagement, audit, government, tax, names,
-            formState?.IndustryGroup, additionalEntities, departmentDirectors);
+            formState?.EntityType, additionalEntities, departmentDirectors);
         return Ok(ApiResponseFactory.Success(workspace, "REMS engagement workspace retrieved."));
     }
 
     // -------------------- Part A: client + entity editing --------------------
 
-    /// <summary>Update the client record (AC-REMS-014). The client email is locked and never changes.</summary>
+    /// <summary>Update the client record (AC-REMS-014).</summary>
     [HttpPut("requests/{remsId:guid}/client")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<RemsClientView>>(StatusCodes.Status200OK)]
@@ -436,7 +380,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view, "REMS client updated."));
     }
 
-    /// <summary>Replace an entity's physical/mailing addresses (AC-REMS-014). Each null =&gt; remove that type.</summary>
+    /// <summary>Replace an entity's physical/mailing addresses (AC-REMS-014).</summary>
     [HttpPut("entities/{entityId:guid}/addresses")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsEntityAddressView>>>(StatusCodes.Status200OK)]
@@ -467,7 +411,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(rows, "REMS entity addresses updated."));
     }
 
-    /// <summary>Replace an entity's contacts (AC-REMS-014). Each contact is upserted by its role; absent roles are removed.</summary>
+    /// <summary>Replace an entity's contacts (AC-REMS-014).</summary>
     [HttpPut("entities/{entityId:guid}/contacts")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsEntityContactView>>>(StatusCodes.Status200OK)]
@@ -537,11 +481,7 @@ public sealed class RemsEngagementController : ControllerBase
 
     // -------------------- Part A: engagement editing --------------------
 
-    /// <summary>
-    /// Update an engagement's team, service placement and fee/realization (AC-REMS-014). Setting the
-    /// department prefills the mapped director unless one is supplied. Returns the engagement plus the
-    /// director the chosen department maps to (prefill hint).
-    /// </summary>
+    /// <summary>Update an engagement's team, service placement and fee/realization (AC-REMS-014).</summary>
     [HttpPut("engagements/{id:guid}")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementUpdateResult>>(StatusCodes.Status200OK)]
@@ -571,11 +511,7 @@ public sealed class RemsEngagementController : ControllerBase
             }
         }
 
-        // Each of the three is an option-set item, referenced by id. The wire carries the CODE, so it is
-        // resolved here — and a code the tenant's list does not have resolves to null rather than being
-        // stored, because there is nothing for the foreign key to point at.
-        //
-        // Compare like with like: the comparison is between the code that WAS stored and the one coming in.
+        // Each of the three is an option-set item, referenced by id.
         var incomingDepartment = Normalize(request.Department);
         var departmentChanged = request.Department is not null
             && !string.Equals(incomingDepartment, engagement.Department?.Value, StringComparison.Ordinal);
@@ -587,15 +523,15 @@ public sealed class RemsEngagementController : ControllerBase
 
         // The two sub-classifications. Nothing branches on either — they narrow the line and the industry
         // group for reporting.
-        if (request.SubServiceLine is not null)
+        if (request.ServiceLine is not null)
         {
-            engagement.SubServiceLineId = await _codes.RemsIdAsync(
-                RemsOptionSetKeys.SubServiceLine, Normalize(request.SubServiceLine), cancellationToken);
+            engagement.ServiceLineId = await _codes.RemsIdAsync(
+                RemsOptionSetKeys.ServiceLine, Normalize(request.ServiceLine), cancellationToken);
         }
-        if (request.SubIndustry is not null)
+        if (request.Industry is not null)
         {
-            engagement.SubIndustryId = await _codes.RemsIdAsync(
-                RemsOptionSetKeys.SubIndustry, Normalize(request.SubIndustry), cancellationToken);
+            engagement.IndustryId = await _codes.RemsIdAsync(
+                RemsOptionSetKeys.Industry, Normalize(request.Industry), cancellationToken);
         }
 
         // The department the director is mapped from is the one being SAVED, which on this request may be
@@ -608,24 +544,18 @@ public sealed class RemsEngagementController : ControllerBase
         }
         else if (departmentChanged || engagement.DepartmentDirectorId is null)
         {
-            // Prefill from the tenant department-director map (may be null = unassigned placeholder). Also
-            // fills an engagement that is still unassigned — the department may have gained a director
-            // (a department head) only after this engagement was set up, and re-picking the same
-            // department would otherwise never pick it up.
+            // Prefill from the tenant department-director map (may be null = unassigned placeholder).
             engagement.DepartmentDirectorId = mappedDirector;
         }
 
         if (request.EngagementExecutiveId.HasValue) engagement.EngagementExecutiveId = request.EngagementExecutiveId;
         if (request.BillingManagerId.HasValue) engagement.BillingManagerId = request.BillingManagerId;
         if (request.FirstYearFeeEstimate.HasValue) engagement.FirstYearFeeEstimate = request.FirstYearFeeEstimate;
-        // Assurance's own fee, kept apart from the first-year estimate above rather than sharing a column
-        // with it: they are different questions, and a department corrected from one to the other should
-        // not read its predecessor's answer back as its own.
+        // Assurance's own fee, kept apart from the first-year estimate above rather than sharing a column with
+        // it: they are different questions.
         if (request.EngagementFee.HasValue) engagement.EngagementFee = request.EngagementFee;
         if (request.RealizationPercentage.HasValue) engagement.RealizationPercentage = request.RealizationPercentage;
-        // The billing schedule: how often, and how it actually works. The frequency is normalized like
-        // the other option-set codes on this record; the description is free prose, so it is only trimmed
-        // — and an empty string is how it is CLEARED, which an omitted field cannot say.
+        // The billing schedule: how often, and how it actually works.
         if (request.BillingPeriod is not null)
         {
             engagement.BillingPeriodId = await _codes.RemsIdAsync(
@@ -646,7 +576,7 @@ public sealed class RemsEngagementController : ControllerBase
 
     /// <summary>
     /// Link a previously-uploaded media id as the audit engagement's signed client-acceptance form
-    /// (AC-REMS-014.12). The audit detail is created on first link.
+    /// (AC-REMS-014.12).
     /// </summary>
     [HttpPost("engagements/{id:guid}/audit/client-acceptance-form")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
@@ -694,17 +624,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Client acceptance form linked."));
     }
 
-    /// <summary>
-    /// Take the signed client-acceptance form off the engagement. The LINK goes; the stored media itself is
-    /// left where it is, exactly as detaching a request attachment does — the document may be filed against
-    /// other records, and this endpoint's business is what this engagement carries.
-    /// <para>
-    /// It exists because the form is a compliance artifact the approvers read: a wrong one uploaded to an
-    /// audit engagement could previously only be replaced, never removed, so an engagement that turned out
-    /// not to need one — or one whose form was superseded before a correct copy existed — had no way back
-    /// to "none on file". Sending for approval still requires one on an Audit or Assurance engagement.
-    /// </para>
-    /// </summary>
+    /// <summary>Take the signed client-acceptance form off the engagement.</summary>
     [HttpDelete("engagements/{id:guid}/audit/client-acceptance-form")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -739,7 +659,10 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Client acceptance form removed."));
     }
 
-    /// <summary>Set the government-audit contract detail: contract number + Florida 1% flag and contract/PO dates (AC-REMS-014.13).</summary>
+    /// <summary>
+    /// Set the government-audit contract detail: contract number + Florida 1% flag and contract/PO
+    /// dates (AC-REMS-014.13).
+    /// </summary>
     [HttpPut("engagements/{id:guid}/government")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -775,9 +698,7 @@ public sealed class RemsEngagementController : ControllerBase
         detail.RenewalTerms = Normalize(request.RenewalTerms);
         detail.PurchaseOrderStartDate = request.PurchaseOrderStartDate;
         detail.PurchaseOrderEndDate = request.PurchaseOrderEndDate;
-        // GCS. Every field on this record is written from the request, blanks included, which is why the
-        // setup form sends the whole row back rather than only the half its card shows — a government
-        // audit's contract block and a GCS purchase order live here together.
+        // GCS. Every field on this record is written from the request, blanks included.
         detail.PurchaseOrderNumber = Normalize(request.PurchaseOrderNumber);
         detail.PurchaseOrderAmount = request.PurchaseOrderAmount;
         detail.PersonnelLevelId = await _codes.RemsIdAsync(
@@ -791,10 +712,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Government audit detail updated."));
     }
 
-    /// <summary>
-    /// Set the ASSURANCE detail: the client's fiscal year end and the administrative fees. Shares the
-    /// audit detail row with the signed client-acceptance form, which is linked by its own endpoint above.
-    /// </summary>
+    /// <summary>Set the ASSURANCE detail: the client's fiscal year end and the administrative fees.</summary>
     [HttpPut("engagements/{id:guid}/audit")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -835,10 +753,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Assurance engagement detail updated."));
     }
 
-    /// <summary>
-    /// Link a previously-uploaded media id as the GCS engagement's purchase-order document. The government
-    /// detail is created on first link, exactly as the audit detail is for the client-acceptance form.
-    /// </summary>
+    /// <summary>Link a previously-uploaded media id as the GCS engagement's purchase-order document.</summary>
     [HttpPost("engagements/{id:guid}/government/purchase-order")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -878,16 +793,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Purchase order linked."));
     }
 
-    /// <summary>
-    /// Take the purchase-order document off the GCS engagement. The LINK goes; the stored media itself is
-    /// left where it is, exactly as removing the signed client-acceptance form does.
-    /// <para>
-    /// It exists for the same reason that one does: the order is a document the approvers read, and until
-    /// this endpoint a wrong one could only be REPLACED, never removed — so an engagement whose order was
-    /// withdrawn before a corrected copy existed had no way back to "none on file". Unlike the CAF, no
-    /// approval gate requires one, so removing it never blocks a round.
-    /// </para>
-    /// </summary>
+    /// <summary>Take the purchase-order document off the GCS engagement.</summary>
     [HttpDelete("engagements/{id:guid}/government/purchase-order")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -908,9 +814,8 @@ public sealed class RemsEngagementController : ControllerBase
             return EngagementLocked();
         }
 
-        // Idempotent, exactly as the client-acceptance form's removal is: an engagement carrying no order
-        // is already in the state the caller asked for, and answering 404 to "there is nothing there"
-        // would make a double-click read as an error.
+        // Idempotent, exactly as the client-acceptance form's removal is: an engagement carrying no order is
+        // already in the state the caller asked.
         var detail = await _engagements.GetGovernmentDetailAsync(id, cancellationToken);
         if (detail?.PurchaseOrderMediaId is not null)
         {
@@ -924,8 +829,8 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// Set the tax engagement detail (AC-REMS-014.14): the fiscal year end (which recomputes the due-date
-    /// schedule) and the tax-form checklist. Requires a Tax engagement.
+    /// Set the tax engagement detail (AC-REMS-014.14): the fiscal year end (which recomputes the
+    /// due-date schedule) and the tax-form checklist.
     /// </summary>
     [HttpPut("engagements/{id:guid}/tax")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
@@ -967,10 +872,7 @@ public sealed class RemsEngagementController : ControllerBase
         }
 
         detail.FiscalYearEnd = request.FiscalYearEnd;
-        // The rule fills in what was left blank and steps aside for what was typed. The JSON snapshot is
-        // written from the SAME effective pair, so the approver's packet and the setup form can never show
-        // one schedule each. No fiscal year end means no schedule at all — there is nothing to derive from
-        // and nothing the two pickers could be anchored to.
+        // The rule fills in what was left blank and steps aside for what was typed.
         if (request.FiscalYearEnd is { } fye)
         {
             var schedule = RemsTaxDueDates.Effective(fye, request.OriginalDueDate, request.FirstExtensionDueDate);
@@ -1012,8 +914,8 @@ public sealed class RemsEngagementController : ControllerBase
     // -------------------- Part B: marketing, commission --------------------
 
     /// <summary>
-    /// Set the engagement marketing tags (AC-REMS-017): a list of REMS marketing option ids, at least one
-    /// required to save. Saving makes the approval step reachable.
+    /// Set the engagement marketing tags (AC-REMS-017): a list of REMS marketing option ids, at least
+    /// one required to save.
     /// </summary>
     [HttpPut("engagements/{id:guid}/marketing")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
@@ -1067,9 +969,8 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// Set the engagement commission splits (AC-REMS-016): up to ten recipients, each &gt; 0 and &lt;= 100,
-    /// allocating no more than 100% in total. Recipients become required approvers. Removal is allowed only
-    /// before approval is sent (enforced by the editable guard).
+    /// Set the engagement commission splits (AC-REMS-016): up to ten recipients, each &gt; 0 and &lt;=
+    /// 100, allocating no more than 100% in total.
     /// </summary>
     [HttpPut("engagements/{id:guid}/commission")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
@@ -1136,15 +1037,14 @@ public sealed class RemsEngagementController : ControllerBase
 
     // -------------------- Helpers --------------------
 
-    /// <summary>An engagement is editable only while it is Draft or has been Rejected (a fresh rework); locked once routed for approval or approved.</summary>
+    /// <summary>
+    /// An engagement is editable only while it is Draft or has been Rejected (a fresh rework); locked
+    /// once routed for approval or approved.
+    /// </summary>
     private static bool IsEditable(REMSEngagement engagement)
         => engagement.Status is RemsEngagementStatus.Draft or RemsEngagementStatus.Rejected;
 
-    /// <summary>
-    /// The refusal for reading a request's setup, or null to carry on. Everyone named on the request may
-    /// read it in every stage — the initiator does not stop being able to see their own request once the
-    /// Admin picks the review up.
-    /// </summary>
+    /// <summary>The refusal for reading a request's setup, or null to carry on.</summary>
     private IActionResult? GuardCanRead(REMS rems)
     {
         if (User.GetUserId() is not { } me)
@@ -1158,18 +1058,7 @@ public sealed class RemsEngagementController : ControllerBase
                 ApiResponseFactory.Forbidden("Not permitted to view this request's engagement."));
     }
 
-    /// <summary>
-    /// The refusal for WRITING a request's setup, or null to carry on. The setup belongs to whoever the
-    /// request is with at this stage (see <see cref="RemsSetupAccess"/>): the initiator fills it before the
-    /// client is ever contacted, the named Admin takes it over once the client has answered, and a
-    /// send-back hands it straight back.
-    /// <para>
-    /// A permission cannot express that, which is why this is here on top of one: every REMS Admin holds
-    /// <c>rems.engagements.manage</c>, so without the record rule any of them could work a request another
-    /// was reviewing. Enforced on the server rather than by hiding fields — the form is a URL, reachable
-    /// from either list or a pasted link.
-    /// </para>
-    /// </summary>
+    /// <summary>The refusal for WRITING a request's setup, or null to carry on.</summary>
     private async Task<IActionResult?> GuardSetupOwnerAsync(Guid remsId, CancellationToken cancellationToken)
     {
         if (User.GetUserId() is not { } me)
@@ -1305,7 +1194,10 @@ public sealed class RemsEngagementController : ControllerBase
         }
     }
 
-    /// <summary>Clones a source <see cref="Address"/> onto a target entity's address slot (upsert by type) — used by copy-from.</summary>
+    /// <summary>
+    /// Clones a source <see cref="Address"/> onto a target entity's address slot (upsert by type) —
+    /// used by copy-from.
+    /// </summary>
     private async Task UpsertEntityAddressFromAsync(REMSEntity entity, RemsAddressType type, Address source, CancellationToken cancellationToken)
     {
         var existing = entity.Addresses.FirstOrDefault(a => !a.Deleted && a.AddressType == type);
@@ -1346,7 +1238,10 @@ public sealed class RemsEngagementController : ControllerBase
         return address;
     }
 
-    /// <summary>Copies the standard address block onto a shared <see cref="Address"/> (create and update alike).</summary>
+    /// <summary>
+    /// Copies the standard address block onto a shared <see cref="Address"/> (create and update
+    /// alike).
+    /// </summary>
     private static void ApplyAddress(Address address, RemsAddressInput input)
     {
         address.AddressLine1 = Normalize(input.Street);

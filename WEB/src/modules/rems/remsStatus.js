@@ -1,10 +1,4 @@
 // The REMS request lifecycle codes, mirroring RemsRequestStatuses on the server.
-//
-// The codes are what the option set stores, so one of them reads oddly and is kept deliberately:
-// `customer_submitted` is the ADMIN REVIEW stage — the client has submitted; the admin now reviews.
-//
-// The lifecycle names the stage a request is IN — who it is waiting on — rather than the event that last
-// happened to it.
 export const REMS_STATUS = Object.freeze({
   /** With its initiator, not yet sent to the client. */
   DRAFT: "draft",

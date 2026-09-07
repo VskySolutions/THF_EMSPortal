@@ -1,7 +1,6 @@
 <template>
   <!-- Nothing at all when a caller excluding its own approval has no OTHER rejection left to show: a
-       History card sitting under a list that already carries the rejections is a heading over nothing.
-       The unfiltered use keeps its card and says why it is empty. -->
+       History card sitting under a list that already carries the rejections is a heading over nothing. -->
   <q-card v-if="!collapsed" flat bordered class="ah">
     <q-card-section class="ah__head row items-center q-py-sm">
       <q-icon name="o_history" size="18px" color="primary" class="q-mr-sm" />
@@ -23,8 +22,8 @@
             {{ d.approver }}
             <span class="text-grey-6">— {{ approverRoleLabel(d.role) }}</span>
           </q-item-label>
-          <!-- A rejection has required a reason since AC-REMS-020.1, but an older one may carry none, and
-               a row that names an objector and then says nothing is worse than one that admits the gap. -->
+          <!-- A rejection has required a reason since AC-REMS-020.1, but an older one may carry none, and a
+               row that names an objector and then says nothing is worse than one that admits the gap. -->
           <q-item-label class="ah__reason">{{ d.reason || "No reason recorded." }}</q-item-label>
         </q-item-section>
         <q-item-section v-if="d.decidedOnUtc" side top>
@@ -37,14 +36,6 @@
 
 <script setup>
 // What the approvers have objected to on an engagement, newest first: who rejected it, and why.
-//
-// The server keeps the record in immutable numbered rounds — a resubmission opens a NEW one rather than
-// reopening the last — but none of that is on screen. Deliberately: the numbering is machinery, and the
-// only part of it a reader ever acts on is the list of objections still to answer. So the rounds are
-// flattened into one list here and everything but the rejections is dropped — the approvals, the tasks
-// nobody got to, the checklist tallies. The round plumbing stays wired underneath (the API is untouched
-// and `excludeRoundId` still works on round ids), so putting the full per-round history back is a
-// rendering change rather than a rebuild.
 import { ref, computed, watch } from "vue";
 import { remsApi } from "services/api";
 import { useDateFormat } from "composables/useDateFormat";
@@ -53,10 +44,7 @@ import { useRemsMeta } from "modules/rems/useRemsMeta";
 const props = defineProps({
   engagementId: { type: String, default: null },
   // An approval the CALLER already renders in full, left out here rather than repeated directly beneath
-  // itself. It is a round's id and not "the newest", because the two are not always the same one: an
-  // approver reaching a historical task out of their inbox is shown THAT one, while a later one may
-  // already be open — and dropping the newest would then hide objections nothing else on the page shows,
-  // while still repeating the ones it does.
+  // itself.
   excludeRoundId: { type: String, default: null },
   label: { type: String, default: "Rejection History" }
 });
@@ -67,9 +55,7 @@ const fmt = useDateFormat();
 const { approverRoleLabel } = useRemsMeta();
 const rounds = ref([]);
 const loading = ref(false);
-// Told apart from an empty history on purpose. This panel also sits on the approver's own task now,
-// and reading the engagement behind it is not a permission every approver holds — a 403 rendered as
-// "no rejections recorded" would be a flat lie to somebody who was sent back over one.
+// Told apart from an empty history on purpose.
 const failed = ref(false);
 
 // Every rejection on the engagement, in the server's order — which leads with the most recent sending,
@@ -82,8 +68,7 @@ const rejections = computed(() => {
 });
 
 // A card with an exclusion and nothing left over has nothing to say — the objections it would have listed
-// are the ones already on screen above it. Only that case disappears: still loading, refused, or simply
-// never rejected all keep the card, because each of those is something the reader needs told.
+// are the ones already on screen above it.
 const collapsed = computed(() =>
   !!props.excludeRoundId && !loading.value && !failed.value && rejections.value.length === 0);
 

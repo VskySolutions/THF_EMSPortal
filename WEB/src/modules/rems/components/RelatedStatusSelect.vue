@@ -1,11 +1,6 @@
 <template>
   <!-- The badge IS the control — the same AppOptionBadge every other REMS status is drawn with, not a
-       button dressed up as one. A related client's status is read far more often than it is set (the
-       column is scanned down for the rows that have not moved), so it has to sit in the reader's eye
-       exactly where every other status badge does, and the chevron is what says this one can also be
-       changed.
-       The q-btn underneath is stripped of its own padding and background so nothing of it shows; it is
-       there for the focus ring, the keyboard and the ripple, which a bare div would have thrown away. -->
+       button dressed up as one. -->
   <q-btn flat dense no-caps padding="0" class="rss" :disable="saving" :aria-label="`Status: ${current.label}`">
     <app-option-badge :option="current" class="rss__badge">
       <q-spinner v-if="saving" size="13px" class="q-ml-xs" />
@@ -43,10 +38,6 @@
 
 <script setup>
 // One related client's hand-set progress, read and written on the same badge.
-//
-// PRESENTATIONAL ONLY. It emits the chosen code and nothing else — the list page owns the save, because
-// the save is what decides whether the row keeps the new value (and it is the page that can say so on a
-// failure). `saving` is the page telling this control that its own row is in flight.
 import { ref, computed } from "vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
 

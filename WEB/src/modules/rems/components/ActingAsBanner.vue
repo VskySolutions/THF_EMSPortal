@@ -26,7 +26,7 @@
             <q-item-section>
               <q-item-label>{{ o.principalName }}</q-item-label>
               <!-- The two rights are genuinely different: preparing commits nothing, sending puts the firm
-                   in front of a client. Say which one this seat carries before they start. -->
+                   in front of a client. -->
               <q-item-label caption>
                 {{ o.canSend ? "Prepare and send to the client" : "Prepare only — they send it" }}
               </q-item-label>
@@ -39,9 +39,7 @@
 </template>
 
 <script setup>
-// The acting-as switch. Work a delegate does in someone else's seat is attributed to both of them, and
-// this is where they say whose seat that is — an explicit choice rather than something inferred, so the
-// attribution is never guesswork.
+// The acting-as switch.
 import { onMounted } from "vue";
 import { useRemsActingAs } from "modules/rems/useRemsActingAs";
 

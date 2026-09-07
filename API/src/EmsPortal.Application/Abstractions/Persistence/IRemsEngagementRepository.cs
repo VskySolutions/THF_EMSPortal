@@ -13,17 +13,12 @@ public interface IRemsEngagementRepository
     Task<REMSEngagement?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// The engagement with its full staff/approval context (WO-114): marketing methods, commission splits,
-    /// and its owning REMS request → the client materialised from the intake → that client's entities and
-    /// their addresses. Backs the approver-list build and the approval send/resubmit pre-checks.
+    /// The engagement with its full staff/approval context (WO-114): marketing methods, commission
+    /// splits.
     /// </summary>
     Task<REMSEngagement?> GetWithContextAsync(Guid id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// A request's engagement, with marketing and commission loaded. There is exactly one, created when the
-    /// initiator first saves the request — so this replaces the old per-entity lookup, the batch load across
-    /// a client's entities, and the status roll-up that summarised them.
-    /// </summary>
+    /// <summary>A request's engagement, with marketing and commission loaded.</summary>
     Task<REMSEngagement?> GetByRemsIdAsync(Guid remsId, CancellationToken cancellationToken = default);
 
     /// <summary>Audit details for a set of engagements (WO-114 workspace).</summary>

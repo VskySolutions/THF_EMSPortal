@@ -15,8 +15,8 @@ internal sealed class RemsFormConfiguration : IEntityTypeConfiguration<REMSForm>
         builder.ToTable("REMSForm");
         builder.HasKey(f => f.Id);
 
-        builder.HasOne(f => f.IndustryGroup).WithMany().HasForeignKey(f => f.IndustryGroupId).OnDelete(DeleteBehavior.Restrict);
-        builder.Navigation(f => f.IndustryGroup).AutoInclude();
+        builder.HasOne(f => f.EntityType).WithMany().HasForeignKey(f => f.EntityTypeId).OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(f => f.EntityType).AutoInclude();
         builder.Property(f => f.InviteCode).IsRequired().HasMaxLength(64);
         builder.Property(f => f.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
 

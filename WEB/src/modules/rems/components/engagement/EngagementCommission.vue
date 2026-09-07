@@ -1,8 +1,7 @@
 <template>
   <div>
     <!-- One line, and only what the screen cannot show for itself: the rule, and the consequence of being
-         on this list. The "up to ten" is on the counter beside the picker; the running total is on the
-         status line at the bottom. -->
+         on this list. -->
     <div class="text-body2 text-grey-8 q-mb-sm">
       The split must total 100% before the request goes to the client. Each recipient approves the
       engagement.
@@ -16,9 +15,7 @@
         info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded."
         @update:model-value="addRecipient"
       />
-      <!-- The cap said as a count, not only as a picker that stops responding. At nine of ten the next
-           recipient is the last one, and the counter turns amber on the tenth so the disabled picker
-           beside it has something explaining itself. -->
+      <!-- The cap said as a count, not only as a picker that stops responding. -->
       <div class="col-auto q-pb-sm">
         <div class="rems-commission__count" :class="{ 'rems-commission__count--full': splits.length >= 10 }">
           <span class="rems-commission__count-n">{{ splits.length }}</span>
@@ -51,10 +48,7 @@
       </q-item>
     </q-list>
 
-    <!-- ONE piece of feedback about the total, not four. This line was a caption, a banner repeating the
-         caption, and a toast repeating the banner — three ways of saying the same number, on a tab whose
-         whole content is that number. What is left says where the split stands and what is missing, and
-         changes colour rather than growing an alert. -->
+    <!-- ONE piece of feedback about the total, not four. -->
     <div class="rems-commission__total q-mt-md" :class="`rems-commission__total--${totalTone}`">
       <q-icon :name="totalIcon" size="16px" class="q-mr-xs" />
       Total allocated: {{ totalPercent }}%<template v-if="totalNote"> — {{ totalNote }}</template>
@@ -63,12 +57,8 @@
 </template>
 
 <script setup>
-// The engagement commission splits (AC-REMS-016): up to ten recipients holding the CSE role, each with
-// an editable percentage (> 0 and ≤ 100), individually removable.
-//
-// Controlled by the page: it holds the splits, announces every change (`change`), and the page's auto-save
-// writes them. Its own "Save & Next" button was teleported into the workspace card's title row — a target
-// that no longer exists, so the button rendered nowhere and the splits could not be saved at all.
+// The engagement commission splits (AC-REMS-016): up to ten recipients holding the CSE role, each with an
+// editable percentage (> 0 and ≤ 100), individually removable.
 import { ref, computed, watch, nextTick } from "vue";
 import { remsApi } from "services/api";
 import AppSelect from "components/common/AppSelect.vue";

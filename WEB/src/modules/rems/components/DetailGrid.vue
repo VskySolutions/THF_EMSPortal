@@ -2,14 +2,10 @@
   <div class="dg">
     <div v-for="row in visibleRows" :key="row.label" class="dg__item" :class="{ 'dg__item--wide': row.wide }">
       <div class="dg__label">{{ row.label }}</div>
-      <!-- Rich text (the partner's message) arrives as markup and has to render as such. Passed through
-           the shared allowlist first — the API sanitizes on write, and this is the second pass that
-           covers anything stored before it did. Everything else is plain and the interpolation below
-           escapes it. -->
+      <!-- Rich text (the partner's message) arrives as markup and has to render as such. -->
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div v-if="row.html" class="dg__value dg__value--rich" v-html="renderRichText(row.value)" />
-      <!-- A row that names somebody. The generational particle is drawn after the name and in bold, the way it
-           reads everywhere else — a joined string could not tell the two apart. -->
+      <!-- A row that names somebody. -->
       <div v-else-if="row.suffix !== undefined" class="dg__value">
         <app-name-with-suffix :name="String(row.value ?? '')" :suffix="row.suffix" />
       </div>
@@ -20,23 +16,18 @@
 
 <script setup>
 // Read-only presentation for the REMS form's View mode: label above value, not a disabled input.
-//
-// A disabled control still looks like a control — it invites a click and reads as "you may not do this"
-// rather than "here is the record". View mode is for reading, so it drops the form furniture entirely.
 import { computed } from "vue";
 import { renderRichText } from "utils/richText";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 
 const props = defineProps({
-  // [{ label, value, wide?, html?, hideWhenEmpty?, suffix? }]
-  // `suffix` marks the row as a NAME: present (even as "") it renders through AppNameWithSuffix, which
-  // puts the particle after the name and in bold.
+  // [{ label, value, wide?, html?, hideWhenEmpty?, suffix? }] `suffix` marks the row as a NAME: present
+  // (even as "") it renders through AppNameWithSuffix, which puts the particle after the name and in bold.
   rows: { type: Array, default: () => [] }
 });
 
 // A field nobody filled in still matters on a record — "no mobile number" is information — so an empty
-// value shows as a dash rather than vanishing. Rows opt out with hideWhenEmpty where their absence says
-// nothing (a conditional block that does not apply to this engagement).
+// value shows as a dash rather than vanishing.
 const visibleRows = computed(() =>
   props.rows.filter((r) => !(r.hideWhenEmpty && !hasValue(r.value))));
 

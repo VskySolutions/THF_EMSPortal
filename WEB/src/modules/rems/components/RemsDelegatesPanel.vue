@@ -86,10 +86,7 @@
 </template>
 
 <script setup>
-// Delegate management, in two voices. On its own profile the panel is self-service — the principal names
-// their own delegates, Concur's model, with granular rights rather than one blanket "act as me". Given a
-// `principalUserId` it is an administrator arranging cover for somebody else, from that person's user
-// page, and every call goes to the admin endpoints instead. Same rows, same rules, different door.
+// Delegate management, in two voices.
 import { ref, reactive, computed, onMounted } from "vue";
 import { remsApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";

@@ -20,7 +20,10 @@ public interface IRemsClientRepository
 
     void Remove(REMSClient client);
 
-    /// <summary>A single entity with its addresses (and shared Address) and contacts (and Person) loaded (WO-114).</summary>
+    /// <summary>
+    /// A single entity with its addresses (and shared Address) and contacts (and Person) loaded
+    /// (WO-114).
+    /// </summary>
     Task<REMSEntity?> GetEntityAsync(Guid entityId, CancellationToken cancellationToken = default);
 
     Task AddEntityAsync(REMSEntity entity, CancellationToken cancellationToken = default);

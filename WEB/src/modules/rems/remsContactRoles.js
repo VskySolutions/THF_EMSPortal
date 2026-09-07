@@ -1,28 +1,22 @@
-// The client-intake contact roles, in ONE place. Three surfaces render them — the public form, its
-// review step, and the submitted-form panel staff read — and they had a private copy each, which is how
-// the panel came to be listing roles the form had stopped asking for.
-//
-// The keys are the payload's own (RemsRolesPayload), so what is written here is what is stored.
+// The client-intake contact roles, in ONE place.
 import { NAME_SUFFIXES } from "utils/personName";
+import { REMS_ENTITY_TYPE_TRUST_ESTATE } from "modules/rems/useRemsMeta";
 
-/// The label each role is asked and read under. Named for what the firm needs from the person rather
-/// than for the office they hold: not every client has a CEO or a CFO, and a two-partner practice asked
-/// for both was left guessing which of them to put where.
+// / The label each role is asked and read under.
 export const CONTACT_ROLE_LABELS = {
   self: "Self",
   spouse: "Spouse",
   primaryContact: "Primary Client Contact",
   financialContact: "Financial Contact",
-  // Retired with the Billing Contact block. Kept so a submission that carries one still says what it
-  // is — whoever an invoice is addressed to travels on the billing ADDRESS now, which is where the form
-  // asks for it.
+  // Retired with the Billing Contact block.
   billingContact: "Billing Contact",
   otherContact: "Other Contact",
   financeDirector: "Finance Director",
 
-  // Retired. Kept so a submission that carries one still says what it is — a client's banker and lawyer
-  // are their advisers rather than the firm's contacts on the engagement, and both boxes were left blank
-  // on almost every form.
+  // Trust and Estate only — the person who ACTS for it. Optional for now.
+  trustEstateContact: "Trust and Estate Contact",
+
+  // Retired.
   banker: "Banker",
   lawyer: "Lawyer"
 };
@@ -33,7 +27,8 @@ export const CONTACT_ROLE_HINTS = {
   primaryContact: "Who we speak to about this engagement — the main person on your side.",
   financialContact: "Who we speak to about your finances and reporting.",
   otherContact: "Anyone else you would like us to have on file.",
-  financeDirector: "The finance director for this entity."
+  financeDirector: "The finance director for this entity.",
+  trustEstateContact: "The trustee or personal representative who acts for the trust or estate."
 };
 
 /// The keys the payload can carry, in the order they are asked. Used to seed and to iterate a payload
@@ -42,56 +37,42 @@ export const ALL_ROLE_KEYS = [
   "self", "spouse",
   "primaryContact", "financialContact", "billingContact", "otherContact",
   "financeDirector",
+  "trustEstateContact",
   "banker", "lawyer"
 ];
 
-/// What each industry group is asked, in display order. The three business groups share one set, so they
-/// all look up under "business" (see groupKey below).
-// The billing contact is no longer among them. Whoever an invoice is addressed to travels ON the billing
-// address — the form asks for a name, an email and a phone beside each place to invoice — so a contact of
-// its own asked the same question in a second place and left nothing saying which address the answer
-// belonged to. `billingContact` stays in ALL_ROLE_KEYS and in the labels above so a submission that
-// answered it still reads, and roleDefsFor's extraKeys is what puts it back on screen for those records.
-// An INDIVIDUAL is asked for none of them. "Self" was the client re-typing the name, email and phone the
-// first card had just asked them for, and "Spouse" asked for a name and an email where what the firm
-// needs to know about a second person on a return is how they file and who pays for it — which is what
-// the Spouse & More Individuals card asks, and which fits a spouse, children and anybody else. Both keys
-// stay in ALL_ROLE_KEYS and in the labels above so a submission that answered them still reads;
-// roleDefsFor's extraKeys is what puts them back on screen for those records.
+// / What each industry group is asked, in display order.
 export const GROUP_ROLES = {
   individual: [],
   business: ["primaryContact", "financialContact", "otherContact"],
+  [REMS_ENTITY_TYPE_TRUST_ESTATE]:
+    ["primaryContact", "financialContact", "trustEstateContact", "otherContact"],
   government: ["financeDirector", "otherContact"]
 };
 
-/// Which of them must be filled in. Mirrors RemsFormPayloadValidator.
+/// Which of them must be filled in. Mirrors RemsFormPayloadValidator. The Trust and Estate contact is
+/// deliberately not among them.
 export const REQUIRED_ROLES = {
   individual: [],
   business: ["primaryContact", "financialContact"],
+  [REMS_ENTITY_TYPE_TRUST_ESTATE]: ["primaryContact", "financialContact"],
   government: ["financeDirector"]
 };
 
-/// The payload keys these roles used to be stored under. Read, never written: a client part-way through
-/// a form filled in under the old names must not lose the contacts they already typed, and a submission
-/// is the immutable record of what they sent. Mirrors RemsRolesPayload.Normalized on the server.
+// / The payload keys these roles used to be stored under.
 export const LEGACY_ROLE_ALIASES = {
   ceo: "primaryContact",
   cfo: "financialContact",
   accountsPayable: "billingContact"
 };
 
-// `prefix` and `suffix` are deliberately NOT counted. A particle on its own is not a contact — somebody
-// who opened the suggestions and picked "Jr." out of curiosity has told us nothing, and treating that as
-// an answer would make an otherwise-blank optional contact start failing validation as "partly filled".
+// `prefix` and `suffix` are deliberately NOT counted.
 const hasAny = (role) =>
   !!role && [role.firstName, role.lastName, role.name, role.email, role.phone]
     .some((v) => v != null && String(v).trim() !== "");
 
-/**
- * A roles node with the legacy keys folded into their successors, so everything downstream reads one
- * shape. A payload carrying both keeps the current one — it was written later, by a form that offered
- * the legacy answer nowhere.
- */
+/** A roles node with the legacy keys folded into their successors, so everything downstream reads one
+    shape. */
 export const normalizeRoles = (roles) => {
   const out = { ...(roles || {}) };
   Object.entries(LEGACY_ROLE_ALIASES).forEach(([legacy, current]) => {
@@ -101,10 +82,8 @@ export const normalizeRoles = (roles) => {
   return out;
 };
 
-/**
- * A contact's name as one string: the two boxes joined, falling back to the single `name` a payload
- * saved before the split carries.
- */
+/** A contact's name as one string: the two boxes joined, falling back to the single `name` a payload saved
+    before the split carries. */
 export const roleDisplayName = (role) => {
   const joined = [role?.firstName, role?.lastName]
     .filter((v) => v != null && String(v).trim() !== "")
@@ -115,28 +94,9 @@ export const roleDisplayName = (role) => {
 
 export const roleHasAny = hasAny;
 
-/**
- * The contact as they are addressed — the joined name with its particles on it. For DISPLAY only: the
- * name on its own (roleDisplayName) is what the record is filed and searched under, and the stored
- * Person.DisplayName is composed server-side (RemsRolePayload.NameWithSuffix) and is NOT this — a record
- * filed under "Jr. Jane Smith" is one nobody finds by surname.
- *
- * The two particles sit at opposite ends, each where its own kind belongs: a courtesy title LEADS a name
- * ("Mr. Jane Smith") and a generational suffix TRAILS it ("Jane Smith Jr."). That is also the order the
- * form asks them in — RoleContactFields puts the suffix box after Last Name — so a client checking their
- * answers here reads them in the order they typed them, which is the whole premise of the review step.
- *
- * Both are read because the two are not the same era. The intake form asks each contact for a
- * generational SUFFIX (Jr., Sr., III); it used to ask for a courtesy title instead, and a submission
- * saved under that form still carries one. No record carries both, so their order relative to each other
- * never arises in practice.
- */
-/**
- * The same two halves, unjoined, for a surface that RENDERS the name rather than needing a string —
- * AppNameWithSuffix draws the particle in bold after the name, and cannot find it inside a joined one.
- * The retired courtesy prefix rides with the name: it leads a name rather than trailing it, so it is not
- * the particle this is about, and no record carries both.
- */
+/** The contact as they are addressed — the joined name with its particles on it. */
+/** The same two halves, unjoined, for a surface that RENDERS the name rather than needing a string —
+    AppNameWithSuffix draws the particle in bold after the name, and cannot find it inside a joined one. */
 export const roleNameParts = (role) => ({
   name: [String(role?.prefix ?? "").trim(), roleDisplayName(role)].filter(Boolean).join(" "),
   suffix: roleDisplayName(role) ? String(role?.suffix ?? "").trim() : ""
@@ -150,14 +110,13 @@ export const roleAddressedName = (role) => {
   return name ? [prefix, name, suffix].filter(Boolean).join(" ") : "";
 };
 
-/** Which role set an industry group is asked. The three business groups share one. */
-export const groupKey = (industryGroup, isBusiness) => (isBusiness ? "business" : industryGroup);
+/** Which role set an industry group is asked. The business groups share one, except a trust or estate. */
+export const groupKey = (entityType, isBusiness) => {
+  if (entityType === REMS_ENTITY_TYPE_TRUST_ESTATE) return REMS_ENTITY_TYPE_TRUST_ESTATE;
+  return isBusiness ? "business" : entityType;
+};
 
-/**
- * The roles to render for a group, as [{ key, label, hint, required }]. `extraKeys` adds any role the
- * payload carries that the group no longer asks for — a retired Banker on an older submission — so a
- * record shows what is in it rather than what the current form would have collected.
- */
+/** The roles to render for a group, as [{ key, label, hint. */
 export const roleDefsFor = (key, extraKeys = []) => {
   const order = GROUP_ROLES[key] || [];
   const required = REQUIRED_ROLES[key] || [];
@@ -174,22 +133,10 @@ export const roleDefsFor = (key, extraKeys = []) => {
 export const answeredRoleKeys = (roles) =>
   ALL_ROLE_KEYS.filter((k) => hasAny(roles?.[k]));
 
-/**
- * The generational suffixes offered beside a client's name.
- *
- * The list itself lives in utils/personName now, because two unrelated fields ask for one: the client's
- * own name on the request, and every contact on the intake form. Re-exported under the name this module's
- * callers already know it by.
- */
+/** The generational suffixes offered beside a client's name. */
 export const CLIENT_NAME_SUFFIXES = NAME_SUFFIXES;
 
-/**
- * A client's name as it reads — the suffix AFTER the name ("John Smith Jr."). Mirrors
- * REMS.ClientDisplayName.
- *
- * After, because that is where a generational particle belongs and where the form asks for it: the Suffix
- * box sits to the RIGHT of Last Name, and every surface that shows a name echoes the order it was typed
- * in. The contacts on the intake form read the same way (roleAddressedName).
- */
+/** A client's name as it reads — the suffix AFTER the name ("John Smith Jr."). Mirrors
+    REMS.ClientDisplayName. After. */
 export const clientDisplayName = (name, suffix) =>
   [String(name ?? "").trim(), String(suffix ?? "").trim()].filter(Boolean).join(" ");

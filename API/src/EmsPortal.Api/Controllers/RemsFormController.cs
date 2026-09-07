@@ -16,15 +16,7 @@ using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// REMS EMS-form build/send + email-log backend (WO-112). Admin operations on a request's customer-facing
-/// onboarding form: build/save it (assign the CSE, pick the industry group, mint the invite link),
-/// preview and send the form-link email, read the form's email-delivery log, and browse the EMS Inbox of
-/// every request with a form. Endpoints are permission-gated (rems.forms.* / rems.pool.read /
-/// rems.emailLog.read — Admin/Super Admin only); tenant isolation is ambient, so a request/form outside
-/// the caller's tenant is simply a 404. Request-field editing on the build screen is done via WO-111's
-/// <c>PUT /api/rems/requests/{id}</c>, not here.
-/// </summary>
+/// <summary>REMS EMS-form build/send + email-log backend (WO-112).</summary>
 [ApiController]
 [Route("api/rems/requests")]
 [Produces("application/json")]
@@ -43,7 +35,7 @@ public sealed class RemsFormController : ControllerBase
     private const string CodeFormAlreadySent = "REMS_FORM_ALREADY_SENT";
     private const string CodeClientEmailMissing = "REMS_CLIENT_EMAIL_MISSING";
     private const string CodeCommissionNotFullyAllocated = "REMS_COMMISSION_NOT_FULLY_ALLOCATED";
-    private const string CodeIndustryGroupLocked = "REMS_INDUSTRY_GROUP_LOCKED";
+    private const string CodeEntityTypeLocked = "REMS_ENTITY_TYPE_LOCKED";
     private const string CodeFormAlreadySubmitted = "REMS_FORM_ALREADY_SUBMITTED";
 
     private readonly IRemsRepository _rems;
@@ -91,10 +83,6 @@ public sealed class RemsFormController : ControllerBase
     // -------------------- Build screen --------------------
 
     /// <summary>The EMS form build-screen model: the request context plus the current form (AC-REMS-007.1).</summary>
-    /// <remarks>
-    /// Open to the initiator (<c>rems.requests.update</c>) as well as to form managers: the CSE and the
-    /// industry group are fields on their own request form now, not a separate admin build step.
-    /// </remarks>
     [HttpGet("{remsId:guid}/form")]
     [RequireAnyPermission(Permissions.RemsFormsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsFormBuildScreen>>(StatusCodes.Status200OK)]
@@ -117,9 +105,8 @@ public sealed class RemsFormController : ControllerBase
     }
 
     /// <summary>
-    /// Build/save the form (AC-REMS-007): set the CSE on the request, create-or-update the form with the
-    /// industry group, and mint (or, before send, regenerate) the invite link. Both CSE and industry group
-    /// are required (AC-REMS-007.7). Once sent, the industry group and invite code are locked.
+    /// Build/save the form (AC-REMS-007): set the CSE on the request, create-or-update the form with
+    /// the industry group, and mint (or, before send, regenerate) the invite link.
     /// </summary>
     [HttpPost("{remsId:guid}/form")]
     [RequireAnyPermission(Permissions.RemsFormsManage, Permissions.RemsRequestsUpdate)]
@@ -153,18 +140,17 @@ public sealed class RemsFormController : ControllerBase
         var form = await _forms.GetByRemsIdAsync(remsId, cancellationToken);
         var alreadySent = form?.SentOnUtc is not null;
         var industryChanged = form is null
-            || !string.Equals(form.IndustryGroup?.Value, request.IndustryGroup, StringComparison.Ordinal);
+            || !string.Equals(form.EntityType?.Value, request.EntityType, StringComparison.Ordinal);
 
         // The entity type is a foreign key to its option item, so the CODE the caller sent is resolved once
-        // here and used for both the create and the change below. Required, and locked once the form is
-        // sent -- so an unknown code is a bad request rather than a null reference.
-        var industryGroupId = await _codes.RequireRemsIdAsync(
-            RemsOptionSetKeys.IndustryGroup, request.IndustryGroup, cancellationToken);
+        // here and used for both the create and the change below.
+        var entityTypeId = await _codes.RequireRemsIdAsync(
+            RemsOptionSetKeys.EntityType, request.EntityType, cancellationToken);
 
         // Once sent, the industry group / invite code are locked (AC-REMS-007.5).
         if (alreadySent && industryChanged)
         {
-            return FormConflict(CodeIndustryGroupLocked,
+            return FormConflict(CodeEntityTypeLocked,
                 "The entity type and invite link are locked once the form has been sent.");
         }
 
@@ -182,7 +168,7 @@ public sealed class RemsFormController : ControllerBase
             {
                 Id = Guid.NewGuid(),
                 REMSId = remsId,
-                IndustryGroupId = industryGroupId,
+                EntityTypeId = entityTypeId,
                 InviteCode = await GenerateUniqueInviteCodeAsync(tenantId, cancellationToken),
                 Status = RemsFormStatus.Saved,
                 CreatedByUserId = me,
@@ -194,7 +180,7 @@ public sealed class RemsFormController : ControllerBase
             // Changing the industry group before send regenerates the invite code/link (AC-REMS-007.5).
             if (industryChanged)
             {
-                form.IndustryGroupId = industryGroupId;
+                form.EntityTypeId = entityTypeId;
                 form.InviteCode = await GenerateUniqueInviteCodeAsync(tenantId, cancellationToken);
             }
             if (form.Status == RemsFormStatus.Draft)
@@ -241,10 +227,7 @@ public sealed class RemsFormController : ControllerBase
             return FormConflict(CodeFormNotBuilt, "The form has not been built yet.");
         }
 
-        // Render the effective template with the values this send would use, so the dialog shows the real
-        // email rather than a description of one — and so what the admin edits starts from what would
-        // otherwise go out. Rendered here, not in the browser: the template is per-tenant and its
-        // placeholders are the server's to substitute.
+        // Render the effective template with the values this send would use.
         var formLink = BuildFormLink(form.InviteCode);
         var rendered = User.GetActiveTenantId() is { } previewTenantId
             ? await _templates.RenderEffectiveAsync(
@@ -259,12 +242,7 @@ public sealed class RemsFormController : ControllerBase
         return Ok(ApiResponseFactory.Success(preview, "REMS form preview retrieved."));
     }
 
-    /// <summary>
-    /// Send the form-link email to the client (AC-REMS-008). Allowed only when the form is saved with a CSE
-    /// and industry group and the client has an email; otherwise 409 and nothing is sent (AC-REMS-007.10 /
-    /// 008.2). Sets the form to Sent, locks the invite code, records a <see cref="REMSFormEmailEvent"/>
-    /// (Sent), and notifies the Admin actor + CSE (AC-REMS-008.5).
-    /// </summary>
+    /// <summary>Send the form-link email to the client (AC-REMS-008).</summary>
     [HttpPost("{remsId:guid}/form/send")]
     [RequirePermission(Permissions.RemsFormsSend)]
     [ProducesResponseType<ApiResponse<RemsFormBuildScreen>>(StatusCodes.Status200OK)]
@@ -297,7 +275,7 @@ public sealed class RemsFormController : ControllerBase
             return FormConflict(CodeFormAlreadySent, "The form has already been sent.");
         }
         // Must be saved with a CSE + industry group (AC-REMS-007.10).
-        if (rems.CSEId is null || form.IndustryGroupId == Guid.Empty || form.Status != RemsFormStatus.Saved)
+        if (rems.CSEId is null || form.EntityTypeId == Guid.Empty || form.Status != RemsFormStatus.Saved)
         {
             return FormConflict(CodeFormNotSendable,
                 "The form must be saved with a CSE and an entity type before it can be sent.");
@@ -310,21 +288,13 @@ public sealed class RemsFormController : ControllerBase
                 "The client has no email address on file; add one before sending.");
         }
 
-        // The commission has to be settled before the client is written to. The splits divide ONE
-        // commission, so anything other than 100% is a share allocated to nobody — and every recipient
-        // becomes a required approver on the round that follows, so a division that does not add up is one
-        // the approvers would be asked to accept later, on a request already out with the client.
-        //
-        // Rounded to 2dp before comparing, as the Commission tab does: three 33.33/33.34 splits sum to
-        // 100.00000000000001 in binary floating point and would otherwise never be sendable.
+        // The commission has to be settled before the client is written to.
         var engagement = await _engagements.GetByRemsIdAsync(remsId, cancellationToken);
         var splits = engagement?.CommissionSplits.Where(s => !s.Deleted).ToList() ?? [];
         var allocated = Math.Round(splits.Sum(s => s.CommissionPercentage), 2, MidpointRounding.AwayFromZero);
         if (allocated != 100m)
         {
-            // Naming nobody is its own sentence. An empty split is NOT "no commission on this one" — it is
-            // a commission that has not been settled yet, and the message says so rather than pointing the
-            // reader at recipients that do not exist.
+            // Naming nobody is its own sentence.
             return FormConflict(
                 CodeCommissionNotFullyAllocated,
                 splits.Count == 0
@@ -338,8 +308,7 @@ public sealed class RemsFormController : ControllerBase
         var formLink = BuildFormLink(form.InviteCode);
 
         // Mint a stable outbound Message-ID and store it as the ProviderMessageId on the Sent event so a
-        // delivery provider can echo it back on delivery/open/failed callbacks that WO-121 ingests. The same
-        // id is threaded to the email pipeline and pinned on the MimeMessage.
+        // delivery provider can echo it back on delivery/open/failed callbacks that WO-121 ingests.
         var messageId = BuildOutboundMessageId();
 
         form.Status = RemsFormStatus.Sent;
@@ -348,8 +317,7 @@ public sealed class RemsFormController : ControllerBase
         _forms.Update(form);
 
         // Sending the intake link is what takes a request out of draft — there is no pool in between any
-        // more, so this is the initiator's own hand-off to the client. Guarded on Draft so a request that
-        // has already moved further along is never walked backwards by a re-send.
+        // more, so this is the initiator's own hand-off to the client.
         if (rems.Status!.Value == RemsRequestStatuses.Draft)
         {
             rems.StatusId = await _codes.RequireRemsIdAsync(
@@ -367,9 +335,7 @@ public sealed class RemsFormController : ControllerBase
             EventType = RemsFormEmailEventType.Sent,
             RecipientEmail = email,
             OccurredOnUtc = now,
-            // What the client is about to read, kept alongside the fact that we sent it. The dialog seeds
-            // these from the tenant's template and the sender may rewrite either, so the template is not a
-            // record of what went out — this is.
+            // What the client is about to read, kept alongside the fact that we sent it.
             Subject = Normalize(request?.Subject),
             Body = Normalize(request?.Body),
         }, cancellationToken);
@@ -384,10 +350,7 @@ public sealed class RemsFormController : ControllerBase
         }
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Enqueue the email only after the Sent state is durably persisted. Delivery is best-effort on a
-        // Hangfire worker and never throws — a send failure must not roll the request back.
-        // Whatever the admin left in the dialog wins over the template; leaving both untouched sends the
-        // template exactly as the preview showed it.
+        // Enqueue the email only after the Sent state is durably persisted.
         _emailNotifier.SendComposedFormLink(
             tenantId, email, new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber),
             request?.Subject, request?.Body, messageId);
@@ -399,10 +362,7 @@ public sealed class RemsFormController : ControllerBase
 
     // -------------------- Reminder --------------------
 
-    /// <summary>
-    /// The pre-send preview for a REMINDER, rendered from the <c>RemsFormReminder</c> template. Same shape
-    /// as <see cref="Preview"/> so the send dialog can drive both.
-    /// </summary>
+    /// <summary>The pre-send preview for a REMINDER, rendered from the <c>RemsFormReminder</c> template.</summary>
     [HttpGet("{remsId:guid}/form/reminder/preview")]
     [RequirePermission(Permissions.RemsFormsSend)]
     [ProducesResponseType<ApiResponse<RemsFormPreview>>(StatusCodes.Status200OK)]
@@ -426,13 +386,7 @@ public sealed class RemsFormController : ControllerBase
         return Ok(ApiResponseFactory.Success(preview, "REMS form reminder preview retrieved."));
     }
 
-    /// <summary>
-    /// Re-send the form link to a client who has not submitted yet. Repeatable by design — chasing a
-    /// client is a thing you do more than once — so unlike <see cref="Send"/> this changes no state on the
-    /// form: the invite code, the Sent timestamp and the request status all stay exactly as they were.
-    /// What it leaves behind is a <see cref="RemsFormEmailEventType.Reminder"/> row, so the email log
-    /// answers "how many times have we chased them, and when".
-    /// </summary>
+    /// <summary>Re-send the form link to a client who has not submitted yet.</summary>
     [HttpPost("{remsId:guid}/form/reminder")]
     [RequirePermission(Permissions.RemsFormsSend)]
     [ProducesResponseType<ApiResponse<RemsFormBuildScreen>>(StatusCodes.Status200OK)]
@@ -487,9 +441,7 @@ public sealed class RemsFormController : ControllerBase
         return Ok(ApiResponseFactory.Success(screen, "Reminder sent."));
     }
 
-    /// <summary>
-    /// Resolves a request whose client can legitimately be reminded, or the error explaining why not.
-    /// </summary>
+    /// <summary>Resolves a request whose client can legitimately be reminded, or the error explaining why not.</summary>
     private async Task<(REMS? Rems, REMSForm? Form, IActionResult? Failure)> LoadRemindableAsync(
         Guid remsId, CancellationToken cancellationToken)
     {
@@ -513,17 +465,7 @@ public sealed class RemsFormController : ControllerBase
         return (rems, form, null);
     }
 
-    /// <summary>
-    /// Why this request's client cannot be reminded right now, or null when they can. A reminder makes
-    /// sense in exactly one window: the form has been SENT and the client has not submitted. Before that
-    /// there is nothing to remind them about; after it, nothing to chase.
-    /// <para>
-    /// One definition, read by both the endpoint that sends a reminder and the email log that offers the
-    /// button — so the log never shows a Remind the request would refuse, and never hides one it would
-    /// have allowed. Says nothing about WHO is asking; that is the caller's permission and
-    /// <see cref="RemsSetupAccess"/> record rule, checked alongside it.
-    /// </para>
-    /// </summary>
+    /// <summary>Why this request's client cannot be reminded right now, or null when they can.</summary>
     private static (string Code, string Reason)? RemindBlocked(REMS rems, REMSForm? form)
     {
         if (form is null)
@@ -553,15 +495,8 @@ public sealed class RemsFormController : ControllerBase
     // -------------------- Email log --------------------
 
     /// <summary>
-    /// The request's email history, newest first (AC-REMS-008.6), together with whether this caller can
-    /// nudge the client from it. Every send and every provider callback for the intake form lands here,
-    /// so it is the answer to "did they get it, and how many times have we asked".
-    /// <para>
-    /// Gated twice: <c>rems.emailLog.read</c> says the caller may read logs at all, and
-    /// <see cref="RemsSetupAccess.CanRead"/> says they may read THIS one — the request's initiator, its
-    /// CSE, the admin reviewing it, or anyone who manages engagements. Who a client is being chased by
-    /// is not tenant-wide reading material.
-    /// </para>
+    /// The request's email history, newest first (AC-REMS-008.6), together with whether this caller
+    /// can nudge the client from it.
     /// </summary>
     [HttpGet("{remsId:guid}/email-log")]
     [RequirePermission(Permissions.RemsEmailLogRead)]
@@ -611,10 +546,7 @@ public sealed class RemsFormController : ControllerBase
             ? null
             : blocked?.Reason ?? (isOwner ? null : RemsSetupAccess.WorkDeniedReason(rems));
 
-        // The client's link, only while it is genuinely theirs to follow: sent, and not yet answered. The
-        // same window a reminder makes sense in, minus the permission and record checks above — copying a
-        // link to chase somebody with is not the same act as sending mail on the firm's behalf, so anyone
-        // who may READ this log may copy it.
+        // The client's link, only while it is genuinely theirs to follow: sent, and not yet answered.
         var linkable = form is not null
             && !string.IsNullOrWhiteSpace(form.InviteCode)
             && form.SentOnUtc is not null
@@ -629,10 +561,7 @@ public sealed class RemsFormController : ControllerBase
 
     /// <summary>
     /// The EMS Inbox: every request that has a form, paginated and newest-modified first, with request
-    /// context, form state, creator, and latest send/delivery/open info (AC-REMS-009). Narrow it with
-    /// <paramref name="formState"/> (draft/saved/sent/submitted/cancelled), <paramref name="requestStatus"/>,
-    /// and <paramref name="search"/> over the REMS number and client name. Filtering is server-side so the
-    /// pager reports the filtered total rather than the page in hand.
+    /// context, form state, creator, and latest send/delivery/open info (AC-REMS-009).
     /// </summary>
     [HttpGet("/api/rems/inbox")]
     [RequireAnyPermission(Permissions.RemsRequestsRead, Permissions.RemsFormsManage)]
@@ -675,12 +604,7 @@ public sealed class RemsFormController : ControllerBase
 
     // -------------------- Helpers --------------------
 
-    /// <summary>
-    /// The refusal for reading or writing this request's form, or null to carry on. The CSE and the
-    /// industry group are part of the engagement setup, so they follow the same record rule as the rest of
-    /// it (<see cref="RemsSetupAccess"/>): whoever the request is with at this stage may set them, and
-    /// holding a REMS permission is not on its own an answer to "which requests".
-    /// </summary>
+    /// <summary>The refusal for reading or writing this request's form, or null to carry on.</summary>
     private async Task<IActionResult?> GuardSetupOwnerAsync(REMS rems, CancellationToken cancellationToken)
     {
         if (User.GetUserId() is not { } me)
@@ -695,25 +619,7 @@ public sealed class RemsFormController : ControllerBase
                 ApiResponseFactory.Forbidden(RemsSetupAccess.WorkDeniedReason(rems)));
     }
 
-    /// <summary>
-    /// The build screen for a request and its form.
-    /// <para>
-    /// The two option codes are resolved from the FOREIGN KEYS, not read off the <c>Status</c> /
-    /// <c>IndustryGroup</c> navigations, and that is load-bearing rather than a matter of taste. This helper
-    /// is called after the write in every action that has one, and <see cref="Send"/> moves the request from
-    /// Draft to Awaiting Customer on its way here. Changing <c>rems.StatusId</c> makes EF's fixup null
-    /// <c>rems.Status</c> — the navigation no longer matches the key, and the new option item is never
-    /// tracked because <see cref="IOptionCodeResolver"/> answers from a cache and returns bare guids — so
-    /// the caller arrived here holding a request whose status navigation had been detached under it.
-    /// <c>rems.Status!.Value</c> then threw a NullReferenceException on a send that had already gone out:
-    /// the row was written, the email was queued, and the client got their link, but the caller saw a 500.
-    /// The <c>!</c> was no protection at all, being a note to the compiler rather than a check.
-    /// </para>
-    /// <para>
-    /// Reading the ids costs nothing extra — the resolver is a cached id → code lookup — and it is the same
-    /// answer, from the value the row actually holds rather than from whatever EF happens to have loaded.
-    /// </para>
-    /// </summary>
+    /// <summary>The build screen for a request and its form.</summary>
     private async Task<RemsFormBuildScreen> BuildScreenAsync(REMS rems, REMSForm? form, CancellationToken cancellationToken)
     {
         var names = await _users.GetFullNamesAsync(
@@ -725,14 +631,14 @@ public sealed class RemsFormController : ControllerBase
 
         // One lookup for both codes rather than one each.
         var codes = await _codes.CodesOfAsync(
-            new Guid?[] { rems.StatusId, form?.IndustryGroupId }, cancellationToken);
+            new Guid?[] { rems.StatusId, form?.EntityTypeId }, cancellationToken);
         string CodeOf(Guid? id) => id is { } key && codes.TryGetValue(key, out var code) ? code : string.Empty;
 
         var formInfo = form is null
             ? null
             : new RemsFormInfo(
                 form.Id,
-                CodeOf(form.IndustryGroupId),
+                CodeOf(form.EntityTypeId),
                 form.InviteCode,
                 BuildFormLink(form.InviteCode),
                 form.Status.ToString(),
@@ -746,19 +652,16 @@ public sealed class RemsFormController : ControllerBase
             rems.CustomerEmail, rems.CustomerMobileNumber, cseRef, formInfo);
     }
 
-    /// <summary>The public EMS-form URL (the route WO-113/116 serve), built from <c>App:BaseUrl</c> as the email pipeline does.</summary>
+    /// <summary>
+    /// The public EMS-form URL (the route WO-113/116 serve), built from <c>App:BaseUrl</c> as the
+    /// email pipeline does.
+    /// </summary>
     private string BuildFormLink(string inviteCode)
         => $"{_baseUrl.TrimEnd('/')}/rems/form/{inviteCode}";
 
     /// <summary>
-    /// A stable, RFC-5322-style Message-ID (<c>{guid:N}@{host}</c>, no angle brackets) minted at send time
-    /// (WO-121). Stored as the Sent event's <c>ProviderMessageId</c> and pinned on the outbound email so a
-    /// provider's delivery/open/failed callbacks correlate back to this request. Host derives from
-    /// <c>App:BaseUrl</c>, falling back to a placeholder when it is not an absolute URL.
-    /// </summary>
-    /// <summary>
-    /// The placeholder values the <c>RemsFormLink</c> template renders with. One definition, so the preview
-    /// the admin edits is rendered from exactly what the send would have used.
+    /// A stable, RFC-5322-style Message-ID (<c>{guid:N}@{host}</c>, no angle brackets) minted at send
+    /// time (WO-121).
     /// </summary>
     private static Dictionary<string, string?> FormLinkModel(REMS rems, string formLink) => new(StringComparer.OrdinalIgnoreCase)
     {
@@ -775,11 +678,7 @@ public sealed class RemsFormController : ControllerBase
         return $"{Guid.NewGuid():N}@{host}";
     }
 
-    /// <summary>
-    /// Mints an opaque, URL-safe invite code (22 chars, 128 bits) unique per tenant. Uniqueness is backed
-    /// by the filtered unique index <c>(TenantId, InviteCode) WHERE [Deleted] = 0</c>; this retry loop only
-    /// avoids the (astronomically unlikely) in-flight collision.
-    /// </summary>
+    /// <summary>Mints an opaque, URL-safe invite code (22 chars, 128 bits) unique per tenant.</summary>
     private async Task<string> GenerateUniqueInviteCodeAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < 5; attempt++)
@@ -823,12 +722,7 @@ public sealed class RemsFormController : ControllerBase
     private IActionResult FormConflict(string code, string message)
         => StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(code, message, message));
 
-    /// <summary>
-    /// The human-readable reason for a Failed event, for the Email Log. Only events this portal recorded
-    /// itself carry one — <c>RemsEmailDeliveryFailureSink</c> tags its payload <c>"source":"portal"</c> and
-    /// puts the reason in <c>message</c>. A provider webhook payload is third-party JSON of unknown shape,
-    /// so it is deliberately never echoed to the UI.
-    /// </summary>
+    /// <summary>The human-readable reason for a Failed event, for the Email Log.</summary>
     private static string? DescribeFailure(REMSFormEmailEvent emailEvent)
     {
         if (emailEvent.EventType != RemsFormEmailEventType.Failed

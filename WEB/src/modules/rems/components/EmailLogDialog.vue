@@ -18,9 +18,7 @@
         <div v-if="loading" class="row flex-center q-pa-lg"><q-spinner color="primary" size="32px" /></div>
 
         <!-- What actually happened to each email: what we sent (Sent / Reminder), and what the provider
-             reported back about it (Delivered / Opened / Failed), each with its own timestamp
-             (AC-REMS-008.6). Delivery and open are NEVER synthesised — an unsent or newly-sent form
-             simply shows fewer (or no) events. -->
+             reported back about it (Delivered / Opened / Failed). -->
         <q-list v-else-if="events.length" separator>
           <q-item v-for="ev in events" :key="ev.id">
             <q-item-section avatar>
@@ -37,25 +35,20 @@
               </q-item-label>
               <q-item-label caption>
                 {{ fmt.formatDateTime(ev.occurredOnUtc) }}
-                <!-- Who chased the client, on the rows where somebody did. The provider's own callbacks
-                     have no actor, so they say nothing rather than crediting the last human. -->
+                <!-- Who chased the client, on the rows where somebody did. -->
                 <template v-if="ev.sentBy"> · by {{ ev.sentBy }}</template>
               </q-item-label>
-              <!-- The subject line stood in for by a transport id here before. The id ("…@localhost") is
-                   how the provider's callbacks find this row; it is not something a reader can act on,
-                   and the message itself is what they opened the log to see. -->
+              <!-- The subject line stood in for by a transport id here before. -->
               <q-item-label v-if="ev.subject" caption class="event-subject">
                 {{ ev.subject }}
               </q-item-label>
-              <!-- Why a Failed event failed. Only set for failures the portal recorded itself; provider
-                   webhook payloads are never echoed here. -->
+              <!-- Why a Failed event failed. -->
               <q-item-label v-if="ev.detail" caption class="text-negative event-detail">
                 {{ ev.detail }}
               </q-item-label>
             </q-item-section>
 
-            <!-- Only the rows that ARE a message carry one to read. A delivery or open callback reports
-                 on a message rather than being one, so it has nothing to preview. -->
+            <!-- Only the rows that ARE a message carry one to read. -->
             <q-item-section v-if="ev.body" side>
               <q-btn flat round dense color="primary" icon="o_visibility" @click="openPreview(ev)">
                 <q-tooltip>Preview email</q-tooltip>
@@ -76,16 +69,12 @@
       <q-separator />
       <q-card-actions align="right">
         <!-- Why the client cannot be chased from here, when that is worth saying: they have already
-             answered, the form was never sent, the request is with somebody else. A caller who simply
-             may not send gets neither the button nor an explanation of a permission they do not hold. -->
+             answered, the form was never sent, the request is with somebody else. -->
         <div v-if="!canRemind && remindBlockedReason" class="col text-caption text-grey-7 remind-note">
           {{ remindBlockedReason }}
         </div>
         <!-- The client's own form link, for chasing them by any means other than this dialog — a phone
-             call, a message from someone's own mailbox. Present only while the link is theirs to follow:
-             the server withholds it until the form has been sent, and again once they have answered, so
-             this button appears and disappears with it rather than deciding for itself.
-             Offered to anyone who may READ the log: copying a link is not sending mail as the firm. -->
+             call, a message from someone's own mailbox. -->
         <q-btn
           v-if="clientFormLink" outline no-caps color="primary" icon="o_content_copy"
           label="Client Form" @click="copyClientFormLink"
@@ -101,9 +90,8 @@
     </q-card>
   </q-dialog>
 
-  <!-- The message as the client received it, read from what was stored at send rather than re-rendered
-       from the template: the sender may rewrite any of it in the compose dialog, so the template is not a
-       record of what went out. Read-only — an email that has already gone cannot be edited. -->
+  <!-- The message as the client received it, read from what was stored at send rather than re-rendered from
+       the template: the sender may rewrite any of it in the compose dialog. -->
   <q-dialog v-model="previewOpen">
     <q-card class="preview-card">
       <q-card-section class="row items-center no-wrap">
@@ -121,9 +109,7 @@
         <div class="preview-subject">{{ previewing.subject || "—" }}</div>
       </q-card-section>
       <q-separator />
-      <!-- The body IS html — it is what the template produces and what the rich-text editor wrote. It is
-           staff-authored and already stored, so it is rendered rather than escaped, the same way the
-           compose dialog showed it before sending. -->
+      <!-- The body IS html — it is what the template produces and what the rich-text editor wrote. -->
       <q-card-section class="preview-body">
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div v-html="previewing.body" />
@@ -136,9 +122,7 @@
   </q-dialog>
 
   <!-- The same compose-and-send dialog the request page uses, so a reminder reads and behaves identically
-       wherever it is sent from. A sibling of the log rather than a child of it — each QDialog portals
-       itself — so it simply stacks on top, and sending drops back to a log that has the new Reminder row
-       on it. -->
+       wherever it is sent from. -->
   <send-ems-dialog v-model="reminderOpen" mode="reminder" :rems-id="remsId" :subtitle="subtitle" @sent="onSent" />
 </template>
 
@@ -178,9 +162,8 @@ const previewing = ref({});
 // The client's intake link, or empty where the server withholds it — before the form has been sent, and
 // once the client has answered. See the footer button.
 const clientFormLink = ref("");
-// Whether THIS caller can chase the client, decided by the server rather than re-derived from a row: it
-// is the reminder endpoint's own answer — permission, whose request it is, and the state window — so the
-// button is offered exactly when pressing it would work.
+// Whether THIS caller can chase the client, decided by the server rather than re-derived from a row: it is
+// the reminder endpoint's own answer — permission, whose request.
 const canRemind = ref(false);
 const remindBlockedReason = ref("");
 

@@ -9,11 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// Per-tenant REMS engagement settings (WO-114): the managing shareholder (a required approver on every
-/// engagement) and the department-to-director mapping used to prefill an engagement's department director.
-/// Admin/staff only (<see cref="Permissions.RemsEngagementsManage"/>); tenant isolation is ambient.
-/// </summary>
+/// <summary>Per-tenant REMS engagement settings (WO-114).</summary>
 [ApiController]
 [Route("api/rems/settings")]
 [Produces("application/json")]
@@ -80,11 +76,7 @@ public sealed class RemsSettingsController : ControllerBase
             await _settings.AddAsync(settings, cancellationToken);
         }
 
-        // Deliberately no Update() on the settings row itself. Calling it on a row just Added flips the
-        // tracked entry to Modified — the key is already set, so EF reads it as an existing detached row —
-        // and the UPDATE then matches nothing, surfacing as a concurrency failure on the first save a
-        // tenant ever makes. An existing row is tracked from the read above and needs no such call; the
-        // only thing changing here is its child director rows, which reconcile below.
+        // Deliberately no Update() on the settings row itself.
 
         await ReconcileDepartmentDirectorsAsync(settings, request.DepartmentDirectors, cancellationToken);
 
@@ -97,7 +89,10 @@ public sealed class RemsSettingsController : ControllerBase
 
     // -------------------- Helpers --------------------
 
-    /// <summary>Upserts the supplied department-director rows by (normalized) department and removes any not present.</summary>
+    /// <summary>
+    /// Upserts the supplied department-director rows by (normalized) department and removes any not
+    /// present.
+    /// </summary>
     private async Task ReconcileDepartmentDirectorsAsync(
         RemsSettings settings, IReadOnlyList<RemsDepartmentDirectorInput> desired, CancellationToken cancellationToken)
     {

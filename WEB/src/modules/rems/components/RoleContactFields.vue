@@ -1,13 +1,10 @@
 <template>
-  <!-- A single contact role bound to a RemsRolePayload node. A required role needs a first name, a last
-       name and a valid email before review/submit — the phone is always optional. An optional role is
-       only validated once the client starts filling it in. -->
+  <!-- A single contact role bound to a RemsRolePayload node. -->
   <div class="role-block" :class="{ 'role-block--required': required }">
     <div class="role-block__head">
       <div class="role-block__title">
         {{ label }}
-        <!-- What this contact is FOR, where the label alone leaves a real question. On the heading it
-             belongs to rather than as a caption line, so the block keeps its height. -->
+        <!-- What this contact is FOR, where the label alone leaves a real question. -->
         <q-icon v-if="hint" name="o_info" size="15px" color="grey-6" class="role-block__info">
           <q-tooltip anchor="top middle" self="bottom middle" max-width="280px" :delay="200">
             {{ hint }}
@@ -22,10 +19,9 @@
     </div>
     <div class="row q-col-gutter-sm">
       <!-- Two boxes, because a contact becomes a Person and a Person is filed under a given name and a
-           family name. One box asked the client to write a name and left the application guessing where
-           to cut it — which put "Van Der Berg" in a first-name column often enough to matter. -->
+           family name. -->
       <!-- A contact becomes a Person record, so the two name boxes are held to what a name actually is:
-           letters, and the hyphen / apostrophe / period that appear inside real ones. See utils/personName. -->
+           letters, and the hyphen / apostrophe / period that appear inside real ones. -->
       <app-text-field
         v-model="role.firstName" label="First Name" :required="required" class="col-12 col-sm-6"
         :rules="nameRules('First Name')"
@@ -37,10 +33,7 @@
         :error="!!err('lastName')" :error-message="err('lastName')"
       />
       <!-- The generational particle on their name — Jr., Sr., III. Never required: most people have none,
-           and one guessed on their behalf is worse than none. In a box of its own because a Person is
-           filed under a given name and a family name, and "Jr." is neither — typed into the surname it
-           makes a contact nobody finds by searching for their name. It sits AFTER the surname because
-           that is where it is read: "Jane Smith Jr.". -->
+           and one guessed on their behalf is worse than none. -->
       <app-name-suffix-field v-model="role.suffix" class="col-4 col-sm-2" />
       <app-text-field
         v-model="role.email" label="Email" type="email" :required="required" class="col-12 col-sm-6"

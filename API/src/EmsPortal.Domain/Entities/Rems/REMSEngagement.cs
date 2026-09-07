@@ -5,7 +5,7 @@ namespace EmsPortal.Domain.Entities;
 /// <summary>
 /// The engagement being set up by a <see cref="REMS"/> request — exactly one per request. Holds the
 /// servicing team, fee estimate, realization and billing schedule, and routes through approval.
-/// <see cref="Department"/>, <see cref="SubServiceLine"/>, <see cref="SubIndustry"/> and
+/// <see cref="Department"/>, <see cref="ServiceLine"/>, <see cref="Industry"/> and
 /// <see cref="BillingPeriod"/> store option-set codes.
 /// <para>
 /// It hangs off the REQUEST, not off a <see cref="REMSEntity"/>. The initiator fills the engagement
@@ -40,19 +40,18 @@ public class REMSEngagement : AuditableEntity
     public Guid? DepartmentId { get; set; }
 
     /// <summary>
-    /// The service actually being sold — what the setup form calls the SERVICE LINE (option-set
-    /// <c>REMS.SubServiceLine</c> code; the key keeps its old name so each tenant's own copy of the list
-    /// stays theirs). Classification only — nothing branches on it.
+    /// The service actually being sold — the setup form's SERVICE LINE (option-set <c>REMS.ServiceLine</c>
+    /// code). Classification only — nothing branches on it.
     /// </summary>
-    public Guid? SubServiceLineId { get; set; }
+    public Guid? ServiceLineId { get; set; }
 
     /// <summary>
-    /// The client's trade — what the setup form calls the INDUSTRY (option-set <c>REMS.SubIndustry</c>
+    /// The client's trade — what the setup form calls the INDUSTRY (option-set <c>REMS.Industry</c>
     /// code, the key likewise kept). The ENTITY TYPE above it lives on the form record because it decides
     /// what the client is asked and is frozen once the intake goes out; this is internal classification, so
     /// it belongs to the engagement and stays editable for as long as the setup does.
     /// </summary>
-    public Guid? SubIndustryId { get; set; }
+    public Guid? IndustryId { get; set; }
 
     /// <summary>Department director (User).</summary>
     public Guid? DepartmentDirectorId { get; set; }
@@ -103,8 +102,8 @@ public class REMSEngagement : AuditableEntity
     // The four option-set references above. Every read goes through these — `.Value` is the code the
     // application branches on and the API puts on the wire.
     public OptionSetItem? Department { get; set; }
-    public OptionSetItem? SubServiceLine { get; set; }
-    public OptionSetItem? SubIndustry { get; set; }
+    public OptionSetItem? ServiceLine { get; set; }
+    public OptionSetItem? Industry { get; set; }
     public OptionSetItem? BillingPeriod { get; set; }
     public ICollection<REMSEngagementMarketingMethod> MarketingMethods { get; set; } = new List<REMSEngagementMarketingMethod>();
     public ICollection<REMSEngagementCommissionSplit> CommissionSplits { get; set; } = new List<REMSEngagementCommissionSplit>();

@@ -33,8 +33,7 @@
     </q-banner>
 
     <template v-else>
-      <!-- Extra approvers only: the automatic ones already route and are shown in the list below.
-           Selecting saves immediately and the person appears in the list — then Send. -->
+      <!-- Extra approvers only: the automatic ones already route and are shown in the list below. -->
       <div v-if="canPick" class="q-mb-md">
         <app-select
           v-model="picked" :options="approverOptions" label="Add approvers" multiple use-input
@@ -61,11 +60,7 @@
         commission recipients. You can also add approvers above.
       </div>
 
-      <!-- Why the round cannot go out yet, where the button that would send it is. Said here rather than
-           left to the API's rejection: the commission is on another tab, and a Send that fails with a
-           message about a percentage is a message about a screen the reader is not looking at.
-           Only the commission gets the banner — an empty approver list already has the paragraph above
-           explaining itself, and saying it twice on one card is saying it once too often. -->
+      <!-- Why the round cannot go out yet, where the button that would send it is. -->
       <q-banner
         v-if="commissionProblem && (canShowSend || canShowResubmit)" dense
         class="rems-approval__warn q-mt-md rounded-borders"
@@ -98,9 +93,7 @@
 
 <script setup>
 // The Approval tab (AC-REMS-018): shows the live suggested approver list from the engagement, and — for a
-// Draft engagement whose holder may send — the Send-for-Approval action. The approver decision/checklist UI
-// is a SEPARATE surface (the Approvals inbox) and is intentionally not built here. Once sent, the state is
-// read-only and the list is locked.
+// Draft engagement whose holder may send — the Send-for-Approval action.
 import { ref, computed, watch, onMounted } from "vue";
 import { remsApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -123,8 +116,7 @@ const { confirm } = useConfirm();
 const { engagementStatusOption, approverRoleOption } = useRemsMeta();
 
 // What each approver IS to this engagement, from the REMS.ApproverRole list — the name and the icon are
-// the tenant's, maintained in Administration → Option Sets. This component held a private copy of both
-// until now, which is how a firm that renames Shareholder could end up seeing two words for one role.
+// the tenant's, maintained in Administration → Option Sets.
 const roleOption = (r) => approverRoleOption(r);
 
 const status = computed(() => props.engagement.status);
@@ -143,13 +135,7 @@ const errorMsg = ref("");
 
 // ---- Whether the round can actually go out ----
 // The commission splits divide ONE commission, so a set of them that comes to 90% leaves a tenth of it
-// allocated to nobody — and every recipient is a required approver, so the round would be routed asking
-// the approvers to accept a division that does not add up. Naming NOBODY stays allowed: an empty list is
-// met by the time a round is routed. The API enforces the same rule (Send / Resubmit);
-// this is the readable version of that rejection, said before the button rather than after it.
-//
-// Rounded to 2dp before comparing, as the Commission tab does: three 33.33/33.34 splits sum to
-// 100.00000000000001 in binary floating point and would otherwise never be sendable.
+// allocated to nobody — and every recipient is a required approver.
 const round2 = (n) => Math.round(n * 100) / 100;
 const commissionTotal = computed(() => round2(
   (props.engagement.commissionSplits || []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
@@ -173,9 +159,7 @@ const canRoute = computed(() => !blockedReason.value);
 const canPick = computed(() => ["Draft", "Rejected"].includes(status.value));
 const approverOptions = ref([]);
 const loadingOptions = ref(false);
-// ONLY the added approvers. The automatic ones (shareholders, Department Director, CSE, commission
-// recipients) are never in here — they are on the list below regardless, and putting them in the picker
-// would imply they could be removed.
+// ONLY the added approvers.
 const picked = ref([]);
 
 // Adopt a returned approver list as both the display list and the picker's current state.
@@ -201,10 +185,7 @@ const loadOptions = async () => {
   loadingOptions.value = true;
   try {
     const rows = await remsApi.approverOptions(props.engagement.id);
-    // "Full Name — Role", falling back to the email and then to the name alone. Deciding whose signature
-    // an engagement needs is a question about what somebody IS to the firm — a Partner, a CSE, a
-    // Shareholder — which a list of bare names cannot answer. The email stands in where a person somehow
-    // has no role to show, since a label has to distinguish two people who share a name.
+    // "Full Name — Role", falling back to the email and then to the name alone.
     approverOptions.value = (rows || []).map((r) => {
       const qualifier = (r.roles || []).join(", ") || r.email;
       return { label: qualifier ? `${r.name} — ${qualifier}` : r.name, value: r.userId };

@@ -1,11 +1,6 @@
 <template>
   <!-- Read-only, grouped presentation of the in-progress payload for the public form's Review step
-       (AC-REMS-024.7): Contact · Physical & Mailing Addresses · Billing Information · Spouse & More
-       Individuals · Contract Details (Government only) · Additional Contacts · Other Entities. That is
-       the order the form asks the questions in, card for card, so checking an answer here means looking
-       where it was typed — which is also why each invoice's addressee sits inside Billing Information
-       rather than in a block of its own at the end. Rendered as plain text — no inputs. Mirrors the
-       admin's submitted-form panel so the client sees what the admin will. -->
+       (AC-REMS-024.7). -->
   <div>
     <div v-for="g in groups" :key="g.title" class="review-group">
       <div class="review-group__title">
@@ -39,10 +34,7 @@
         <div v-else class="text-grey-6">No additional contacts provided.</div>
       </div>
 
-      <!-- The other people on this return, several to a row. Each is four short lines rather than seven
-           labelled rows — the labels cost more height than the answers and said nothing the answer did
-           not ("Filing Type: Joint" against "Joint") — so a family of four reads across the card instead
-           of running four blocks down the page. -->
+      <!-- The other people on this return, several to a row. -->
       <div v-else-if="g.kind === 'individuals'" class="review-people__grid">
         <div v-for="p in g.rows" :key="p.key" class="review-person">
           <div class="person-head">
@@ -76,11 +68,7 @@
       </div>
 
       <!-- People belonging to a FIELDS group — the addressees, under the addresses they are the other
-           half of. Each gets a card of its own so a reader can tell one person from the next at a
-           glance, which consecutive rows in the grid above could not do.
-
-           Outside the kind chain above rather than inside it: a v-else-if has to follow its v-if with
-           nothing in between, and this is an ADDITION to the fields group, not a fourth kind of one. -->
+           half of. -->
       <div v-if="g.people && g.people.length" class="review-people">
         <div class="review-people__title">{{ g.peopleTitle }}</div>
         <div class="review-people__grid">
@@ -101,7 +89,7 @@
 import { computed } from "vue";
 import { addressText, billingAddressList, addresseeParts } from "modules/rems/remsAddress";
 import { formatDateOnly } from "composables/useDateFormat";
-import { isBusinessIndustryGroup } from "modules/rems/useRemsMeta";
+import { isBusinessEntityType } from "modules/rems/useRemsMeta";
 import {
   answeredRoleKeys, groupKey, normalizeRoles, roleDefsFor, roleHasAny, roleNameParts
 } from "modules/rems/remsContactRoles";
@@ -110,18 +98,16 @@ import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 
 const props = defineProps({
   payload: { type: Object, required: true },
-  industryGroup: { type: String, default: "" },
+  entityType: { type: String, default: "" },
   // The locked request email, shown on the Contact row (the payload email is a courtesy echo only).
   lockedEmail: { type: String, default: "" },
-  // The referral-source list, passed down rather than resolved here. This component renders on the
-  // PUBLIC form, which is anonymous — reaching for useRemsMeta would fire authenticated option-set
-  // requests from a page with no session and hand the 401 to the auth interceptor.
+  // The referral-source list, passed down rather than resolved here.
   referralSources: { type: Array, default: () => [] }
 });
 
-const isIndividual = computed(() => props.industryGroup === "individual");
-const isBusiness = computed(() => isBusinessIndustryGroup(props.industryGroup));
-const isGovernment = computed(() => props.industryGroup === "government");
+const isIndividual = computed(() => props.entityType === "individual");
+const isBusiness = computed(() => isBusinessEntityType(props.entityType));
+const isGovernment = computed(() => props.entityType === "government");
 
 const referralOption = (v) => props.referralSources.find((o) => o.value === v);
 // Falls back to the raw value: drafts saved before this was a picker hold free text the client typed.
@@ -156,13 +142,10 @@ const groups = computed(() => {
     { label: "Referral Details", value: val(p.referralSourceDetail) }
   );
   if (isIndividual.value) {
-    // The courtesy title the name box used to ask for, before it asked for a generational suffix. Shown
-    // only when a draft started under the old box still carries one, for the same reason the three
-    // spouse rows below are.
+    // The courtesy title the name box used to ask for, before it asked for a generational suffix.
     if (p.clientPrefix) contact.push({ label: "Prefix", value: p.clientPrefix });
-    // The spouse is asked for once, in the Spouse & More Individuals card, and is reviewed in its own
-    // group below. These three are retired, and appear only when a draft started before the change still
-    // carries one — this step reviews what will actually be submitted, and is silent about what will not.
+    // The spouse is asked for once, in the Spouse & More Individuals card, and is reviewed in its own group
+    // below.
     if (p.spouseName) contact.push({ label: "Spouse Name", value: p.spouseName });
     if (p.spouseEmail) contact.push({ label: "Spouse Email Address", value: p.spouseEmail });
     if (p.spousePhone) contact.push({ label: "Spouse Phone", value: p.spousePhone });
@@ -170,9 +153,7 @@ const groups = computed(() => {
   if (isBusiness.value) contact.push({ label: "EIN", value: val(p.ein) });
   result.push({ title: "Contact", icon: "o_person", kind: "fields", rows: contact });
 
-  // Addresses. The mailing one is reported as "same as physical" where that is what the client said,
-  // rather than as the copy the payload actually carries: repeating the identical address twice reads as
-  // two answers, and the client would be checking one of them against itself.
+  // Addresses.
   const roles = normalizeRoles(p.roles);
   const addressRows = [{ label: "Physical Address", value: addressText(p.physicalAddress) }];
   addressRows.push({
@@ -182,8 +163,7 @@ const groups = computed(() => {
   result.push({ title: "Physical & Mailing Addresses", icon: "o_place", kind: "fields", rows: addressRows });
 
   // Billing — a card of its own, because it is a whole answer of its own: who each invoice is for, and
-  // where it goes. Those are two halves of one question, so the person is shown under the place they
-  // belong to rather than in a section further down.
+  // where it goes.
   const billing = billingAddressList(p);
   // Numbered only where there is more than one — a "1" over a lone block answers a question nobody asked.
   const billingLabel = (i) => (billing.length > 1 ? `Billing Information ${i + 1}` : "Billing Information");
@@ -230,11 +210,8 @@ const groups = computed(() => {
     });
   }
 
-  // Additional Contacts (role contacts, in group order). Any role the client answered that this group is
-  // no longer asked — a Banker on a form started before it was retired, or a Billing Contact on one
-  // started before the addressee moved onto the billing address — is shown after the rest: the review
-  // step reports what will be submitted, and those contacts will be.
-  const key = groupKey(props.industryGroup, isBusinessIndustryGroup(props.industryGroup));
+  // Additional Contacts (role contacts, in group order).
+  const key = groupKey(props.entityType, isBusinessEntityType(props.entityType));
   const contactRows = roleDefsFor(key, answeredRoleKeys(roles))
     .filter((def) => roleHasAny(roles[def.key]))
     .map((def) => ({
@@ -244,16 +221,12 @@ const groups = computed(() => {
       ...roleNameParts(roles[def.key])
     }));
   // Absent entirely where the group is asked for none — an individual, whose own details are the first
-  // card and whose family is a card of its own. "No additional contacts provided" under a heading nobody
-  // was shown a question for is a gap that reads like a mistake.
+  // card and whose family is a card of its own.
   if (contactRows.length || roleDefsFor(key).length) {
     result.push({ title: "Additional Contacts", icon: "o_groups", kind: "contacts", rows: contactRows });
   }
 
-  // Other Entities — a contact each, not a second set of business details. Each becomes its own EMS.
-  // An individual is not asked, so "No other entities provided" under a heading they were never shown a
-  // question for is a gap that reads like a mistake; a draft that carries one from before the card was
-  // dropped still shows it, because this step reports what will be submitted.
+  // Other Entities — a contact each, not a second set of business details.
   const entities = (p.relatedEntities || [])
     .filter((e) => [e.fullName, e.emailAddress, e.phoneNumber].some((x) => x && String(x).trim()))
     .map((e, i) => {
@@ -267,10 +240,7 @@ const groups = computed(() => {
   }
 
   // The billing answers a payload gave under questions the form no longer asks: the two plain boxes that
-  // preceded the billing-contact block, and the extra billing contacts that preceded the billing-address
-  // list. Neither is asked any more and neither is editable, but this step reports what will actually be
-  // submitted — and these will be. Absent entirely on anything filled in since, which is the ordinary
-  // case.
+  // preceded the billing-contact block.
   const retiredBilling = (p.additionalBillingContacts || []).filter(roleHasAny);
   if (p.billingContactName || p.billingEmail || retiredBilling.length) {
     result.push({

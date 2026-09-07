@@ -17,8 +17,8 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
     public Task<REMSEngagement?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => _dbContext.RemsEngagements
             .Include(e => e.Department)
-            .Include(e => e.SubServiceLine)
-            .Include(e => e.SubIndustry)
+            .Include(e => e.ServiceLine)
+            .Include(e => e.Industry)
             .Include(e => e.BillingPeriod)
             .Include(e => e.MarketingMethods)
             .Include(e => e.CommissionSplits)
@@ -31,8 +31,8 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
     public Task<REMSEngagement?> GetWithContextAsync(Guid id, CancellationToken cancellationToken = default)
         => _dbContext.RemsEngagements
             .Include(e => e.Department)
-            .Include(e => e.SubServiceLine)
-            .Include(e => e.SubIndustry)
+            .Include(e => e.ServiceLine)
+            .Include(e => e.Industry)
             .Include(e => e.BillingPeriod)
             .Include(e => e.MarketingMethods)
             .Include(e => e.CommissionSplits)
@@ -50,8 +50,8 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
     public Task<REMSEngagement?> GetByRemsIdAsync(Guid remsId, CancellationToken cancellationToken = default)
         => _dbContext.RemsEngagements
             .Include(e => e.Department)
-            .Include(e => e.SubServiceLine)
-            .Include(e => e.SubIndustry)
+            .Include(e => e.ServiceLine)
+            .Include(e => e.Industry)
             .Include(e => e.BillingPeriod)
             .Include(e => e.MarketingMethods)
             .Include(e => e.CommissionSplits)

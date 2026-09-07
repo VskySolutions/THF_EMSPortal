@@ -3,19 +3,15 @@ using EmsPortal.Domain.Enums;
 namespace EmsPortal.Api.Models.Rems;
 
 // ---------------------------------------------------------------------------------------------------
-// WO-114 — REMS approval workflow (Part C): the live suggested approver list, the caller's own tasks,
-// the role-scoped task view, and the checklist/approve/reject payloads.
-// ---------------------------------------------------------------------------------------------------
+// WO-114 — REMS approval workflow (Part C): the live suggested approver list, the caller's own tasks, the
+// role-scoped task view.
 
 /// <summary>One suggested approver on the live list (AC-REMS-018): the user and the role they would act in.</summary>
 public sealed record RemsApproverSuggestion(RemsUserRef User, string Role);
 
 /// <summary>
 /// The full approver list an engagement will route to (updates until the round is sent): the automatic
-/// approvers — the firm's shareholders, the Department Director, the CSE and every commission recipient —
-/// plus anyone added on the Approval tab. Ordered for reading, shareholders first.
-/// <see cref="SelectedApproverIds"/> is just the added ones, so the picker shows only what a user chose
-/// rather than the people who are approvers regardless — and cannot be used to take one of them off.
+/// approvers — the firm's shareholders, the Department Director.
 /// </summary>
 public sealed record RemsApproverList(
     Guid EngagementId,
@@ -23,38 +19,19 @@ public sealed record RemsApproverList(
     IReadOnlyList<RemsApproverSuggestion> Approvers,
     IReadOnlyList<Guid> SelectedApproverIds);
 
-/// <summary>
-/// A user selectable as an extra approver: any active user in the tenant (there is no Approver role).
-/// <para>
-/// <paramref name="Roles"/> is every role they hold in this tenant, which is what the picker shows beside
-/// the name: choosing who else should sign off is a question about what someone IS to the firm, and a list
-/// of bare names cannot answer it. The email travels with them too, as the tiebreak when two people share
-/// a name and a role.
-/// </para>
-/// </summary>
+/// <summary>A user selectable as an extra approver: any active user in the tenant (there is no Approver role).</summary>
 public sealed record RemsApproverOption(
     Guid UserId, string Name, string? Email, IReadOnlyList<string> Roles);
 
-/// <summary>
-/// Replaces the engagement's ADDED approvers with exactly these users (AC-REMS-018). An empty list removes
-/// the additions; the automatic approvers — shareholders among them — are unaffected either way, which is
-/// what makes them impossible to remove from here.
-/// </summary>
+/// <summary>Replaces the engagement's ADDED approvers with exactly these users (AC-REMS-018).</summary>
 public sealed class SetRemsApproversRequest
 {
     public List<Guid> UserIds { get; set; } = new();
 }
 
 /// <summary>
-/// One REQUEST in the caller's approvals inbox, carried by their task on its latest round — so
-/// <see cref="Role"/>, <see cref="Status"/> and <see cref="RoundNumber"/> say what they are to it now, and
-/// the rounds before this one are read on the task detail rather than listed here as rows of their own.
-/// <para>
-/// The three counts describe the whole ROUND, not just the caller's task, so the inbox can show how far
-/// along an engagement is — "1/4 approved" answers "is this waiting on me alone, or on five other people
-/// too?". Still awaiting = <c>ApproverCount - ApprovedCount - RejectedCount</c>; a rejection ends the
-/// round, so the remaining tasks stay pending and never decide.
-/// </para>
+/// One REQUEST in the caller's approvals inbox, carried by their task on its latest round — so <see
+/// cref="Role"/>, <see cref="Status"/> and <see cref="RoundNumber"/> say what they are to it now.
 /// </summary>
 public sealed record RemsApprovalTaskRow(
     Guid TaskId,
@@ -72,11 +49,7 @@ public sealed record RemsApprovalTaskRow(
     string ClientName,
     /// <summary>The generational particle, so the cell can draw it in bold at the end of that name.</summary>
     string? ClientNameSuffix,
-    /// <summary>
-    /// The request's Client Service Executive. An approver deciding on a round needs to know who to ask
-    /// about it, and the CSE is that person — so the inbox shows them by default rather than making the
-    /// approver open the request to find out.
-    /// </summary>
+    /// <summary>The request's Client Service Executive.</summary>
     RemsUserRef? Cse,
     // No EntityName: an approval is about a request and its single engagement now, so the entity's name
     // only ever repeated the client's.
@@ -93,17 +66,8 @@ public sealed record RemsApprovalTaskRow(
 public sealed record RemsChecklistItemView(Guid Id, int DisplayOrder, string Label, bool IsCompleted, DateTime? CompletedOnUtc);
 
 /// <summary>
-/// The approval-task review packet: the task, its checklist, and the complete case an approver decides on —
-/// the originating REMS request, the client, the entity under review, the engagement setup with its
-/// conditional audit/government/tax detail, the marketing tags, the commission splits, and the round's
-/// other decisions. Deliberately the SAME material as the staff engagement workspace's four tabs, since an
-/// approver is being asked to sign off on exactly what staff filled in.
-/// <para>
-/// One thing stays role-scoped: the first-year fee estimate and % realization are reserved to the
-/// Department Director (AC-REMS-019.10). For every other role they arrive null
-/// with <see cref="RemsApprovalEngagementView.FinancialsRestricted"/> set, so the UI can say the figures
-/// are withheld rather than render them as blank.
-/// </para>
+/// The approval-task review packet: the task, its checklist, and the complete case an approver decides
+/// on — the originating REMS request, the client, the entity under review.
 /// </summary>
 public sealed record RemsApprovalTaskView(
     Guid TaskId,
@@ -122,15 +86,16 @@ public sealed record RemsApprovalTaskView(
     RecordAudit Audit);
 
 /// <summary>
-/// The originating REMS request as an approver sees it: the intake fields the partner raised, who is on it,
-/// and the attachments that came with it.
+/// The originating REMS request as an approver sees it: the intake fields the partner raised, who is
+/// on it, and the attachments that came with it.
 /// </summary>
 public sealed record RemsApprovalRequestView(
     Guid RemsId,
     string RemsNumber,
     string? Description,
     /// <summary>
-    /// The client's name as it reads — "Smith John Jr." for a person, the legal name for an organisation.
+    /// The client's name as it reads — "Smith John Jr." for a person, the legal name for an
+    /// organisation.
     /// </summary>
     string ClientName,
     /// <summary>The particle, so the packet can draw it in bold at the end of that name.</summary>
@@ -139,7 +104,7 @@ public sealed record RemsApprovalRequestView(
     string Status,
     string? CustomerEmail,
     string? CustomerMobileNumber,
-    string? IndustryGroup,
+    string? EntityType,
     string EmsFormState,
     string? ClientSubmissionState,
     RemsUserRef? AssignedAdmin,
@@ -148,18 +113,13 @@ public sealed record RemsApprovalRequestView(
     DateTime CreatedOnUtc,
     IReadOnlyList<RemsFileRef> Files);
 
-/// <summary>
-/// The engagement under review, mirroring the workspace's Setup / Marketing / Commission tabs.
-/// <c>FinancialsRestricted</c> is true when the fee estimate and realization were withheld from this
-/// approver's role rather than simply never filled in — the difference the UI needs to say "reserved"
-/// instead of "—".
-/// </summary>
+/// <summary>The engagement under review, mirroring the workspace's Setup / Marketing / Commission tabs.</summary>
 public sealed record RemsApprovalEngagementView(
     Guid EngagementId,
     string Status,
     string? Department,
-    string? SubServiceLine,
-    string? SubIndustry,
+    string? ServiceLine,
+    string? Industry,
     RemsApprovalClientView Client,
     RemsApprovalEntityView Entity,
     RemsUserRef? DepartmentDirector,
@@ -171,9 +131,8 @@ public sealed record RemsApprovalEngagementView(
     decimal? RealizationPercentage,
     bool FinancialsRestricted,
     /// <summary>
-    /// How often the client is billed (option-set <c>REMS.BillingPeriod</c> code), and how that billing
-    /// actually runs. Asked of CAS engagements and no others — a recurring arrangement is part of what the
-    /// approvers are being asked to accept, and the packet did not carry either answer.
+    /// How often the client is billed (option-set <c>REMS.BillingPeriod</c> code), and how that
+    /// billing actually runs.
     /// </summary>
     string? BillingPeriod,
     string? BillingProcessDescription,
@@ -183,15 +142,7 @@ public sealed record RemsApprovalEngagementView(
     IReadOnlyList<RemsApprovalOptionRef> MarketingMethods,
     IReadOnlyList<RemsCommissionSplitView> CommissionSplits);
 
-/// <summary>
-/// One approval round as history. Rounds are immutable and numbered from 1: a resubmission creates a new
-/// one rather than resetting the last, so the list is the whole record of what the approvers did.
-/// </summary>
-/// <summary>
-/// A pointer to one approval task and nothing else — what the approver deep-link needs to navigate. It
-/// carries no round, no engagement and no client: the caller is about to open the task itself, which
-/// returns the whole packet under its own permission rule.
-/// </summary>
+/// <summary>One approval round as history.</summary>
 public sealed record RemsApprovalTaskRef(Guid TaskId);
 
 public sealed record RemsApprovalRoundHistory(
@@ -201,9 +152,7 @@ public sealed record RemsApprovalRoundHistory(
     DateTime SentOnUtc,
     string? SentBy,
     DateTime? CompletedOnUtc,
-    // What it would have taken to close this round, and how close it got. One decline closes a round
-    // now, so these agree on anything that failed today — but a round closed under the old two-decline
-    // threshold still carries the count it actually took, against a threshold recomputed as one.
+    // What it would have taken to close this round, and how close it got.
     int DeclineThreshold,
     int DeclineCount,
     IReadOnlyList<RemsApprovalRoundDecision> Decisions);
@@ -215,7 +164,7 @@ public sealed record RemsApprovalRoundDecision(
     string Role,
     string Status,
     DateTime? DecidedOnUtc,
-    /// <summary>Their own reason for declining. The round-level reason cannot hold several.</summary>
+    /// <summary>Their own reason for declining.</summary>
     string? Reason,
     int ChecklistCompleted,
     int ChecklistTotal);
@@ -245,10 +194,7 @@ public sealed record RemsApprovalEntityView(
     IReadOnlyList<RemsEntityAddressView> Addresses,
     IReadOnlyList<RemsEntityContactView> Contacts);
 
-/// <summary>
-/// An option-set item resolved to its LABEL (and group, for marketing). Approver roles do not carry
-/// <c>optionSets.read</c>, so ids alone would be unreadable on this screen — the server resolves them.
-/// </summary>
+/// <summary>An option-set item resolved to its LABEL (and group, for marketing).</summary>
 public sealed record RemsApprovalOptionRef(Guid Id, string Label, string? Group);
 
 /// <summary>Audit detail with the signed client-acceptance form resolved to something openable.</summary>
@@ -265,15 +211,13 @@ public sealed record RemsApprovalAuditDetailView(
 public sealed record RemsApprovalTaxDetailView(
     Guid Id,
     DateOnly? FiscalYearEnd,
-    /// <summary>Derived from the fiscal year end, then whatever was typed over it. Never recomputed here.</summary>
+    /// <summary>Derived from the fiscal year end, then whatever was typed over it.</summary>
     RemsTaxDueDateSet? DueDates,
     IReadOnlyList<RemsApprovalOptionRef> TaxForms);
 
 /// <summary>
-/// The approval round this task belongs to, with every approver's decision — the approver-side equivalent
-/// of the workspace's Approval tab, so a reviewer can see who else is on the round and where it stands.
-/// <see cref="Decisions"/> arrives in round order: those who have decided first, oldest decision leading,
-/// then everyone still to decide.
+/// The approval round this task belongs to, with every approver's decision — the approver-side
+/// equivalent of the workspace's Approval tab.
 /// </summary>
 public sealed record RemsApprovalRoundView(
     Guid Id,
@@ -285,7 +229,7 @@ public sealed record RemsApprovalRoundView(
     string? RejectionReason,
     IReadOnlyList<RemsApprovalDecisionView> Decisions);
 
-/// <summary>One approver's standing on the round. <see cref="IsYou"/> marks the caller's own task.</summary>
+/// <summary>One approver's standing on the round.</summary>
 public sealed record RemsApprovalDecisionView(
     Guid TaskId,
     RemsUserRef Approver,
@@ -309,8 +253,7 @@ public sealed class RejectApprovalTaskRequest
 
 /// <summary>
 /// The per-role approval checklist labels (AC-REMS-019.4/5/6): CSE = 2, DepartmentDirector = 3,
-/// CommissionRecipient = 2. Defined as constants here (they could become
-/// option-set-driven later). Rows are created in order as <c>REMSApprovalChecklistItem</c>s.
+/// CommissionRecipient = 2.
 /// </summary>
 public static class RemsApprovalChecklistCatalog
 {
@@ -333,10 +276,8 @@ public static class RemsApprovalChecklistCatalog
         "Commission allocation accepted",
     };
 
-    // An approver with no other standing on the engagement: a general review, since nothing narrower can
-    // be assumed about why they are looking at it. Shared with Shareholder — being asked about every
-    // engagement says nothing about what to ask them, and a firm-wide checklist would have to be general
-    // in exactly this way.
+    // An approver with no other standing on the engagement: a general review, since nothing narrower can be
+    // assumed about why they are looking at it.
     private static readonly IReadOnlyList<string> Approver = new[]
     {
         "Engagement details reviewed",

@@ -95,7 +95,7 @@ public sealed record RemsPoolCounts(int Unassigned, int Mine, int All);
 /// </summary>
 public sealed record RemsFormStateInfo(
     Guid RemsId,
-    string? IndustryGroup,
+    string? EntityType,
     RemsFormStatus? FormStatus,
     DateTime? FormSentOnUtc,
     DateTime? FormSubmittedOnUtc,
@@ -137,7 +137,7 @@ public enum RemsRelatedClientKind
 public sealed record RemsRelatedEntityQuery(
     /// <summary>Quick search over the REMS number, the client's name, and the related clients' names.</summary>
     string? Search,
-    /// <summary>Option-set CODE (REMS.IndustryGroup), matched exactly — what kind of entity the client is.</summary>
+    /// <summary>Option-set CODE (REMS.EntityType), matched exactly — what kind of entity the client is.</summary>
     string? EntityType,
     /// <summary>
     /// Option-set CODE (REMS.RelatedEntityStatus). Narrows to requests with AT LEAST ONE related client at
@@ -166,7 +166,7 @@ public sealed record RemsRelatedEntityItem(
     /// <summary>The generational particle, so the Client column can draw it in bold at the end of the name.</summary>
     string? ClientNameSuffix,
     string? ClientEmail,
-    /// <summary>What kind of entity the client is (REMS.IndustryGroup code), off the request's form.</summary>
+    /// <summary>What kind of entity the client is (REMS.EntityType code), off the request's form.</summary>
     string? EntityType,
     /// <summary>Where the request itself has got to (REMS.Status code) — context, not this list's subject.</summary>
     string RequestStatus,

@@ -1,7 +1,5 @@
 <template>
-  <!-- The client's submitted EMS form, read-only, rendered from the immutable submission. This is a PANEL
-       rather than a dialog: it lives in the left pane of the request page, beside the setup it is being
-       read against, so checking one answer against one field costs no opening and closing. -->
+  <!-- The client's submitted EMS form, read-only, rendered from the immutable submission. -->
   <div class="sfp">
     <div v-if="loading" class="row flex-center q-pa-xl"><q-spinner color="primary" size="32px" /></div>
 
@@ -11,9 +9,7 @@
     </q-banner>
 
     <template v-else-if="view">
-      <!-- Summary. No entity-type badge: this is the snapshot of what the CLIENT submitted, and the
-           entity type is THF's own classification — never something they were asked. It is read on the
-           request's Client Information tab, where it is set. -->
+      <!-- Summary. -->
       <div class="row items-center q-col-gutter-sm q-mb-md">
         <div class="col text-grey-8">
           <span class="text-weight-medium">
@@ -27,20 +23,15 @@
         <div class="col-auto text-caption text-grey-7">Submitted {{ fmt.formatDateTime(view.submittedOnUtc) }}</div>
       </div>
 
-      <!-- Said before the answers, not after them: a reader checking an EIN against the setup needs to
-           know whether it is the client's own answer or a colleague's correction of it BEFORE they read
-           it. Absent entirely while the snapshot is untouched, which is the ordinary case. -->
+      <!-- Said before the answers, not after them: a reader checking an EIN against the setup needs to know
+           whether it is the client's own answer or a colleague's correction of it BEFORE they read it. -->
       <q-banner v-if="view.editedBy" dense class="sfp-edited q-mb-md rounded-borders">
         <template #avatar><q-icon name="o_edit_note" color="amber-9" /></template>
         Corrected by {{ view.editedBy }} on {{ fmt.formatDateTime(view.editedOnUtc) }} — these are no
         longer only the client's own answers.
       </q-banner>
 
-      <!-- Grouped in the order the client was asked, so the admin reads the answers as they were given:
-           Contact · Physical & Mailing Addresses · Billing Information · Spouse & More Individuals ·
-           Contract Details · Contacts · Other Entities. Plain read-only text (AC-REMS-013.2). A group of
-           retired billing answers slots in after the billing one on the submissions old enough to carry
-           them, and is absent on every other. -->
+      <!-- Grouped in the order the client was asked, so the admin reads the answers as they were given. -->
       <div v-for="g in groups" :key="g.title" class="submitted-group">
         <div class="submitted-group__title">
           <q-icon :name="g.icon" size="18px" class="q-mr-xs" />{{ g.title }}
@@ -64,9 +55,7 @@
           <div v-else class="text-grey-6">No contacts provided.</div>
         </div>
 
-        <!-- The other people on this return, several to a row and four short lines each. Mirrors the
-             client's review step exactly, which is the point of this panel: the admin reads what the
-             client read. -->
+        <!-- The other people on this return, several to a row and four short lines each. -->
         <div v-else-if="g.kind === 'individuals'" class="submitted-people__grid">
           <div v-for="p in g.rows" :key="p.key" class="submitted-person">
             <div class="person-head">
@@ -100,11 +89,7 @@
         </div>
 
         <!-- People belonging to a FIELDS group — the addressees, under the addresses they are the other
-             half of. A card each, so one person is told from the next at a glance rather than by
-             counting rows in the grid above.
-
-             Outside the kind chain rather than inside it: a v-else-if has to follow its v-if with nothing
-             in between, and this is an ADDITION to the fields group, not a fourth kind of one. -->
+             half of. -->
         <div v-if="g.people && g.people.length" class="submitted-people">
           <div class="submitted-people__title">{{ g.peopleTitle }}</div>
           <div class="submitted-people__grid">
@@ -123,13 +108,11 @@
 </template>
 
 <script setup>
-// Renders one REMS request's submitted client form. Loads it itself from the request id, because the
-// only thing every caller has is the request — and reloads when told to, so a page that has just seen a
-// submission arrive can ask for it without remounting.
+// Renders one REMS request's submitted client form.
 import { ref, computed, watch } from "vue";
 import { remsApi, getApiErrorMessage } from "services/api";
 import { useDateFormat, formatDateOnly } from "composables/useDateFormat";
-import { useRemsMeta, isBusinessIndustryGroup } from "modules/rems/useRemsMeta";
+import { useRemsMeta, isBusinessEntityType } from "modules/rems/useRemsMeta";
 import { addressText, billingAddressList, addresseeParts } from "modules/rems/remsAddress";
 import {
   answeredRoleKeys, groupKey, normalizeRoles, roleDefsFor, roleHasAny, roleNameParts
@@ -152,24 +135,18 @@ const loading = ref(false);
 const errorMsg = ref("");
 
 const payload = computed(() => view.value?.payload || {});
-const isIndividual = computed(() => view.value?.industryGroup === "individual");
-const isBusiness = computed(() => isBusinessIndustryGroup(view.value?.industryGroup));
-const isGovernment = computed(() => view.value?.industryGroup === "government");
+const isIndividual = computed(() => view.value?.entityType === "individual");
+const isBusiness = computed(() => isBusinessEntityType(view.value?.entityType));
+const isGovernment = computed(() => view.value?.entityType === "government");
 
 const val = (v) => (v == null || String(v).trim() === "" ? "—" : v);
 
 // The client's name, whichever shape the payload is in: the two parts a person gave, or the single entity
-// name a company gave. Older payloads carry only `clientName`. Kept as two halves so the heading can draw
-// the particle after the name and in bold, like every other REMS surface.
-//
-// The suffix comes off the REQUEST rather than the payload — the client's own answer carries theirs, but
-// the firm's particle is the one every other surface shows them by. The First Name and Last Name ROWS
-// below stay exactly as the client typed them: those report the answer, this names them.
+// name a company gave.
 const clientName = computed(() => {
   const p = payload.value;
   // Surname first — "Smith John" — the order every REMS list reads a client in, and the one the server
-  // now files them under. An older submission whose stored `clientName` predates that order falls through
-  // to the branch below and reads as it was sent; the two PARTS are always composed the new way.
+  // now files them under.
   const joined = [p.clientLastName, p.clientFirstName]
     .filter((v) => v != null && String(v).trim() !== "")
     .map((v) => String(v).trim())
@@ -205,9 +182,7 @@ const groups = computed(() => {
     // Retired from the form — the name box asks for a generational suffix now, not a courtesy title —
     // and rendered for the same reason the spouse rows below are.
     if (p.clientPrefix) contact.push({ label: "Prefix", value: p.clientPrefix });
-    // Retired from the form — the spouse is a contact now, and shows under Contacts. Still rendered when
-    // a snapshot carries them: this panel is the record of what that client actually submitted, so it
-    // shows what was in the envelope.
+    // Retired from the form — the spouse is a contact now, and shows under Contacts.
     if (p.spouseName) contact.push({ label: "Spouse Name", value: p.spouseName });
     if (p.spouseEmail) contact.push({ label: "Spouse Email Address", value: p.spouseEmail });
     if (p.spousePhone) contact.push({ label: "Spouse Phone", value: p.spousePhone });
@@ -216,13 +191,9 @@ const groups = computed(() => {
   result.push({ title: "Contact", icon: "o_person", kind: "fields", rows: contact });
 
   // Addresses — each stored in its own right — with the person each invoice is addressed to beside the
-  // place it goes to, which is where the form asks it: those are two halves of one answer, and reading
-  // them sections apart is what made checking either of them awkward. Billing is a LIST: a client
-  // invoiced at two offices gives two, each with its own addressee.
+  // place it goes to, which is where the form asks it: those are two halves of one answer.
   const roles = normalizeRoles(p.roles);
-  // Addresses. Where the client said their post goes to the physical address, that is what the panel
-  // says: the payload carries the copy, and printing the identical address twice reads as two answers an
-  // admin has to compare against each other.
+  // Addresses.
   const addressRows = [{ label: "Physical Address", value: addressText(p.physicalAddress) }];
   addressRows.push({
     label: "Mailing Address",
@@ -231,11 +202,6 @@ const groups = computed(() => {
   result.push({ title: "Physical & Mailing Addresses", icon: "o_place", kind: "fields", rows: addressRows });
 
   // Billing — its own group, because it is its own answer: who each invoice is for, and where it goes.
-  // The addressees are rendered as PEOPLE, one block each with the email and phone beneath the name,
-  // rather than three label/value rows apiece: flattened into a grid, a second one became fields called
-  // "Billing Information 2 Email" and "Billing Information 2 Phone", and an admin checking who to invoice
-  // had to count rows to work out where one person ended. The client's review step shows the same shape,
-  // which is the point of this panel mirroring it.
   const billing = billingAddressList(p);
   // Numbered only where they gave more than one — a "1" over a lone block answers a question nobody
   // asked — and in the order they gave them.
@@ -268,10 +234,8 @@ const groups = computed(() => {
     });
   }
 
-  // The billing answers a submission gave under questions the form no longer asks: the two plain boxes
-  // that preceded the billing-contact block, and the extra billing contacts that preceded the
-  // billing-address list. This panel reports what was in the envelope, so both are shown where they are
-  // there — and nothing at all where they are not, which is the ordinary case.
+  // The billing answers a submission gave under questions the form no longer asks: the two plain boxes that
+  // preceded the billing-contact block.
   const retiredBilling = (p.additionalBillingContacts || []).filter(roleHasAny);
   if (p.billingContactName || p.billingEmail || retiredBilling.length) {
     result.push({
@@ -311,11 +275,8 @@ const groups = computed(() => {
     });
   }
 
-  // Contacts. Normalized, so a submission written under the old business role names reads under the names
-  // those roles are known by now; the roles this entity type is no longer asked follow the rest, because
-  // what the client sent is what this panel is for. That now includes a Billing Contact on a submission
-  // sent before the addressee moved onto the billing address.
-  const key = groupKey(view.value?.industryGroup, isBusiness.value);
+  // Contacts.
+  const key = groupKey(view.value?.entityType, isBusiness.value);
   const contactRows = roleDefsFor(key, answeredRoleKeys(roles))
     .filter((def) => roleHasAny(roles[def.key]))
     .map((def) => ({
@@ -330,9 +291,7 @@ const groups = computed(() => {
     result.push({ title: "Contacts", icon: "o_groups", kind: "contacts", rows: contactRows });
   }
 
-  // Other Entities — a contact each, not a second set of business details. Each becomes its own EMS.
-  // Absent for an individual, who is not asked, unless their submission carries one from before the card
-  // was dropped: this panel reports what was in the envelope.
+  // Other Entities — a contact each, not a second set of business details.
   const entities = (p.relatedEntities || [])
     .filter((e) => [e.fullName, e.emailAddress, e.phoneNumber].some((x) => x && String(x).trim()))
     .map((e, i) => {

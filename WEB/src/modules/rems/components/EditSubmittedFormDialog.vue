@@ -1,8 +1,7 @@
 <template>
   <q-dialog v-model="open" persistent :maximized="maximized" @show="load">
     <q-card class="esf">
-      <!-- Head: what is being corrected, and the way out. Sticky, because the form below it is long and
-           the way out should not be a scroll away. -->
+      <!-- Head: what is being corrected, and the way out. -->
       <q-card-section class="esf__head row items-center no-wrap q-gutter-sm">
         <q-icon name="o_edit_document" size="22px" color="primary" />
         <div class="col">
@@ -22,8 +21,7 @@
         </q-banner>
 
         <template v-else>
-          <!-- What this dialog IS, said once. An admin correcting a client's answers is rewriting the
-               record of what that client sent, and the panel behind this one will say so afterwards. -->
+          <!-- What this dialog IS, said once. -->
           <q-banner dense class="esf__note q-mb-md rounded-borders">
             <template #avatar><q-icon name="o_info" color="primary" /></template>
             These are the client's own answers. Corrections replace them and are recorded against your
@@ -40,15 +38,14 @@
           </q-banner>
 
           <client-intake-fields
-            v-model="payload" :industry-group="industryGroup" :errors="errors"
+            v-model="payload" :entity-type="entityType" :errors="errors"
             :referral-sources="referralSourceOptions"
             email-hint="Locked — the intake form was sent to this address"
             @confirm-clear-entities="onConfirmClearEntities"
             @confirm-clear-individuals="onConfirmClearIndividuals"
           />
 
-          <!-- The same completeness gate the client's own Review button uses. A corrected form still has
-               to be a complete one — the API validates it identically, so saying so here beats a 400. -->
+          <!-- The same completeness gate the client's own Review button uses. -->
           <q-card v-if="issues.length" flat bordered class="esf__todo q-mb-md">
             <q-card-section>
               <div class="row items-center q-gutter-xs text-grey-8">
@@ -78,20 +75,7 @@
 </template>
 
 <script setup>
-// The Admin's correction of a client's submitted intake form (Phase 16). The client filled it in once,
-// from an emailed link that is spent the moment they send it — so when a digit of the EIN is wrong or a
-// contact's email has a typo in it, the alternative to fixing it here is issuing a whole second intake
-// form for one character.
-//
-// The FIELDS are the client's own — ClientIntakeFields, the same component their page renders — so a
-// correction is made against exactly the form that was answered rather than against a staff-side
-// approximation of it. Everything peculiar to this side is here: loading the snapshot, the one save, and
-// the note saying whose answers these are.
-//
-// The save OVERWRITES the stored snapshot (there is one submission per form) and does not touch the
-// client record, entities or contact Persons the submit materialised — see the endpoint's own note.
-// Admin-only, and refused once an approval round has frozen the request; the caller decides whether to
-// offer the action at all, and the server enforces both rules again.
+// The Admin's correction of a client's submitted intake form (Phase 16).
 import { ref, computed } from "vue";
 import { useQuasar } from "quasar";
 import { remsApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
@@ -128,7 +112,7 @@ const { referralSourceOptions } = useRemsMeta();
 const loading = ref(false);
 const saving = ref(false);
 const loadError = ref("");
-const industryGroup = ref("");
+const entityType = ref("");
 const errors = ref({});
 const serverSummary = ref([]);
 const payload = ref(blankIntakePayload());
@@ -137,9 +121,9 @@ let baseline = "";
 
 const issues = computed(() => (loading.value || loadError.value
   ? []
-  : intakeIssues(payload.value, industryGroup.value)));
+  : intakeIssues(payload.value, entityType.value)));
 
-const snapshot = () => JSON.stringify(buildIntakePayload(payload.value, industryGroup.value));
+const snapshot = () => JSON.stringify(buildIntakePayload(payload.value, entityType.value));
 const dirty = () => snapshot() !== baseline;
 
 async function load () {
@@ -149,7 +133,7 @@ async function load () {
   serverSummary.value = [];
   try {
     const view = await remsApi.submission(props.remsId);
-    industryGroup.value = String(view?.industryGroup || "").toLowerCase();
+    entityType.value = String(view?.entityType || "").toLowerCase();
     payload.value = blankIntakePayload();
     // The locked email is the request's, not the payload's echo of it — the same rule the server applies
     // on submit and again on save.
@@ -206,7 +190,7 @@ async function save () {
   serverSummary.value = [];
   try {
     const view = await remsApi.updateSubmission(
-      props.remsId, buildIntakePayload(payload.value, industryGroup.value));
+      props.remsId, buildIntakePayload(payload.value, entityType.value));
     notify.success("The client's form has been updated.");
     emit("saved", view);
     open.value = false;

@@ -19,7 +19,7 @@ internal sealed class RemsFormRepository : IRemsFormRepository
     public Task<REMSForm?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => _dbContext.RemsForms
             // The entity type is an option-set item; its CODE decides what the client's form asks.
-            .Include(f => f.IndustryGroup)
+            .Include(f => f.EntityType)
             .Include(f => f.Drafts)
             .Include(f => f.Submissions)
             .Include(f => f.EmailEvents)
@@ -30,14 +30,14 @@ internal sealed class RemsFormRepository : IRemsFormRepository
         // scoped by the ambient query filter. Email events are loaded so callers can read sent/locked state.
         => _dbContext.RemsForms
             // The entity type is an option-set item; its CODE decides what the client's form asks.
-            .Include(f => f.IndustryGroup)
+            .Include(f => f.EntityType)
             .Include(f => f.EmailEvents)
             .FirstOrDefaultAsync(f => f.REMSId == remsId, cancellationToken);
 
     public Task<REMSForm?> GetWithSubmissionsByRemsIdAsync(Guid remsId, CancellationToken cancellationToken = default)
         => _dbContext.RemsForms
             // The entity type is an option-set item; its CODE decides what the client's form asks.
-            .Include(f => f.IndustryGroup)
+            .Include(f => f.EntityType)
             .Include(f => f.Submissions)
             .FirstOrDefaultAsync(f => f.REMSId == remsId, cancellationToken);
 
@@ -147,7 +147,7 @@ internal sealed class RemsFormRepository : IRemsFormRepository
         // state and upsert/submit. Tracked so the submit transaction can update the form + request.
         => _dbContext.RemsForms
             .IgnoreQueryFilters()
-            .Include(f => f.IndustryGroup)
+            .Include(f => f.EntityType)
             .Include(f => f.Rems).ThenInclude(r => r!.Status)
             .Include(f => f.Rems).ThenInclude(r => r!.Type)
             .Include(f => f.Drafts)

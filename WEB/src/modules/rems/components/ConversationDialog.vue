@@ -11,8 +11,7 @@
       </q-card-section>
       <q-separator />
       <!-- No overflow of its own: the panel is a chat, and a chat scrolls its THREAD while its composer
-           stays put. Wrapping it in a scrolling section scrolled both, which put the box you type in
-           somewhere below the bottom of the dialog. It is handed a height and divides it itself. -->
+           stays put. -->
       <q-card-section class="conv-dialog__body">
         <!-- Reuses the Universal Features conversation thread keyed on the REMS request. -->
         <entity-conversation-panel
@@ -27,8 +26,7 @@
 import { computed } from "vue";
 import { EntityType } from "services/api";
 // Must be imported explicitly: <script setup> resolves components from this scope, and only ZwDate /
-// ZwCurrency / ZwNumeric are registered globally (boot/components.js). Without this the tag silently
-// resolves to nothing and the dialog opens with an empty body.
+// ZwCurrency / ZwNumeric are registered globally (boot/components.js).
 import EntityConversationPanel from "components/universal/EntityConversationPanel.vue";
 
 const props = defineProps({

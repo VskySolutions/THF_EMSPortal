@@ -23,9 +23,7 @@
           </q-item-label>
         </q-item-section>
         <q-item-section side>
-          <!-- Once an EMS exists the row says so and links to it. Without that the flag would sit on this
-               request forever, and the Partner and the CSE — who both see this list — would each raise
-               one for the same entity. -->
+          <!-- Once an EMS exists the row says so and links to it. -->
           <q-btn
             v-if="row.createdRemsId" flat dense no-caps size="sm" color="positive"
             icon="o_check_circle" :label="row.createdRemsNumber || 'EMS created'"
@@ -42,9 +40,7 @@
 </template>
 
 <script setup>
-// The client's other businesses, and whether each has been turned into its own request yet. This is what
-// makes one-engagement-per-request work: a client group fans out into more REQUESTS, raised deliberately,
-// rather than into more engagements inside this one.
+// The client's other businesses, and whether each has been turned into its own request yet.
 import { computed } from "vue";
 
 const props = defineProps({

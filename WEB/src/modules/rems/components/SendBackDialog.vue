@@ -11,14 +11,7 @@
       <q-separator />
 
       <q-card-section>
-        <!-- Who to hand it to. Naming whose job the rework is, which is otherwise left for the two of them
-             to work out between themselves; the other is still told, so nobody carries on with a request
-             that has moved.
-
-             Offered only where there is a real choice, and the CSE is a real choice only where the request
-             names one AND the initiator has a REMS delegate in force. The rework is the initiator's own
-             work and delegating is how they hand it out, so without that the CSE cannot edit the returned
-             setup either — offering them here would be offering a handover to somebody locked out of it. -->
+        <!-- Who to hand it to. -->
         <div class="sbd-label">Who should make the changes?</div>
         <div class="sbd-choices" role="radiogroup" aria-label="Who should make the changes?">
           <button
@@ -89,9 +82,7 @@ const props = defineProps({
   initiatorName: { type: String, default: "" },
   cseName: { type: String, default: "" },
   // Whether the CSE may actually be handed the rework: the request's own `canSendBackToCse`, which the
-  // server sets only when the initiator has a REMS delegate in force. Named apart from `cseName` because
-  // the two say different things — who the CSE IS, and whether this return may go to them — and the
-  // dialog explains the second rather than silently dropping the button.
+  // server sets only when the initiator has a REMS delegate in force.
   cseEligible: { type: Boolean, default: false }
 });
 const emit = defineEmits(["update:modelValue", "confirm"]);

@@ -2,19 +2,18 @@ using System.Text.Json;
 
 namespace EmsPortal.Api.Models.Rems;
 
-/// <summary>
-/// Inbound provider email-event webhook payload (WO-121). Accepts either a single event (its fields set at
-/// the top level) or a batch via <see cref="Events"/>. Every field is nullable so a malformed individual
-/// event is detected and skipped during processing rather than failing model binding for the whole request.
-/// </summary>
+/// <summary>Inbound provider email-event webhook payload (WO-121).</summary>
 public sealed class RemsEmailEventWebhookRequest
 {
-    /// <summary>A batch of events. When present and non-empty, the top-level single-event fields are ignored.</summary>
+    /// <summary>A batch of events.</summary>
     public List<RemsEmailEventNotification?>? Events { get; set; }
 
     // ---- Single-event form (fields flattened onto the root object) ----
 
-    /// <summary>Provider message id echoed from the outbound Message-ID; correlates to the anchoring Sent event.</summary>
+    /// <summary>
+    /// Provider message id echoed from the outbound Message-ID; correlates to the anchoring Sent
+    /// event.
+    /// </summary>
     public string? ProviderMessageId { get; set; }
 
     /// <summary>delivered | opened | failed | sent (case-insensitive).</summary>
@@ -62,7 +61,10 @@ public sealed class RemsEmailEventWebhookRequest
 /// <summary>One provider-reported email delivery event (WO-121).</summary>
 public sealed class RemsEmailEventNotification
 {
-    /// <summary>Provider message id echoed from the outbound Message-ID; correlates to the anchoring Sent event.</summary>
+    /// <summary>
+    /// Provider message id echoed from the outbound Message-ID; correlates to the anchoring Sent
+    /// event.
+    /// </summary>
     public string? ProviderMessageId { get; set; }
 
     /// <summary>delivered | opened | failed | sent (case-insensitive).</summary>
@@ -85,8 +87,7 @@ public sealed class RemsEmailEventNotification
 }
 
 /// <summary>
-/// Webhook ingestion outcome (WO-121): per-request counts, returned with 200 so providers never retry-storm.
-/// <paramref name="Processed"/> = new events appended; <paramref name="Duplicates"/> = already-recorded
-/// events skipped; <paramref name="Ignored"/> = malformed or unmatched events skipped without state change.
+/// Webhook ingestion outcome (WO-121): per-request counts, returned with 200 so providers never
+/// retry-storm.
 /// </summary>
 public sealed record RemsEmailEventIngestResult(int Processed, int Duplicates, int Ignored);

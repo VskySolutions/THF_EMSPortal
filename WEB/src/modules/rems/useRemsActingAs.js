@@ -3,13 +3,6 @@ import { LocalStorage } from "quasar";
 import { remsApi } from "services/api";
 
 // Whose REMS work the user is currently doing — their own, or a principal who has delegated to them.
-//
-// Held in LocalStorage rather than in memory so the choice survives a reload: the axios interceptor reads
-// it from there on every request, and a delegate who refreshed mid-task should not silently drop back
-// into their own seat and start filing work under their own name.
-//
-// Module-level and shared, so the header picker and any screen that needs to know are looking at one
-// answer rather than each keeping their own.
 const STORAGE_KEY = "remsActingForUserId";
 
 const options = ref([]);

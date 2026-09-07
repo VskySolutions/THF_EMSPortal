@@ -3,7 +3,10 @@ using FluentValidation;
 
 namespace EmsPortal.Api.Validators.Rems;
 
-/// <summary>Validates a REMS settings update (WO-114): each department mapping carries a code and a director, no duplicate departments.</summary>
+/// <summary>
+/// Validates a REMS settings update (WO-114): each department mapping carries a code and a director,
+/// no duplicate departments.
+/// </summary>
 public sealed class UpdateRemsSettingsRequestValidator : AbstractValidator<UpdateRemsSettingsRequest>
 {
     public UpdateRemsSettingsRequestValidator()

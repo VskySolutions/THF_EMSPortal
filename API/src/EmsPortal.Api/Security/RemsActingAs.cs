@@ -3,20 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Security;
 
-/// <summary>
-/// Resolves the "acting as" claim a delegate sends with a request, and decides whether they may.
-/// <para>
-/// The delegate chooses whose hat they are wearing and says so per request, via the
-/// <c>X-Rems-On-Behalf-Of</c> header, rather than the server inferring it from whoever happens to have
-/// delegated to them. That is Concur's model and it is the safer one: someone holding several delegations
-/// would otherwise have their actions attributed by guesswork, and every action would carry an ambiguity
-/// no audit trail could later resolve.
-/// </para>
-/// <para>
-/// The header is a CLAIM, never a grant. Nothing trusts it until it has been checked against a live
-/// delegation here, so sending someone else's id gets you exactly the access you already had.
-/// </para>
-/// </summary>
+/// <summary>Resolves the "acting as" claim a delegate sends with a request, and decides whether they may.</summary>
 public static class RemsActingAs
 {
     public const string HeaderName = "X-Rems-On-Behalf-Of";
@@ -25,9 +12,8 @@ public static class RemsActingAs
     public sealed record Seat(Guid PrincipalUserId, bool CanPrepare, bool CanSend);
 
     /// <summary>
-    /// The principal this call is being made for, or null when the caller is acting as themselves — which
-    /// covers no header, an unparseable one, the caller's own id, and a header naming someone who has not
-    /// delegated to them or whose delegation has lapsed. All four collapse to the same safe answer.
+    /// The principal this call is being made for, or null when the caller is acting as themselves —
+    /// which covers no header, an unparseable one, the caller's own id.
     /// </summary>
     public static async Task<Seat?> ResolveAsync(
         ControllerBase controller,

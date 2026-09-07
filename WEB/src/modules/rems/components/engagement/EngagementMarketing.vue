@@ -51,10 +51,6 @@
 
 <script setup>
 // The engagement marketing tags (AC-REMS-017): a searchable, grouped multi-select shown as removable chips.
-// Values are OptionSetItem ids.
-//
-// Controlled by the page (like the setup form beside it): it holds the selection, announces every change
-// (`change`), and the page's auto-save writes it. It has no save button of its own: the page has ONE Save.
 import { ref, computed, watch, nextTick } from "vue";
 import { remsApi } from "services/api";
 import AppTextField from "components/common/AppTextField.vue";
@@ -103,9 +99,7 @@ const filteredGroups = computed(() => {
     .filter((g) => g.items.length);
 });
 
-// Called by the page's save. The API requires at least one tag, so an empty selection cannot be written:
-// on an engagement that never had any that is a normal half-filled request, but on one that HAS tags it
-// is a removal the endpoint will not accept — and saying so beats reporting a save that did not happen.
+// Called by the page's save.
 const saveMarketing = async (engagementId) => {
   if (selected.value.length === 0) {
     return (props.engagement.marketingMethodIds || []).length

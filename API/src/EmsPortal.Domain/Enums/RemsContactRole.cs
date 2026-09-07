@@ -44,6 +44,9 @@ public enum RemsContactRole
     /// <summary>Finance Director (Government industry group).</summary>
     FinanceDirector,
 
+    /// <summary>The trustee or personal representative for a trust or estate. Optional for now.</summary>
+    TrustEstateContact,
+
     // ---- Retired ----
     // Neither is asked for any more: a client's banker and lawyer are their advisers rather than the
     // firm's contacts on the engagement, and the two boxes were left blank on almost every form. The

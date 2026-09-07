@@ -1,10 +1,7 @@
 <template>
   <div>
     <!-- 1 · Confirm Your Contact Details ------------------------------------------------------------
-         "Confirm", not "Enter": most of what is in these boxes is already on file — staff typed the name
-         and the email when they raised the request, and the invitation went to that address. Saying so
-         changes what the client does with the card: they read it and correct what is wrong, rather than
-         wondering why the form already knows their name. -->
+         "Confirm", not "Enter". -->
     <q-card flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Confirm Your Contact Details
@@ -17,9 +14,7 @@
       <q-card-section>
         <div class="row q-col-gutter-sm">
           <!-- An individual is a person, so the name is asked as two boxes and stays two: the record we
-               file them under has a given name and a family name, and one box left us guessing where to
-               cut it. A business or a government body has ONE name — its legal name — which does not
-               divide, so it keeps the single box. -->
+               file them under has a given name and a family name. -->
           <template v-if="isIndividual">
             <app-text-field
               v-model="payload.clientFirstName" label="First Name" required class="col-12 col-sm-6"
@@ -32,9 +27,7 @@
               :error="!!errors.clientLastName" :error-message="errors.clientLastName"
             />
             <!-- The generational particle on their name — Jr., Sr., III. Optional, and its own box rather
-                 than something typed into the last name: the name is what we file them under, and "Smith
-                 Jr." in that box is a client nobody finds by searching for their name. It sits after the
-                 surname, which is where it is read. -->
+                 than something typed into the last name: the name is what we file them under. -->
             <app-name-suffix-field v-model="payload.clientSuffix" class="col-4 col-sm-2" />
           </template>
           <app-text-field
@@ -42,8 +35,8 @@
             v-model="payload.clientName" label="Client/Entity Name" required class="col-12 col-sm-6"
             :error="!!errors.clientName" :error-message="errors.clientName"
           />
-          <!-- Locked wherever this form is shown: it is the address the invite went to, so a request
-               that named somebody else would be a record of a conversation that never happened. -->
+          <!-- Locked wherever this form is shown: it is the address the invite went to, so a request that
+               named somebody else would be a record of a conversation that never happened. -->
           <app-text-field
             v-model="payload.email" label="Email" readonly class="col-12 col-sm-6"
             :hint="emailHint"
@@ -54,7 +47,7 @@
             <app-phone-input v-model="payload.mobileNumber" label="Phone Number" />
           </div>
           <!-- Each option's description is its own tooltip, maintained by staff in Administration →
-               Option Sets. Choosing one opens a follow-up box for the specifics. -->
+               Option Sets. -->
           <app-select
             v-model="payload.referralSource" :options="referralSources" label="Referral Source"
             class="col-12 col-sm-6" clearable
@@ -75,10 +68,7 @@
             :placeholder="referralDetailPlaceholder"
           />
 
-          <!-- No spouse fields here. Whoever else is on this client's return — a spouse, a child, anybody
-               the firm is preparing for — is asked for once, in the Spouse & More Individuals card below,
-               where the form also asks the two things that actually matter about them: how their return
-               is filed, and who pays for it. -->
+          <!-- No spouse fields here. -->
 
           <!-- Business (and Trust and Estate, which is asked the same things): EIN -->
           <app-text-field
@@ -89,12 +79,8 @@
       </q-card-section>
     </q-card>
 
-    <!-- 2 · Address ---------------------------------------------------------------------------------
-         ONE card and, for almost every client, one address. The form used to ask for a physical address
-         and a mailing address as two required blocks with a "Copy from physical" button between them,
-         which made the commonest answer on the whole form — "they are the same" — the one that took the
-         most typing. It is a ticked box now, and the second block appears only for the clients whose
-         post really does go somewhere else. -->
+    <!-- 2 · Address --------------------------------------------------------------------------------- ONE
+         card and, for almost every client, one address. -->
     <q-card flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Physical &amp; Mailing Addresses
@@ -120,8 +106,7 @@
         />
 
         <!-- The box that decides whether there is a second address, at the END of the first one: it is a
-             question about the address just typed, and above it there was nothing yet to answer it about.
-             Ticked to start with, because for almost every client it is true. -->
+             question about the address just typed, and above it there was nothing yet to answer it about. -->
         <q-checkbox
           v-model="payload.mailingSameAsPhysical" dense color="primary" class="cif-same-as q-mt-sm"
           label="Mailing address is the same as physical address"
@@ -139,11 +124,7 @@
                 </q-tooltip>
               </q-icon>
             </div>
-            <!-- No "Copy from physical" here. The tickbox above IS that answer, and it is the better one:
-                 a copy gives two addresses that agree today and drift the moment one is corrected, while
-                 the tick says they are the same and keeps saying it. These boxes are only ever open
-                 because the client said their post goes somewhere else, so a button offering to fill them
-                 with the address they have just said it is NOT would undo the answer above it. -->
+            <!-- No "Copy from physical" here. -->
           </div>
           <app-address-fields
             v-model="payload.mailingAddress" required gutter="sm" :cols="ADDRESS_COLS"
@@ -153,13 +134,8 @@
       </q-card-section>
     </q-card>
 
-    <!-- 3 · Billing Information ---------------------------------------------------------------------
-         Who the invoice is for and where it goes, in one block and in that order: those are two halves of
-         one answer, and asked in two sections a client invoiced at two offices came back with two
-         addresses, two names and nothing saying which went with which.
-         REQUIRED now, and no longer inferred. "We will bill the mailing address, addressed to you" was
-         the form guessing on the client's behalf, and it guessed wrong for every client whose invoices
-         go to a bookkeeper. -->
+    <!-- 3 · Billing Information --------------------------------------------------------------------- Who
+         the invoice is for and where it goes, in one block and in that order. -->
     <q-card flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Billing Information
@@ -171,20 +147,13 @@
       <q-card-section>
         <div class="column q-gutter-sm">
           <!-- The BOX is only drawn where there is more than one: it exists to show a reader where one
-               block ends and the next begins, and around a lone block it is a bordered box inside a
-               bordered card, paying for a border and two lots of padding to separate one thing from
-               nothing. -->
+               block ends and the next begins. -->
           <div v-for="(row, i) in billingAddresses" :key="row.key" :class="{ 'cif-billing': severalBilling }">
             <div class="cif-addr-head cif-billing__head">
-              <!-- Numbered, and shown only once there is more than one. A lone block's heading said
-                   "Billing Information" directly under a card head saying "Billing Information" — the
-                   same words twice, and a whole line of the form to say them. -->
+              <!-- Numbered, and shown only once there is more than one. -->
               <div v-if="severalBilling" class="cif-subhead">Billing Information {{ i + 1 }}</div>
               <!-- BOTH sources, because either can be the right one: a client whose post goes to a PO box
-                   is often invoiced at the office they actually work from, and offering only the mailing
-                   address made them retype the physical one they had already given us. The copy moves the
-                   PLACE only — whoever it is addressed to stays as typed. The mailing button is absent
-                   while the two addresses are the same, since it would copy the physical one twice. -->
+                   is often invoiced at the office they actually work. -->
               <div class="cif-addr-copy">
                 <q-btn
                   flat dense no-caps size="sm" color="primary" icon="o_content_copy"
@@ -209,8 +178,7 @@
               </div>
             </div>
             <!-- Bound through the payload rather than through the `billingAddresses` computed above: the
-                 computed is for reading, and a v-model writing back into one is a warning waiting to
-                 happen the first time this field-set replaces the object instead of mutating it. -->
+                 computed is for reading. -->
             <app-address-fields
               v-model="payload.billingAddresses[i]" required
               contact contact-first contact-required contact-label="" gutter="sm" :cols="BILLING_COLS"
@@ -233,8 +201,7 @@
     </q-card>
 
     <!-- 4 · Spouse & More Individuals (individual only) ---------------------------------------------
-         Everyone else on this client's return. Asked of an individual and of nobody else: a business's
-         people are its contacts, and they are asked for in the Contacts card below. -->
+         Everyone else on this client's return. -->
     <q-card v-if="isIndividual" flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Spouse &amp; More Individuals
@@ -244,8 +211,8 @@
       </q-card-section>
       <q-separator />
       <q-card-section>
-        <!-- The client's own surname prefills each person added below: a spouse and children nearly
-             always share it, and it is theirs to type over where they do not. -->
+        <!-- The client's own surname prefills each person added below: a spouse and children nearly always
+             share it, and it is theirs to type over where they do not. -->
         <additional-individuals-fields
           v-model="payload.additionalIndividuals" :errors="errors"
           :default-last-name="payload.clientLastName"
@@ -270,14 +237,7 @@
       </q-card-section>
     </q-card>
 
-    <!-- Contacts (roles). Empty for an INDIVIDUAL, whose own details are the first card and whose family
-         is the fourth — the Self and Spouse roles asked both of those a second time. No Billing Contact
-         among them either: whoever an invoice is addressed to is asked for on the billing block itself,
-         above.
-         Only the roles the group is asked TODAY, so this card is the current form and nothing else. A
-         submission that answered a role since retired keeps that answer — it is echoed back untouched on
-         every save — and it is shown on the surfaces that report what was sent: the client's review step
-         and the staff panel, both of which put retired roles back through roleDefsFor's extraKeys. -->
+    <!-- Contacts (roles). -->
     <q-card v-if="contactRoleDefs.length" flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Contacts
@@ -296,13 +256,7 @@
       </q-card-section>
     </q-card>
 
-    <!-- Other entities: who to speak to, not a second set of business details. Each one becomes its own
-         EMS request, raised by the partner afterwards, which is where its details get asked for.
-         Asked of everyone EXCEPT an individual. A person is not a holding structure — the question is
-         about the client's other businesses, and for an individual the answer to "who else are we setting
-         up?" is the Spouse & More Individuals card above, which asks it in the terms that actually apply
-         to people. A submission that answered it before this keeps the answer: it is echoed back on every
-         save and still materialises, exactly as the retired contact roles do. -->
+    <!-- Other entities: who to speak to, not a second set of business details. -->
     <q-card v-if="!isIndividual" flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Other Entities
@@ -332,24 +286,21 @@
             </q-card-section>
             <q-card-section>
               <div class="row q-col-gutter-sm">
-                <!-- Two across on a tablet and three only from md: an email address in a third of a
-                     600px card is an email address nobody can read back to check it. -->
+                <!-- Two across on a tablet and three only from md: an email address in a third of a 600px
+                     card is an email address nobody can read back to check it. -->
                 <app-text-field
                   v-model="entity.fullName" label="Client/Entity Name" required
                   class="col-12 col-sm-6 col-md-4"
                   :error="!!entityErr(i, 'fullName')" :error-message="entityErr(i, 'fullName')"
                 />
                 <!-- Required, not "email or phone": each of these becomes its own EMS request, and that
-                     request is opened by emailing an intake form to this address. A row we cannot write
-                     to is a row that never becomes anything. -->
+                     request is opened by emailing an intake form to this address. -->
                 <app-text-field
                   v-model="entity.emailAddress" label="Email Address" type="email" required
                   class="col-12 col-sm-6 col-md-4"
                   :error="!!entityErr(i, 'emailAddress')" :error-message="entityErr(i, 'emailAddress')"
                 />
-                <!-- The same dial-code + number control the client's own phone above uses. These numbers
-                     are dialled by staff chasing an entity that has not answered, and a bare string gave
-                     no country to read them against — the component stores E.164, which carries it. -->
+                <!-- The same dial-code + number control the client's own phone above uses. -->
                 <div class="col-12 col-sm-6 col-md-4">
                   <app-phone-input v-model="entity.phoneNumber" label="Phone Number" />
                 </div>
@@ -368,21 +319,8 @@
 
 <script setup>
 // THE client intake field set — the cards a client fills in, and the cards an Admin corrects afterwards.
-//
-// It is a component rather than a stretch of the public page because two screens hold this form now: the
-// client's own anonymous page (PublicEmsForm) and the Admin's correction dialog
-// (EditSubmittedFormDialog). They differ in everything AROUND the form — one auto-saves against an invite
-// code and walks a review step, the other opens over a request and saves once — and in nothing inside it.
-//
-// The cards, in order: Confirm Your Contact Details · Address · Billing Information · Spouse & More
-// Individuals (an individual only) · Contract Details (a government body only) · Contacts (everyone
-// else) · Other Entities.
-//
-// It renders fields and nothing else: no loading, no saving, no action bar. The payload belongs to the
-// host and is written through directly (a `reactive` object from useRemsIntakeForm, which also knows how
-// to seed it, build it and say what is still missing).
 import { computed } from "vue";
-import { isBusinessIndustryGroup } from "modules/rems/useRemsMeta";
+import { isBusinessEntityType } from "modules/rems/useRemsMeta";
 import { addressErrors, addressHasAny } from "modules/rems/remsAddress";
 import {
   copyIntakeAddress, intakeRoleDefs, newBillingAddress, newRelatedEntity, relatedEntityHasData,
@@ -406,7 +344,7 @@ const payload = defineModel({ type: Object, required: true });
 const props = defineProps({
   // The client's entity type (lowercase code). Decides which questions appear — it is THF's own
   // classification, never something the client is asked to confirm, so it is a prop and not a field.
-  industryGroup: { type: String, default: "" },
+  entityType: { type: String, default: "" },
   // Per-field server messages, keyed by payload path (e.g. "roles.self.email").
   errors: { type: Object, default: () => ({}) },
   // The tenant's REMS.ReferralSource list, resolved by whoever is hosting this: the public page is
@@ -430,15 +368,8 @@ const ADDRESS_HINTS = {
     "place you are invoiced at."
 };
 
-// The grid every address block on this form uses, so a client reads the same shape whether they are
-// telling us where they live or where the invoice goes. Three steps, because the form is filled in on a
-// phone as often as on a desk:
-//   xs   — one box per line. There is no width to share below 600px.
-//   sm   — the country/state/city cascade three across, the two street lines side by side.
-//   md+  — the zip drops to a quarter, which is what a zip code is: a short box that spent the whole
-//          layout pretending to be as wide as a street name.
-// Nothing is set at lg or xl: this form is capped at 960px on the public page and 1100px in the admin's
-// correction dialog, so past md there is no more width to spend and the boxes would only get emptier.
+// The grid every address block on this form uses, so a client reads the same shape whether they are telling
+// us where they live or where the invoice goes.
 const ADDRESS_COLS = {
   country: "col-12 col-sm-4",
   state: "col-12 col-sm-4",
@@ -448,9 +379,7 @@ const ADDRESS_COLS = {
   postalCode: "col-12 col-sm-4 col-md-3"
 };
 
-// The billing block adds the three boxes saying who the invoice is for, and they LEAD it. At md they
-// share the first line with each other — 3 + 3 + 6 — and below that the email takes a line of its own
-// rather than sitting beside a country picker, which is what a plain half-width would have left it doing.
+// The billing block adds the three boxes saying who the invoice is for, and they LEAD it.
 const BILLING_COLS = {
   ...ADDRESS_COLS,
   firstName: "col-12 col-sm-6 col-md-3",
@@ -458,9 +387,9 @@ const BILLING_COLS = {
   email: "col-12 col-md-6"
 };
 
-const isIndividual = computed(() => props.industryGroup === "individual");
-const isBusiness = computed(() => isBusinessIndustryGroup(props.industryGroup));
-const isGovernment = computed(() => props.industryGroup === "government");
+const isIndividual = computed(() => props.entityType === "individual");
+const isBusiness = computed(() => isBusinessEntityType(props.entityType));
+const isGovernment = computed(() => props.entityType === "government");
 
 const referralDetailPlaceholder = computed(() => {
   const chosen = props.referralSources.find((o) => o.value === payload.value.referralSource);
@@ -470,7 +399,7 @@ const referralDetailPlaceholder = computed(() => {
 });
 
 // Every role this entity type is asked. Empty for an individual, which is what hides the whole card.
-const contactRoleDefs = computed(() => intakeRoleDefs(props.industryGroup));
+const contactRoleDefs = computed(() => intakeRoleDefs(props.entityType));
 
 // Where the client is invoiced. Read defensively: a payload seeded from a draft saved before this list
 // existed simply has none, and a missing key must render an empty section rather than throw on the way in.
@@ -479,8 +408,6 @@ const billingAddresses = computed(() => payload.value.billingAddresses || []);
 const canAddBillingAddress = computed(() => billingAddresses.value.length < MAX_BILLING_ADDRESSES);
 
 // Whether the client is invoiced in more than one place — which is what decides the block's own chrome.
-// One block needs no number, no heading (the card's own says it) and no box around it; several need all
-// three, or a reader cannot tell where one ends.
 const severalBilling = computed(() => billingAddresses.value.length > 1);
 
 function addBillingAddress () {
@@ -488,9 +415,7 @@ function addBillingAddress () {
   if (canAddBillingAddress.value) payload.value.billingAddresses.push(newBillingAddress());
 }
 
-// No confirmation. Unlike the Other Entities toggle — which throws away every row at once — this takes
-// one block off, and the block below it is still on screen to make the mistake obvious. Never offered on
-// the last one: billing is required.
+// No confirmation.
 function removeBillingAddress (i) {
   payload.value.billingAddresses.splice(i, 1);
 }

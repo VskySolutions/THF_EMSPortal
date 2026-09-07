@@ -2,11 +2,7 @@ using EmsPortal.Domain.Entities;
 
 namespace EmsPortal.Application.Abstractions.Persistence;
 
-/// <summary>
-/// Data access for REMS delegations — who may work whose requests. Self-service: a principal manages
-/// their own delegates, which is why every read here is keyed on one side of the pair rather than
-/// offering a tenant-wide list.
-/// </summary>
+/// <summary>Data access for REMS delegations — who may work whose requests.</summary>
 public interface IRemsDelegationRepository
 {
     /// <summary>The delegates a principal has named, whether or not they are currently in force.</summary>
@@ -32,10 +28,7 @@ public interface IRemsDelegationRepository
     Task<bool> HasActiveDelegateAsync(
         Guid principalUserId, DateOnly on, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// One pair's grant, or null. Used to authorise an acting-as request: the caller claims to be acting
-    /// for someone, and this is what decides whether they may.
-    /// </summary>
+    /// <summary>One pair's grant, or null.</summary>
     Task<REMSDelegation?> GetAsync(
         Guid principalUserId, Guid delegateUserId, CancellationToken cancellationToken = default);
 

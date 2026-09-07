@@ -2,33 +2,20 @@
   <q-page padding>
     <app-detail-header :items="breadcrumbs" :back-to="backTo">
       <template #actions>
-        <!-- EVERY action on the request lives here. There is a badge, a status chip and up to half a
-             dozen buttons — enough to run off the side of a laptop, never mind a phone — so they are
-             wrapped in a box of their own that stacks onto further lines rather than growing the header
-             sideways. The header wraps around it in turn, so on a phone this box and the Back button
-             take a line each instead of one of them running off the card.
-             Stepping through the form is the one thing NOT here: Prev / Next / the finish actions sit on
-             the tab strip, because they act on the tabs rather than on the request. -->
+        <!-- EVERY action on the request lives here. -->
         <div class="rf-head">
           <!-- The row helper rather than the bare code, so a request nobody has picked up says so here
-               exactly as it does in EMS Review instead of reading as though an admin is already on it.
-               The tooltip is the stage's own Description from Administration → Option Sets — the badge is
-               one or two words about who the request is waiting on, and the words alone do not say. -->
+               exactly as it does in EMS Review instead of reading as though an admin is already on it. -->
           <app-option-badge v-if="request" :option="requestStatusOption(request)" />
 
-          <!-- What the page is doing with what has been typed. It stands in for the Save button it
-               replaced, so it is present even while idle: a form with no Save on it has to say why.
-               An icon and nothing else — beside half a dozen labelled buttons, a status that is not one
-               of them should not read as loudly as they do. The words are on the tooltip. -->
+          <!-- What the page is doing with what has been typed. -->
           <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
             <q-spinner v-if="saveState === 'saving'" size="14px" />
             <q-icon v-else :name="saveChip.icon" size="15px" />
             <q-tooltip>{{ saveMessage ? `${saveChip.text} — ${saveMessage}` : saveChip.text }}</q-tooltip>
           </div>
 
-          <!-- The mode switch. Offered only where the stage actually grants an edit right, so it is never
-               a button that turns the page into a form nothing on it can be typed into. A new request has
-               no mode to switch: it is a form and nothing else until it exists. -->
+          <!-- The mode switch. -->
           <q-btn
             v-if="request && !isEditing && canEditAnything"
             unelevated no-caps color="primary" icon="o_edit" label="Edit"
@@ -38,17 +25,13 @@
             v-if="request" outline no-caps color="primary" icon="o_forum" label="Conversation"
             @click="conversationOpen = true"
           />
-          <!-- What the client has actually been sent, and whether it landed. Beside Send Reminder rather
-               than buried on a list, because "have we already chased them twice?" is the question asked
-               immediately before pressing it. -->
+          <!-- What the client has actually been sent, and whether it landed. -->
           <q-btn
             v-if="canReadEmailLog" outline no-caps color="primary" icon="o_mark_email_read"
             label="Email log" @click="emailLogOpen = true"
           />
 
-          <!-- Claiming the request. Filled and first among the workflow moves on a request nobody holds,
-               because on that request it is the ONLY thing an admin can do — every other admin action
-               below belongs to whoever picked it up. -->
+          <!-- Claiming the request. -->
           <q-btn
             v-if="canPickUp" unelevated no-caps color="amber-8" icon="o_pan_tool_alt"
             label="Pick up" :loading="acting" @click="pickUp"
@@ -57,9 +40,7 @@
           </q-btn>
 
           <!-- The workflow moves: each one hands the request to somebody else. -->
-          <!-- Submitting to the client belongs at the end of the tabs, where the work it completes is.
-               This is the fallback for a request with no Commission tab to put it on — one raised before
-               engagements existed, or one whose engagement is not this user's to see. -->
+          <!-- Submitting to the client belongs at the end of the tabs, where the work it completes is. -->
           <q-btn
             v-if="canSendToClient && !hasFinishTab" unelevated no-caps color="teal-7" icon="o_send"
             label="Submit to Client" :disable="!readyToSend" @click="openSend"
@@ -70,11 +51,8 @@
             v-if="canRemind" unelevated no-caps color="amber-8" icon="o_notifications_active"
             label="Send reminder" @click="openReminder"
           />
-          <!-- The client's own form link, for chasing them by any means other than the portal — a call,
-               a message from somebody's own mailbox. Beside Send reminder because it answers the same
-               moment: the client has not come back yet. The server decides when there is a link to copy —
-               it withholds one until the form has been sent and again once the client has answered — so
-               this appears and disappears with it rather than reasoning about the state itself. -->
+          <!-- The client's own form link, for chasing them by any means other than the portal — a call, a
+               message from somebody's own mailbox. -->
           <q-btn
             v-if="clientFormLink" outline no-caps color="primary" icon="o_content_copy"
             label="Client Form" @click="copyClientFormLink"
@@ -82,8 +60,7 @@
             <q-tooltip>Copy the client's intake form link</q-tooltip>
           </q-btn>
           <!-- The reply to Send back, and the only one of these buttons the INITIATOR or the CSE presses:
-               it appears on a request that came back to them for rework. Named for where the request
-               goes, like the two below it, which is exactly why it says which move it is. -->
+               it appears on a request that came back to them for rework. -->
           <q-btn
             v-if="canReturnToAdmin" unelevated no-caps color="primary" icon="o_assignment_turned_in"
             label="Return to admin" :loading="acting" @click="returnToAdmin"
@@ -93,10 +70,8 @@
               waiting
             </q-tooltip>
           </q-btn>
-          <!-- Send back and Hand back are two different moves that sound like one, and they sit two
-               buttons apart. This one gives the WORK back to whoever it belongs to and keeps the request;
-               the other gives the REQUEST back to the queue and keeps nothing. Both say which, in as many
-               words, rather than leaving a new admin to find out by pressing one. -->
+          <!-- Send back and Hand back are two different moves that sound like one, and they sit two buttons
+               apart. -->
           <q-btn
             v-if="canSendBack" outline no-caps color="orange-9" icon="o_assignment_return"
             label="Send back" @click="sendBackOpen = true"
@@ -106,8 +81,7 @@
               you once they have
             </q-tooltip>
           </q-btn>
-          <!-- Giving the request back to the queue. Last, and outlined: it is the undo of Pick up, not
-               a step in the work. -->
+          <!-- Giving the request back to the queue. -->
           <q-btn
             v-if="canHandBack" outline no-caps color="grey-8" icon="o_undo"
             label="Hand back" :loading="acting" @click="handBack"
@@ -131,13 +105,11 @@
     </q-banner>
 
     <template v-else>
-      <!-- Why this request is back with its initiator, and who said so. Shown above everything because it
-           is the instruction for the whole page. -->
+      <!-- Why this request is back with its initiator, and who said so. -->
       <q-banner v-if="openSendBack" dense class="rf-alert rf-alert--warn q-mb-md">
         <template #avatar><q-icon name="o_assignment_return" color="orange-9" /></template>
         <!-- Who it went to, on the returns that recorded a choice — the reader may be the CSE looking at
-             a request the admin handed to the partner, or the other way round, and the reason alone does
-             not say which of them is expected to act. -->
+             a request the admin handed to the partner, or the other way round. -->
         <div class="text-weight-medium">
           Sent back by {{ openSendBack.returnedBy || "an admin" }}
           <template v-if="openSendBack.returnedTo"> — for {{ openSendBack.returnedTo }} to action</template>
@@ -159,11 +131,8 @@
       </q-banner>
 
       <!-- ─── The workspace: the client's answers beside the referral being built from them ────────── -->
-      <!-- Once the client has submitted, this page is two things read against each other — what they
-           told us, and what the firm is filling in on the strength of it. So they sit side by side,
-           with a divider the reader can drag: 40 / 60 to start, because the left pane is a record to
-           consult and the right one is the work. Before the client answers there is nothing to put in
-           the left pane and the form has the page to itself. -->
+      <!-- Once the client has submitted, this page is two things read against each other — what they told
+           us, and what the firm is filling in on the strength of it. -->
       <div ref="workRef" class="rf-work" :class="{ 'rf-work--split': showSubmittedPane }">
         <template v-if="showSubmittedPane">
           <div class="rf-work__pane" :style="{ flexBasis: `${splitPct}%` }">
@@ -174,11 +143,7 @@
                   <div class="text-subtitle2 text-weight-medium">Submitted EMS Form</div>
                   <div class="text-caption text-grey-7">{{ submittedNote }}</div>
                 </div>
-                <!-- Correcting the client's answers, in the corner of the pane that holds them. Admins
-                     only: the client filled this in once, from a link that is spent, so somebody on this
-                     side has to be able to fix a mistyped EIN without issuing a second intake form —
-                     and that somebody is the Admin reviewing it, not its initiator. Gone once an
-                     approval round has frozen the request, which is the same rule the server applies. -->
+                <!-- Correcting the client's answers, in the corner of the pane that holds them. -->
                 <q-btn
                   v-if="canEditSubmission" flat dense no-caps size="sm" color="primary" icon="o_edit"
                   label="Edit Form" @click="editFormOpen = true"
@@ -197,8 +162,7 @@
           </div>
 
           <!-- Draggable, and reachable from the keyboard: the arrow keys move it in steps, Home puts it
-               back to the 40 / 60 it starts at. A divider that only answers a mouse is a divider some
-               readers cannot move. -->
+               back to the 40 / 60 it starts at. -->
           <div
             class="rf-work__gutter" role="separator" tabindex="0"
             aria-label="Resize the submitted form pane"
@@ -223,17 +187,15 @@
               </q-tabs>
 
               <div class="rf-tabs__end">
-                <!-- The one thing the tab strip cannot say for itself — why the rest of it is greyed out —
-                 parked at the end of the strip it is about, and only while it is still true. A banner
-                 over the form said it louder than it deserves and pushed the form down for everyone. -->
+                <!-- The one thing the tab strip cannot say for itself — why the rest of it is greyed out
+                     — parked at the end of the strip it is about, and only while it is still true. -->
                 <q-icon v-if="tabsNote" name="o_info" size="20px" color="primary" class="rf-tabs__note">
                   <q-tooltip anchor="bottom right" self="top right" max-width="320px" :delay="200">
                     {{ tabsNote }}
                   </q-tooltip>
                 </q-icon>
 
-                <!-- Step back. Absent on the first tab, and on a new request, where there is nowhere behind
-                 the one tab that works. -->
+                <!-- Step back. -->
                 <q-btn
                   v-if="prevTab" flat dense no-caps color="primary" icon="o_chevron_left" label="Prev"
                   class="q-px-sm" @click="goTab(prevTab.name)"
@@ -242,15 +204,14 @@
                 </q-btn>
 
                 <!-- The ONE save on the page: a request must exist before anything can be auto-saved
-                 against it, so on a brand-new request the create IS the step forward. It disappears
-                 the moment it has run, which is also when the strip wants its width back. -->
+                     against it, so on a brand-new request the create IS the step forward. -->
                 <q-btn
                   v-if="isNew" unelevated no-caps dense color="primary" icon-right="o_arrow_right"
                   label="Save as Draft &amp; Next" class="q-px-md" :loading="saving" @click="createDraft"
                 />
 
                 <!-- Filled while stepping on is the thing to do here, outlined where it shares the corner
-                 with the two ways out — on that tab they are the point and this is the aside. -->
+                     with the two ways out — on that tab they are the point and this is the aside. -->
                 <q-btn
                   v-else-if="showNext" dense no-caps color="primary" icon-right="o_chevron_right"
                   label="Next" class="q-px-md" :outline="atFinishTab" :unelevated="!atFinishTab"
@@ -260,8 +221,7 @@
                 </q-btn>
 
                 <!-- Commission is where the initiator's own work ends: past it the tabs are the client's
-                 answers and the approvers' round, neither of which they fill in. So instead of stepping
-                 on, this is where the request goes to the client. -->
+                     answers and the approvers' round, neither of which they fill in. -->
                 <q-btn
                   v-if="atFinishTab" unelevated dense no-caps color="teal-7" icon="o_send"
                   label="Submit to Client" class="q-px-md" :disable="!readyToSend" @click="openSend"
@@ -276,16 +236,14 @@
               <!-- ---------- Client Information ---------- -->
               <q-tab-panel name="client">
                 <detail-grid v-if="!isEditing" :rows="clientRows" />
-                <!-- Entity Type, Industry and the CSE are the page's to save — the entity type and the CSE
-                 belong to the request's EMS form record and the industry to its engagement, none of them
-                 to the client row — but this tab's to lay out, because all three are answers about the
-                 client. They are v-modelled down rather than rendered in a row of their own up here. -->
+                <!-- Entity Type, Industry and the CSE are the page's to save — the entity type and the
+                     CSE belong to the request's EMS form record and the industry to its engagement. -->
                 <client-information-fields
                   v-else
                   ref="clientFieldsRef"
                   v-model="clientForm"
-                  v-model:industry-group="setupForm.industryGroup"
-                  v-model:sub-industry="setupForm.subIndustry"
+                  v-model:entity-type="setupForm.entityType"
+                  v-model:industry="setupForm.industry"
                   v-model:cse-user-id="setupForm.cseUserId"
                   :cse-options="cseOptions"
                   :cse-hint="cseHint"
@@ -293,9 +251,9 @@
                   :client-locked="clientLocked"
                   :compact="showSubmittedPane"
                   :setup-readonly="!canEditSetup"
-                  :industry-group-options="industryGroupOptions"
-                  :industry-locked="industryLocked"
-                  :sub-industry-options="subIndustryOptions"
+                  :entity-type-options="entityTypeOptions"
+                  :entity-type-locked="entityTypeLocked"
+                  :industry-options="industryOptions"
                   :type-options="typeOptions"
                   :files="request?.files || []"
                   :attempted="attempted"
@@ -303,9 +261,8 @@
                   @remove-file="removeAttachment"
                 />
 
-                <!-- The client's other businesses, and whether each has been turned into its own request yet.
-                 Shown whether the tab is being read or edited: it is a list with one action, not a field
-                 anybody fills in. -->
+                <!-- The client's other businesses, and whether each has been turned into its own request
+                     yet. -->
                 <additional-entities-panel
                   v-if="additionalEntities.length" :rows="additionalEntities" class="q-mt-md"
                   @create-ems="createFollowUp"
@@ -318,16 +275,14 @@
 
                 <detail-grid v-else-if="!isEditing" :rows="setupRows" />
 
-                <!-- The entity type goes down read-only: the Government Audit card keys off it. The CSE is
-                 not here at all any more — it is asked on the Client Information tab, with the entity
-                 type it is saved alongside. -->
+                <!-- The entity type goes down read-only: the Government Audit card keys off it. -->
                 <engagement-setup-form
                   v-else
                   ref="setupRef"
                   :engagement="setupEngagement"
-                  :industry-group="setupForm.industryGroup"
+                  :entity-type="setupForm.entityType"
                   :dept-options="departmentOptions"
-                  :sub-service-line-options="subServiceLineOptions"
+                  :service-line-options="serviceLineOptions"
                   :tax-form-options="taxFormOptions"
                   :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
@@ -354,8 +309,7 @@
 
               <!-- ---------- Commission ---------- -->
               <q-tab-panel v-if="setupEngagement" name="commission">
-                <!-- No hint line here. What a percentage is OF is answered by the "Total allocated" line
-                 inside the form, which is the only place this tab now says anything about the number. -->
+                <!-- No hint line here. -->
                 <detail-grid v-if="!isEditing" :rows="commissionRows" />
                 <engagement-commission
                   v-else
@@ -367,8 +321,7 @@
 
               <!-- ---------- Approval ---------- -->
               <!-- Only ever reached by someone who may read it: the approver list is gated on managing
-               engagements, so for everyone else this tab does not exist until a round has actually been
-               opened, and then shows the record of it rather than the controls for running one. -->
+                   engagements. -->
               <q-tab-panel v-if="showApprovalTab" name="approval">
                 <template v-if="engagement">
                   <engagement-approval
@@ -386,9 +339,7 @@
 
               <!-- ---------- Activity ---------- -->
               <!-- What has HAPPENED to this request, as against the four tabs before it, which are what it
-                   SAYS. Tags sit at the top of it rather than in the header: they are the firm's own
-                   filing marks on the record — shared, unlike the personal colour a reader can put on its
-                   row in a list — and they belong beside the trail they help somebody find later. -->
+                   SAYS. Tags sit at the top of it rather than in the header. -->
               <q-tab-panel v-if="remsId" name="activity">
                 <entity-tags-panel :entity-type="EntityType.Rems" :entity-id="remsId" class="q-mb-md" />
                 <q-separator class="q-mb-md" />
@@ -400,8 +351,7 @@
       </div>
 
       <!-- No action bar: every button lives in one of the two corners at the top — the workflow moves in
-           the header, stepping through the form on the tab strip — so the tab ends on its last field with
-           no controls below it, and the only thing under the strip is the record's own provenance. -->
+           the header. -->
       <app-record-audit :audit="request?.audit" class="q-mt-md" />
     </template>
 
@@ -429,25 +379,6 @@
 
 <script setup>
 // THE REMS form: one tabbed page for creating, editing and reading a request.
-//
-// CREATING, EDITING AND READING ARE THE SAME PAGE, on three paths — /rems/requests/new,
-// /rems/requests/edit/:id and /rems/requests/:id — because they are the same material seen three ways.
-// Which one you are on is the URL itself: the page reads its own route NAME, and nothing is carried in a
-// query flag.
-//
-// The tabs are the parts of a referral — the client, the engagement setup, how it was won, who is paid for
-// it, and the approval round — not the steps of a wizard: every tab but the first is reachable in any
-// order and none of them gates another. What the CLIENT answered is not among them: it is a snapshot they
-// sent rather than a part of the referral the firm writes, and the left pane shows it.
-//
-// THERE IS ONE SAVE ON THE PAGE, and it is only there because a request has to EXIST before anything can
-// be written against it: saving the Client Information tab files the draft, and from that moment every
-// edit on every tab saves itself (see the auto-save block below).
-//
-// The page is the same for everyone; what differs is what it lets you touch. Editability is derived from
-// the request's STAGE rather than from which list you arrived by, because the two rework states hand the
-// setup to the initiator while the client's own answers stay read-only to them — a split the old
-// per-record locks could not express.
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl, EntityType } from "services/api";
@@ -456,8 +387,9 @@ import { formatDateOnly } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import {
-  useRemsMeta, useRemsOptionSets, useRemsEngagementOptionSets, useRemsIndustryGroups, REMS_SEAT_ROLES,
-  isCasDepartment, isAssuranceDepartment, isGcsDepartment, isTaxDepartment, requiresClientAcceptanceForm
+  useRemsMeta, useRemsOptionSets, useRemsEngagementOptionSets, useRemsEntityTypes, REMS_SEAT_ROLES,
+  isCasDepartment, isAssuranceDepartment, isGcsDepartment, isTaxDepartment, requiresClientAcceptanceForm,
+  isIndividualEntityType
 } from "modules/rems/useRemsMeta";
 import { useAutoSave } from "modules/rems/useAutoSave";
 import { REMS_STATUS, REMS_REWORK_STATUSES } from "modules/rems/remsStatus";
@@ -492,9 +424,9 @@ const { has } = usePermissions();
 const auth = useAuthStore();
 const { emsFormActivity, requestStatusOption, approverRoleLabel } = useRemsMeta();
 const { typeOptions, load: loadTypes } = useRemsOptionSets();
-const { industryGroupOptions, load: loadIndustryGroups } = useRemsIndustryGroups();
+const { entityTypeOptions, load: loadEntityTypes } = useRemsEntityTypes();
 const {
-  departmentOptions, subServiceLineOptions, subIndustryOptions,
+  departmentOptions, serviceLineOptions, industryOptions,
   marketingGroups, marketingUnavailable,
   taxFormOptions, taxFormUnavailable, billingPeriodOptions, personnelLevelOptions,
   load: loadEngagementOptions
@@ -517,10 +449,7 @@ const attempted = ref(false);
 
 const request = ref(null);
 const workspace = ref(null);
-// The engagement as the SERVER last described it, re-read after each auto-save pass. Kept apart from the
-// workspace because the two are wanted for opposite reasons: the tabs below are seeded from the workspace
-// and must not be re-seeded while they are being typed into, while the approval tab and the
-// send-for-approval gate have to follow what was actually written.
+// The engagement as the SERVER last described it, re-read after each auto-save pass.
 const engagementLive = ref(null);
 // The workspace is refused to anyone the request is not about. Tracked so the setup tab can say which
 // of the two silences it is — "not yours to work" or "this request never had an engagement".
@@ -560,33 +489,22 @@ const blankClient = () => ({
   existingClientReferenceId: null
 });
 const clientForm = reactive(blankClient());
-// The fields the page owns rather than a tab. All three are asked on the Client tab, but none of them is
-// the client component's to save: the CSE and the entity type go to the request's EMS form record in one
-// write, and the industry to the engagement in another — so the page holds the values and owns the two
-// writes, and the tab only renders them.
-// `industryGroup` is Entity Type and `subIndustry` is Industry — see the note at the top of useRemsMeta.
-const setupForm = reactive({ cseUserId: null, industryGroup: null, subIndustry: null });
+// The fields the page owns rather than a tab.
+const setupForm = reactive({ cseUserId: null, entityType: null, industry: null });
 
 // ---- View vs Edit ----
 // Two ways of looking at the same record: View renders every field as a label, Edit renders the controls.
-// It is the route rather than component state, so an Edit link from a list lands straight in the form and
-// a reload or a shared link keeps whichever the user was in. A request that does not exist yet is always
-// the form — there is nothing to read.
-//
-// Independent of the stage rules below: this decides whether controls are SHOWN, those decide whether any
-// of them accept input. A stage granting no edit right simply never offers the switch.
 const isEditing = computed(() => isNew.value || route.name === ROUTE_EDIT);
 
 const engagement = computed(() => engagementLive.value || workspace.value?.engagement || null);
 const engagementId = computed(() => engagement.value?.id || null);
 
 // The engagement a brand-new request will get, so the setup tab has a shape to render before there is
-// anything to write it to. A stable object, not a fresh one per read: the setup form re-seeds itself
-// whenever this changes identity, which on a new object every render would wipe what is being typed.
+// anything to write it to.
 const newEngagement = Object.freeze({
   id: null,
   department: null,
-  subServiceLine: null,
+  serviceLine: null,
   departmentDirector: null,
   engagementExecutive: null,
   billingManager: null,
@@ -635,29 +553,20 @@ const frozen = computed(() =>
 
 const isAdmin = computed(() => has(Permissions.RemsEngagementsManage));
 
-// THE admin on this request, not just an admin. A request is nobody's until one picks it up, and it stays
-// that one's while they hold it — so holding the permission is not the same as being the person this
-// request is with. The server draws exactly this line (RemsSetupAccess.CanWork); asking it here is what
-// stops an Edit button that opens a form every save 403s on.
+// THE admin on this request, not just an admin.
 const assignedAdminId = computed(() => request.value?.assignedAdmin?.id || null);
 // Super Admins and Tenant Admins are exempt from the whole ownership rule, so a request can be worked
-// around when the admin holding it is away. Mirrors RemsSetupAccess.IsElevated, which is what the server
-// actually enforces — the SPA only has to agree with it or the page hides what a save would accept.
+// around when the admin holding it is away.
 const isElevated = computed(() =>
   auth.roles.includes("SuperAdmin") || auth.roles.includes("TenantAdmin"));
 const isHoldingAdmin = computed(() =>
   isElevated.value ||
   (isAdmin.value && !!assignedAdminId.value && assignedAdminId.value === auth.user?.userId));
-// Nobody has taken this one. Any stage but draft, which is not out with anybody yet — an admin may claim a
-// request while the client is still filling their form, and often should: it settles who will handle the
-// answers before they arrive rather than after.
+// Nobody has taken this one.
 const awaitingPickUp = computed(() =>
   !isNew.value && status.value !== REMS_STATUS.DRAFT && !assignedAdminId.value);
 
 // The client tab belongs to the initiator while the request is theirs, and to the admin while it is his.
-// In the two REWORK states it is read-only to the INITIATOR — only the setup was sent back — but not to an
-// admin: a send-back asks the initiator for changes, it does not hand the request away, and an admin
-// locked out of a request they were reviewing minutes earlier cannot fix the typo they sent it back over.
 const canEditClient = computed(() => {
   if (frozen.value) return false;
   if (isAdminStage.value) return isHoldingAdmin.value;
@@ -672,20 +581,16 @@ const canEditSetup = computed(() => {
   return isInitiatorStage.value;
 });
 // Whether there is anything on this page this user could change at this stage — what decides if the Edit
-// switch is offered at all. Every tab that edits is one of these two now: what the client submitted is
-// read from the snapshot, not corrected here.
+// switch is offered at all.
 const canEditAnything = computed(() => canEditClient.value || canEditSetup.value);
 
 // Whether the page has anything of its own to write. Same answer as above, kept separate because they are
 // separate questions — one asks what this user may change, the other what the page's Save writes.
 const canSaveForm = computed(() => canEditClient.value || canEditSetup.value);
 
-// The intake form has gone out naming this client, at this address and number. All three are settled from
-// that moment: the invite cannot be un-sent, and a request that then names somebody else — or somewhere
-// else to reach them — is a record of a conversation that never happened. Draft is the window to change
-// who the request is for; sending it is what closes it.
+// The intake form has gone out naming this client, at this address and number.
 const clientLocked = computed(() => !isNew.value && status.value !== REMS_STATUS.DRAFT);
-const industryLocked = computed(() => !isNew.value && status.value !== REMS_STATUS.DRAFT);
+const entityTypeLocked = computed(() => !isNew.value && status.value !== REMS_STATUS.DRAFT);
 
 const lockedReason = computed(() => {
   if (status.value === REMS_STATUS.PENDING_APPROVAL) {
@@ -695,9 +600,7 @@ const lockedReason = computed(() => {
   if (status.value === REMS_STATUS.AWAITING_CUSTOMER && !canEditClient.value) {
     return "The intake form is with the client.";
   }
-  // The state this whole page is read-only in for a reason the reader can do something about. Only said to
-  // the admins: to the initiator it is simply a request they have handed on, and to an elevated caller it
-  // is not read-only at all.
+  // The state this whole page is read-only in for a reason the reader can do something about.
   if (isAdminStage.value && isAdmin.value && !isHoldingAdmin.value) {
     return assignedAdminId.value
       ? `${request.value?.assignedAdmin?.name || "Another admin"} picked this request up. Only they can work it.`
@@ -743,18 +646,14 @@ const canSendBack = computed(() => isAdminStage.value && isHoldingAdmin.value);
 const canRouteForApproval = computed(() =>
   isAdminStage.value && isHoldingAdmin.value && has(Permissions.RemsApprovalsSend));
 
-// Claiming the request, and giving it back. Pick-up is offered on any unclaimed request an admin can
-// reach; handing back is the holder's own move, and it is what puts a request taken by mistake back in
-// front of everybody. Both ask for the admin's own permission on top of the stage, so the buttons never
-// appear to the initiator reading their own request.
+// Claiming the request, and giving it back.
 const canPickUp = computed(() =>
   awaitingPickUp.value && isAdmin.value && has(Permissions.RemsRequestsAssign));
 const canHandBack = computed(() => isHoldingAdmin.value && has(Permissions.RemsRequestsAssign));
 
 const pickUp = async () => {
-  // Asked the same way Hand back is, and for the same reason: this moves the request from everybody to
-  // one person. Until it is handed back no other admin can work it, so it is worth a beat — and on a
-  // request opened from a notification or a link, the button is right where Edit would be.
+  // Asked the same way Hand back is, and for the same reason: this moves the request from everybody to one
+  // person.
   const ok = await confirm({
     title: "Pick this request up",
     message: "The request becomes yours and its engagement setup opens for you to work. No other admin " +
@@ -796,17 +695,7 @@ const handBack = async () => {
   }
 };
 
-// The lighter of the two completeness bars: enough to ask the client for their details. The full one —
-// the engagement team, realization, a marketing method, the signed CAF on an audit — is enforced when the
-// round is actually routed, by the API.
-//
-// The COMMISSION is on this lighter bar all the same, and it is the one thing here that is not about the
-// client at all: the splits divide one commission, every recipient becomes a required approver, and a
-// division that does not add up is one the approvers would be asked to accept later — on a request that
-// has already gone out. Settling it before the client is written to is the whole point.
-//
-// Rounded to 2dp before comparing, as the Commission tab does: three 33.33/33.34 splits sum to
-// 100.00000000000001 in binary floating point and would otherwise never be sendable.
+// The lighter of the two completeness bars: enough to ask the client for their details.
 const round2 = (n) => Math.round(n * 100) / 100;
 const commissionTotal = computed(() => round2(
   (engagement.value?.commissionSplits || []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
@@ -814,23 +703,21 @@ const commissionCount = computed(() => (engagement.value?.commissionSplits || []
 const commissionAllocated = computed(() => commissionTotal.value === 100);
 
 const readyToSend = computed(() =>
-  !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.industryGroup &&
-  !!setupForm.subIndustry && commissionAllocated.value);
+  !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.entityType &&
+  !!setupForm.industry && commissionAllocated.value);
 const sendBlockedReason = computed(() => {
   if (!clientForm.customerEmail?.trim()) return "The client has no email address to send the form to.";
   if (!setupForm.cseUserId) return "Choose a CSE first — it is on the Client Information tab.";
-  if (!setupForm.industryGroup) {
+  if (!setupForm.entityType) {
     return "Choose an entity type on the Client Information tab — it decides what the client is asked.";
   }
   // Required now, where it used to be optional. It is how the engagement is classified and reported on,
   // and a client whose trade nobody recorded at intake is one nobody goes back and records it for.
-  if (!setupForm.subIndustry) {
+  if (!setupForm.industry) {
     return "Choose an industry on the Client Information tab — the Entity Type beside it narrows the list.";
   }
   if (!commissionAllocated.value) {
-    // Naming nobody is its own sentence. "Totals 0% — the recipients must add up to 100%" points at
-    // recipients that do not exist, and no recipients is not "no commission on this one" — it is a
-    // commission that has not been settled, which is the thing this bar exists to stop going out.
+    // Naming nobody is its own sentence.
     if (!commissionCount.value) {
       return "No commission recipients yet — the Commission tab must name recipients adding up to 100% " +
         "before this request can be sent to the client.";
@@ -846,20 +733,13 @@ const hasSubmission = computed(() => !!workspace.value?.client);
 
 // ---- The submitted-form pane ----
 // Shown whenever there is a submission to show, in BOTH modes: reading a request and correcting one are
-// each done against what the client actually said. A request being composed has no client and no
-// answers, so no pane.
+// each done against what the client actually said.
 const showSubmittedPane = computed(() => !isNew.value && hasSubmission.value);
 
-// Whether the client's answers are this caller's to correct. Mirrors the endpoint exactly — an Admin
-// (rems.engagements.manage, which is what the Admin / Tenant Admin / Super Admin roles carry), and not
-// once an approval round has frozen the request. Deliberately NOT narrowed to the admin HOLDING the
-// request: a typo in the client's own answers is a fact about the client, not part of the setup one
-// admin is working, and the endpoint draws the same line.
+// Whether the client's answers are this caller's to correct.
 const canEditSubmission = computed(() => showSubmittedPane.value && isAdmin.value && !frozen.value);
 
-// The pane's caption. It stops claiming to be untouched once somebody has touched it: an admin reading
-// an EIN here is entitled to know whether it is what the client typed or what a colleague corrected it
-// to. The panel below fills in who and when.
+// The pane's caption.
 const submittedNote = computed(() => (canEditSubmission.value
   ? "What the client submitted. Corrections are recorded against the admin who makes them."
   : "Read-only snapshot of exactly what the client submitted."));
@@ -867,9 +747,7 @@ const submittedNote = computed(() => (canEditSubmission.value
 // A correction replaces the stored snapshot, so the pane behind the dialog has to re-read it.
 const onSubmissionCorrected = () => { submittedPanelRef.value?.reload(); };
 
-// 40 / 60 — the left pane is a record to consult, the right one is the work. Kept per browser once the
-// reader moves it: a preference about how somebody reads, not a fact about the request, so it is not
-// worth a round trip and it should not follow them onto a colleague's screen.
+// 40 / 60 — the left pane is a record to consult, the right one is the work.
 const DEFAULT_SPLIT = 40;
 const MIN_SPLIT = 25;
 const MAX_SPLIT = 65;
@@ -881,8 +759,7 @@ const readStoredSplit = () => {
   try {
     const stored = Number(window.localStorage.getItem(SPLIT_KEY));
     // Clamped on the way in as well as on the way out: what comes back is whatever is in that browser's
-    // storage, which a previous version's limits — or a person with the developer tools open — may not
-    // agree with.
+    // storage.
     return Number.isFinite(stored) && stored > 0 ? clampSplit(stored) : DEFAULT_SPLIT;
   } catch {
     // Private windows and blocked site data throw on the accessor itself. The default is a fine answer.
@@ -948,10 +825,6 @@ const cseHint = computed(() => (cseOptions.value.length
 // ---- The Approval tab ----
 // Reading the approver list is gated on managing engagements, which the initiator does not hold — so
 // showing them the section would render a bare 403 on a tab they could do nothing with anyway.
-//
-// Approval is not their step: the admin opens the round once the client's intake is in. So for anyone who
-// cannot run one, the tab appears only once a round HAS been opened — at which point there is something
-// worth reading, and the approval history (gated on reading requests, which they do hold) is what they get.
 const ROUND_OPENED = ["PendingApproval", "Approved", "Rejected"];
 const approvalStarted = computed(() => ROUND_OPENED.includes(engagement.value?.status));
 const canManageApproval = computed(() => isAdmin.value);
@@ -969,10 +842,7 @@ const approvalNote = computed(() => {
 });
 
 // ---- Tabs ----
-// One per part of the referral. Which ones exist depends on the record rather than on the user's progress:
-// no Marketing or Commission where there is no engagement to hang them off, and no Approval until there is
-// a round to show. What the client answered is not a tab — "View Submitted Form" in the header opens the
-// snapshot they sent.
+// One per part of the referral.
 const TABS = [
   { name: "client", label: "Client Information", icon: "o_person" },
   { name: "setup", label: "Engagement Setup", icon: "o_work" },
@@ -1002,17 +872,13 @@ const tabs = computed(() => {
   }));
 });
 
-// What the greyed-out tabs mean, for the one state in which they are greyed out. Empty the rest of the
-// time, and the icon that carries it goes with it — there is nothing to explain about a strip where
-// every tab works.
+// What the greyed-out tabs mean, for the one state in which they are greyed out.
 const tabsNote = computed(() => (isNew.value
   ? "Start with the client. Saving this first tab files the request as a draft, which is what the " +
     "remaining tabs are filled against — and from that point everything you type saves itself."
   : ""));
 
-// Held in the URL, so a reload or a shared link comes back to the tab that was open. A tab that is not on
-// this record — a stale link, or one whose section does not apply — falls back to the first rather than
-// rendering an empty card.
+// Held in the URL, so a reload or a shared link comes back to the tab that was open.
 const tab = computed({
   get: () => {
     const wanted = route.query.tab;
@@ -1024,9 +890,7 @@ const tab = computed({
 });
 
 // ---- Stepping through the tabs ----
-// The strip is the map; these are the path through it, so nobody has to know which tab comes next. Both
-// skip over anything disabled, which on a new request is every tab but the first — so a request being
-// composed has no step of its own and the create button below stands in for one.
+// The strip is the map; these are the path through it, so nobody has to know which tab comes next.
 const goTab = (name) => { tab.value = name; };
 
 const stepTab = (delta) => {
@@ -1044,9 +908,7 @@ const FINISH_TAB = "commission";
 const hasFinishTab = computed(() => tabs.value.some((t) => t.name === FINISH_TAB && !t.disable));
 // Only where there is something to finish WITH — Submit to Client is the whole of finishing here.
 const atFinishTab = computed(() => tab.value === FINISH_TAB && canSendToClient.value);
-// Finishing does not REPLACE stepping on. For the initiator in draft there is nothing past Commission, so
-// submitting is all there is — but once a round has been opened, Approval sits behind it and the admin
-// reviewing it still needs the step.
+// Finishing does not REPLACE stepping on.
 const showNext = computed(() => !!nextTab.value);
 
 // ---- View mode: the same fields, as a record rather than a form ----
@@ -1060,9 +922,7 @@ const nameOf = (options, id) => (id ? options.find((o) => o.value === id)?.label
 const currency = (v) =>
   (v === null || v === undefined || v === "" ? "" : `$${Number(v).toLocaleString()}`);
 
-// Calendar dates read MM/DD/YYYY and are never timezone-shifted — see formatDateOnly. Blank rather than
-// an em dash for a missing one: these rows go through DetailGrid, which renders its own placeholder and
-// drops the ones marked hideWhenEmpty.
+// Calendar dates read MM/DD/YYYY and are never timezone-shifted — see formatDateOnly.
 const dateOnly = (v) => formatDateOnly(v, "");
 
 // Marketing options arrive grouped for the picker; flattened here to turn stored ids back into labels.
@@ -1083,8 +943,8 @@ const clientRows = computed(() => [
   { label: "Client Email Address", value: clientForm.customerEmail },
   { label: "Client Phone Number", value: clientForm.customerMobileNumber },
   { label: "Relationship to THF", value: labelOf(typeOptions.value, clientForm.type) },
-  { label: "Entity Type", value: labelOf(industryGroupOptions.value, setupForm.industryGroup) },
-  { label: "Industry", value: labelOf(subIndustryOptions.value, setupForm.subIndustry) },
+  { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
+  { label: "Industry", value: labelOf(industryOptions.value, setupForm.industry) },
   // Whose client this is. Read here rather than under the engagement setup, which is where it is asked.
   { label: "CSE", value: nameOf(cseOptions.value, setupForm.cseUserId) },
   // Read off the request rather than a picker: nobody chooses this, an admin claims it. Blank until one
@@ -1109,18 +969,16 @@ const clientRows = computed(() => [
 const setupRows = computed(() => {
   const e = engagement.value;
   if (!e) return [];
-  // The same sequence the form is filled in, so reading a request and typing one describe it in the
-  // same order. Entity Type, Industry and the CSE are not here — all three are read on the Client tab,
-  // where they are now asked.
+  // The same sequence the form is filled in, so reading a request and typing one describe it in the same
+  // order.
   return [
-    { label: "Service Line", value: labelOf(subServiceLineOptions.value, e.subServiceLine) },
+    { label: "Service Line", value: labelOf(serviceLineOptions.value, e.serviceLine) },
     { label: "Department", value: labelOf(departmentOptions.value, e.department) },
     { label: "Department Director", value: e.departmentDirector?.name },
     { label: "Engagement Executive", value: e.engagementExecutive?.name },
     { label: "Billing Manager", value: e.billingManager?.name },
     // Every row from here down is asked of some departments and not others, so the summary asks the same
-    // questions the form did. A field the form never offered has to be absent here rather than blank —
-    // otherwise the review reads as an engagement somebody failed to finish.
+    // questions the form did.
     ...(isAssuranceDepartment(e.department)
       ? [{ label: "Engagement Fee", value: currency(e.engagementFee) }]
       : isGcsDepartment(e.department)
@@ -1177,8 +1035,7 @@ const marketingRows = computed(() => [{ label: "Marketing", value: marketingLabe
 const commissionRows = computed(() => [{ label: "Commission", value: commissionLabels.value, wide: true }]);
 
 // ---- Load ----
-// Every people picker here is scoped to the ROLE of the same name, held on the user's own page. A role
-// nobody holds yields an empty list on purpose rather than quietly offering everyone.
+// Every people picker here is scoped to the ROLE of the same name, held on the user's own page.
 
 const toOptions = (rows) => (rows || []).map((r) => ({ label: r.name, value: r.id }));
 
@@ -1195,12 +1052,7 @@ const loadPickers = async () => {
   billingManagerOptions.value = toOptions(billing);
 };
 
-// The CSE, the Entity Type and the Industry as they were picked BEFORE the request existed. All three are
-// asked on the first tab, which a request being composed can fill in, and none of them can be written at
-// create time: the create writes the client row only, the CSE and the entity type are filed together on
-// the EMS form record, and the industry needs an engagement id. So they are carried across the reload that
-// follows the create — `seedForms` reads a server that does not have them yet, and would otherwise wipe
-// three answers the user just gave.
+// The CSE, the Entity Type and the Industry as they were picked BEFORE the request existed.
 let pendingSetupPick = null;
 
 const seedForms = (detail, ws) => {
@@ -1216,16 +1068,12 @@ const seedForms = (detail, ws) => {
   clientForm.type = detail.type || "";
   clientForm.existingClientReferenceId = detail.existingClientReferenceId || null;
   setupForm.cseUserId = detail.cse?.id || pendingSetupPick?.cseUserId || null;
-  setupForm.industryGroup =
-    ws?.industryGroup || detail.industryGroup || pendingSetupPick?.industryGroup || null;
-  setupForm.subIndustry = ws?.engagement?.subIndustry || pendingSetupPick?.subIndustry || null;
+  setupForm.entityType =
+    ws?.entityType || detail.entityType || pendingSetupPick?.entityType || null;
+  setupForm.industry = ws?.engagement?.industry || pendingSetupPick?.industry || null;
 };
 
 // The reasons behind the LAST failed round, so the initiator sees what to fix without opening history.
-// The history comes back newest round first, so the first Rejected one IS the latest — this used to
-// reverse the list to reach it, back when the server returned the rounds oldest first. Reversing now would
-// quietly surface the reasons from the FIRST failed round instead, which on a request that has been round
-// three times is somebody else's objection, already answered.
 const loadDeclineReasons = async (id) => {
   if (!id || status.value !== REMS_STATUS.CHANGES_REQUESTED) return [];
   const rounds = await remsApi.approvalHistory(id).catch(() => []);
@@ -1244,17 +1092,16 @@ const refreshEngagement = async () => {
 };
 
 // ---- What the page writes ----
-// Only the client half is enforced, because it is what the API requires to accept a request at all. The
-// engagement setup saves as far as it has been filled — an initiator raising a referral may not know the
-// fee or the billing manager yet. Completeness is enforced where it bites: sending the intake link needs a
-// CSE and an industry group, and routing for approval needs the rest, which the API checks.
+// Only the client half is enforced, because it is what the API requires to accept a request at all.
 const clientProblem = () => {
-  if (!clientForm.clientName?.trim()) return "Search for the client, or type the new client's name.";
+  // Point at the box that is actually blank: for an individual that is First/Last Name, not the search.
+  if (!clientForm.clientName?.trim()) {
+    return isIndividualEntityType(setupForm.entityType)
+      ? "Give the client's first and last name."
+      : "Search for the client, or type the new client's name.";
+  }
   if (!clientForm.type) return "Choose how this referral relates to THF's records.";
-  // The email, specifically. A mobile number does not stand in for it: the intake form is emailed, so a
-  // request without an address cannot be sent to the client at all. (The API still accepts either, so
-  // that requests raised elsewhere — a follow-up EMS off an entity with only a phone number — are not
-  // refused outright; they simply cannot be saved from this form until the address is filled in.)
+  // The email, specifically.
   if (!clientForm.customerEmail?.trim()) {
     return "Give the client's email address — the intake form is emailed to them.";
   }
@@ -1262,14 +1109,11 @@ const clientProblem = () => {
 };
 
 // No `description`: "Message from Partner" is not on the form, and leaving the field out of the payload is
-// what preserves it — the endpoint reads an omitted field as "leave this alone", so whatever an older
-// request recorded stays recorded.
+// what preserves it — the endpoint reads an omitted field as "leave this alone".
 const clientPayload = () => ({
   type: clientForm.type,
   clientName: clientForm.clientName,
-  // The PARTS, so the server does not have to guess where a name splits. "" rather than null on all of
-  // them, for the same reason the suffix is: the endpoint reads an omitted field as "leave it alone", so
-  // a value taken back off would otherwise stay on the record.
+  // The PARTS, so the server does not have to guess where a name splits.
   clientFirstName: clientForm.clientFirstName || "",
   clientLastName: clientForm.clientLastName || "",
   clientCorporateName: clientForm.clientCorporateName || "",
@@ -1281,12 +1125,7 @@ const clientPayload = () => ({
 
 // ---- Auto-save ----
 // Everything after the first save writes itself, part by part, in the order the records depend on each
-// other: the request, then the CSE + entity type on its intake form, then the engagement — the client's
-// industry first, because it is asked on the first tab and must save without the setup tab ever having
-// been opened.
-//
-// A part that is not fillable yet returns why instead of failing — a commission recipient added a second
-// ago has no percentage on them, and that is someone still typing, not an error to shout about.
+// other: the request, then the CSE + entity type on its intake form.
 const autoSaveOn = computed(() =>
   !isNew.value && !!remsId.value && isEditing.value && canSaveForm.value);
 
@@ -1322,29 +1161,24 @@ const {
   form: async () => {
     if (!canEditSetup.value) return "";
     // CSE and Entity Type live on the EMS form record, which is what the client's link is minted from
-    // (`industryGroup` on the wire — see the note at the top of useRemsMeta). Both or neither: the
-    // endpoint requires the pair, so the reason names whichever half is still blank rather than leaving
-    // the user to work out which one it wanted. Both are on the Client Information tab now, which is why
-    // they read as one answer there rather than as a field on each of two tabs.
-    if (!setupForm.cseUserId || !setupForm.industryGroup) {
-      return setupForm.industryGroup
+    // (`entityType` on the wire).
+    if (!setupForm.cseUserId || !setupForm.entityType) {
+      return setupForm.entityType
         ? "The CSE and the Entity Type are saved together — choose a CSE on the Client Information tab."
         : "The CSE and the Entity Type are saved together — choose an Entity Type on the Client Information tab.";
     }
     await remsApi.saveForm(remsId.value, {
       cseUserId: setupForm.cseUserId,
-      industryGroup: setupForm.industryGroup
+      entityType: setupForm.entityType
     });
     return "";
   },
-  // The client's trade. Asked on the Client tab but stored on the ENGAGEMENT, so the page writes it rather
-  // than the setup form below: that form exists only once its own tab has been opened, and a field on the
-  // first tab cannot depend on somebody having visited the second.
+  // The client's trade.
   industry: async () => {
     if (!canEditSetup.value || !engagementId.value) return "";
     // Empty string, not null — the endpoint reads null as "leave this field alone", so clearing the
     // picker has to say so out loud or the old value comes back on the next read.
-    await remsApi.updateEngagement(engagementId.value, { subIndustry: setupForm.subIndustry ?? "" });
+    await remsApi.updateEngagement(engagementId.value, { industry: setupForm.industry ?? "" });
     return "";
   },
   // Only a request raised before engagements existed has none, and there is nowhere to put the setup for
@@ -1372,8 +1206,8 @@ const {
 watch(clientForm, () => markDirty("client"), { deep: true });
 // `setupForm` is two writes, so it is two flags rather than one deep watcher: the CSE and the entity type
 // go to the EMS form record together, the industry to the engagement.
-watch([() => setupForm.cseUserId, () => setupForm.industryGroup], () => markDirty("form"));
-watch(() => setupForm.subIndustry, () => markDirty("industry"));
+watch([() => setupForm.cseUserId, () => setupForm.entityType], () => markDirty("form"));
+watch(() => setupForm.industry, () => markDirty("industry"));
 
 const saveChip = computed(() => ({
   saving: { tone: "busy", icon: "o_sync", text: "Saving…" },
@@ -1422,21 +1256,17 @@ const load = async () => {
     await nextTick();
     resetSaves();
     resumeSaves();
-    // Whatever was picked before the request existed is writable against it now. Marked rather than
-    // written here so it goes through the same savers as any other edit — including the entity type's
-    // "choose a CSE too", which is answered on this same first tab.
+    // Whatever was picked before the request existed is writable against it now.
     if (pendingSetupPick) {
-      if (pendingSetupPick.industryGroup || pendingSetupPick.cseUserId) markDirty("form");
-      if (pendingSetupPick.subIndustry) markDirty("industry");
+      if (pendingSetupPick.entityType || pendingSetupPick.cseUserId) markDirty("form");
+      if (pendingSetupPick.industry) markDirty("industry");
       pendingSetupPick = null;
     }
   }
 };
 
 // One request per page, but the page outlives the id: creating one replaces "new" with its id, and the
-// Create-EMS action on another of the client's businesses moves it to a different request entirely. Both
-// are the same route record, so the component is re-used and has to re-read rather than assume its first
-// load still describes what is on screen.
+// Create-EMS action on another of the client's businesses moves it to a different request entirely.
 watch(remsId, (id) => {
   if (id) load();
 });
@@ -1449,8 +1279,7 @@ watch(tab, async (name) => {
 });
 
 // Reading and editing are two paths now, so switching between them is a navigation rather than a query
-// flip. Replace, not push: it is the same record either way and Back should leave the page, not toggle it.
-// The query rides along so the tab you were on survives the switch.
+// flip.
 const setMode = async (mode) => {
   await flushSaves();
   router.replace({
@@ -1462,7 +1291,7 @@ const setMode = async (mode) => {
 
 // ---- The one save: filing the draft ----
 // A request has to exist before anything else on this page can be written against it, so the first tab is
-// committed by hand. Everything from here is auto-saved.
+// committed by hand.
 const createDraft = async () => {
   attempted.value = true;
   const problem = clientProblem();
@@ -1472,13 +1301,11 @@ const createDraft = async () => {
   }
 
   saving.value = true;
-  // The create writes the client row only. The CSE and the two classifications on this tab belong to
-  // records that do not exist until it returns, so they ride across the reload instead (see
-  // `pendingSetupPick`).
+  // The create writes the client row only.
   pendingSetupPick = {
     cseUserId: setupForm.cseUserId,
-    industryGroup: setupForm.industryGroup,
-    subIndustry: setupForm.subIndustry
+    entityType: setupForm.entityType,
+    industry: setupForm.industry
   };
   // Held outside the try: once the request exists, this page is about THAT request whatever fails
   // afterwards, or a second attempt would file a second copy of it.
@@ -1507,9 +1334,7 @@ const createDraft = async () => {
   }
 };
 
-// Takes one already-saved attachment off the request. Confirmed first: it is not part of the autosaved
-// form — it writes immediately, and the document it detaches is one the approvers would otherwise read.
-// The link row goes; the stored file itself is left where it is.
+// Takes one already-saved attachment off the request.
 const removeAttachment = async (file, done) => {
   try {
     const ok = await confirm({
@@ -1530,8 +1355,8 @@ const removeAttachment = async (file, done) => {
 };
 
 // ---- Workflow moves ----
-// Each of these hands the request to somebody else, so whatever is still sitting in the debounce goes
-// with it.
+// Each of these hands the request to somebody else, so whatever is still sitting in the debounce goes with
+// it.
 const openSend = async () => {
   await flushSaves();
   sendOpen.value = true;
@@ -1615,7 +1440,7 @@ const warnOnUnload = (e) => {
 
 onMounted(async () => {
   window.addEventListener("beforeunload", warnOnUnload);
-  await Promise.all([loadTypes(), loadIndustryGroups(), loadEngagementOptions(), loadPickers()]);
+  await Promise.all([loadTypes(), loadEntityTypes(), loadEngagementOptions(), loadPickers()]);
   await load();
 });
 

@@ -6,7 +6,7 @@ namespace EmsPortal.Domain.Enums;
 /// </summary>
 public enum RemsFormStatus
 {
-    /// <summary>Created but not yet fully prepared (CSE/IndustryGroup not set).</summary>
+    /// <summary>Created but not yet fully prepared (CSE/EntityType not set).</summary>
     Draft,
 
     /// <summary>Prepared and saved by staff, ready to send.</summary>

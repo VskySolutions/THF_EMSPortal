@@ -16,9 +16,7 @@
     <app-filter-drawer v-model="filterOpen" :chips="allChips" @remove="onRemoveFilter" @clear="onClearFilters">
       <app-column-filters v-model="filters" :columns="filterableColumns" />
       <!-- A server filter with no column of its own: the statuses live INSIDE the nested cell, one per
-           related client, so there is no column for the drawer to hang a picker off. It narrows to the
-           requests holding at least one row at the chosen status — which is the question somebody
-           actually asks here ("what have we not started yet?"). -->
+           related client, so there is no column for the drawer to hang a picker off. -->
       <app-select
         v-model="extras.relatedStatus"
         label="Related Client Status"
@@ -53,8 +51,8 @@
       <!-- The number opens the parent request, which is where the client's own answers are. -->
       <template #body-cell-remsNumber="cell">
         <q-td :props="cell">
-          <!-- The pin the reader put on this row, beside the number rather than only on the button that
-               set it: the button is at the far right and the reason the row is at the top is here. -->
+          <!-- The pin the reader put on this row, beside the number rather than only on the button that set
+               it: the button is at the far right and the reason the row is at the top is here. -->
           <entity-pinned-mark :pinned="isPinned(cell.row.remsId)" />
           <q-btn
             flat dense no-caps color="primary" class="text-weight-medium"
@@ -65,10 +63,7 @@
         </q-td>
       </template>
 
-      <!-- Name over email. The name arrives composed by the server — "Smith John Jr." for a person, the
-           legal name for an organisation — with the particle beside it so it can still be drawn heavier
-           than the rest: a column of Smiths is told apart by the "Jr." alone. Surname first because that
-           is what the column is scanned and sorted by. -->
+      <!-- Name over email. -->
       <template #body-cell-clientName="cell">
         <q-td :props="cell">
           <div class="text-weight-medium">
@@ -80,13 +75,11 @@
         </q-td>
       </template>
 
-      <!-- A badge, not a word: the entity type is what decided which question this client was asked —
-           an individual's "Spouse & More Individuals", or everybody else's "Other Entities" — so on a
-           list about what that question produced it is a category worth seeing at a glance. Its colours
-           are the tenant's, like every other badge here. -->
+      <!-- A badge, not a word: the entity type is what decided which question this client was asked — an
+           individual's "Spouse & More Individuals". -->
       <template #body-cell-entityType="cell">
         <q-td :props="cell">
-          <app-option-badge :option="industryGroupOption(cell.row.entityType)" />
+          <app-option-badge :option="entityTypeOption(cell.row.entityType)" />
         </q-td>
       </template>
 
@@ -94,8 +87,7 @@
         <q-td :props="cell">{{ cell.row.submittedOnUtc ? fmt.formatDate(cell.row.submittedOnUtc) : "—" }}</q-td>
       </template>
 
-      <!-- The column this list exists for. A table inside a cell, because a request's related clients are
-           a LIST and each of them has a status of their own. -->
+      <!-- The column this list exists for. -->
       <template #body-cell-relatedClients="cell">
         <q-td :props="cell">
           <related-clients-cell
@@ -110,9 +102,7 @@
         </q-td>
       </template>
 
-      <!-- Where the PARENT request stands. Off by default — this list is about the clients hanging off it
-           — but rendered through the same helper as every other REMS surface, so an unclaimed request in
-           admin review reads "Waiting for pickup" here too rather than saying something of its own. -->
+      <!-- Where the PARENT request stands. -->
       <template #body-cell-requestStatus="cell">
         <q-td :props="cell">
           <app-option-badge :option="requestStatusOption(statusRow(cell.row))" />
@@ -122,10 +112,7 @@
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- The same four a REMS request carries on every other list, in the same order and worded the
-               same way: read it, work it, see what the client has been told, talk about it. View and Edit
-               are the same page in two modes — separate actions because they are separate intentions.
-               Whether Edit is offered is the SERVER's answer (`canEdit`), not a rule re-derived here:
-               this list is open to everyone, so most callers may edit none of what they can see. -->
+               same way: read it, work it, see what the client has been told, talk about it. -->
           <q-btn flat round dense color="primary" icon="o_visibility" :to="requestRoute(cell.row)">
             <q-tooltip>View</q-tooltip>
           </q-btn>
@@ -147,8 +134,7 @@
             <q-tooltip>Conversation</q-tooltip>
           </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
-               everything before them acts on the REQUEST, and these two are private to whoever is
-               looking. -->
+               everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
           <entity-row-marks
             v-if="canMarkRows"
             :pinned="isPinned(cell.row.remsId)"
@@ -185,12 +171,6 @@
 
 <script setup>
 // Related Entities — the shared board of the clients a client brought with them.
-//
-// It is the one REMS list that is NOT scoped to the caller's own work: every signed-in user sees the whole
-// tenant's, and every one of them may move a row along. That is deliberate — the point of the board is
-// that anybody chasing a client group can see all of it — and the server agrees (the endpoints are
-// [Authorize] and nothing else). Every change is attributed all the same: the row's audit columns, plus an
-// entry on the parent request's timeline.
 import { ref, reactive, computed, watch } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
@@ -220,7 +200,7 @@ const notify = useNotify();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const {
-  industryGroupLabel, industryGroupOption, industryGroupOptions, requestStatusOption,
+  entityTypeLabel, entityTypeOption, entityTypeOptions, requestStatusOption,
   relatedEntityStatusOption, relatedEntityStatusOptions
 } = useRemsMeta();
 
@@ -233,7 +213,7 @@ const statusRow = (row) => ({ status: row?.requestStatus, assignedAdmin: row?.as
 const columns = computed(() => [
   { name: "remsNumber", label: "REMS ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "clientName", label: "Client Name", field: "clientName", align: "left", sortable: true, default: true, filterable: false },
-  { name: "entityType", label: "Entity Type", field: (r) => industryGroupLabel(r.entityType), align: "left", sortable: true, default: true, filterOptions: industryGroupOptions.value },
+  { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: true, filterOptions: entityTypeOptions.value },
   { name: "submittedOnUtc", label: "Submitted On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterable: false },
   // Deliberately not sortable: it is a table, not a value. Related Clients below is the count of it, which
   // is what a reader would have wanted to sort on anyway.
@@ -287,9 +267,7 @@ watch([search, filters, extras], reload, { deep: true });
 
 // ---- The reader's own marks on these rows ----
 // A pin floats a row to the top and a colour tints it, both stored against the USER — nobody else sees
-// either. Offered only to a caller who may read REMS requests, which is what the UF endpoints gate on
-// (UniversalFeatureEntityAccess maps EntityType.Rems to rems.requests.read). This list itself is open to
-// everyone, so without the check some readers would be handed two buttons that 403.
+// either.
 const { has } = usePermissions();
 const canMarkRows = computed(() => has(Permissions.RemsRequestsRead));
 
@@ -298,24 +276,21 @@ const {
   colours: rowColours, colourOf, applyColour, busyId: markBusyId, sync: syncMarks
 } = useRowPersonalisation(EntityType.Rems);
 
-// After every load, never per row: the colours come back for the whole page in one read, and the pins
-// are the user's own small set, fetched once. Shallow on purpose — `rows` is REPLACED by a load, and a
-// status set on one related client mutates a row in place, which is not a new page to look marks up for.
+// After every load, never per row: the colours come back for the whole page in one read, and the pins are
+// the user's own small set, fetched once.
 watch(rows, (list) => {
   if (canMarkRows.value) syncMarks(list.map((r) => r.remsId));
 });
 
 // ---- Moving a related client along ----
-// The only write on this list. Tracked as "kind:id" so exactly one control spins and the rest of the page
-// stays put — a request with four related clients has four of these in one cell.
+// The only write on this list.
 const savingKey = ref("");
 const setStatus = async (row, child, status) => {
   savingKey.value = `${child.kind}:${child.id}`;
   try {
     const updated = await remsApi.setRelatedEntityStatus(child.kind, child.id, status);
     // Patched in place rather than reloaded: the reader is looking at this row, and pulling the whole page
-    // out from under them to change one badge loses their scroll position for nothing. The response is the
-    // row as the server now draws it — which matters, because its REFERENCE appears with the status.
+    // out from under them to change one badge loses their scroll position for nothing.
     Object.assign(child, updated);
     notify.success(`${child.name} is now ${relatedEntityStatusOption(updated.status).label}.`);
     // Unless the list is narrowed BY that status, in which case this row's membership genuinely turned on
@@ -338,7 +313,7 @@ const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.remsI
 
 // ---- Email log ----
 // The client's side of the correspondence: every intake-form email sent for this request and what the
-// provider reported back. Every row here has a submitted form, so there is always something to read.
+// provider reported back.
 const canReadEmailLog = computed(() => has(Permissions.RemsEmailLogRead));
 const emailLogOpen = ref(false);
 const emailLogId = ref(null);

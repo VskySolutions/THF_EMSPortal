@@ -15,29 +15,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Related Entities: every submitted request whose client declared somebody ALONGSIDE themselves, and how
-/// far each of those related clients has got.
-///
-/// <para>
-/// The two sources are the two cards the intake form asks that on, one per kind of client. An Individual
-/// is asked "Spouse &amp; More Individuals" — the other people on their return
-/// (<see cref="REMSAdditionalIndividual"/>). Every other entity type is asked "Other Entities" — the
-/// client's other businesses (<see cref="REMSAdditionalEntity"/>). A request can carry both, because the
-/// second question used to be asked of individuals too.
-/// </para>
-/// <para>
-/// THE STATUS ON EACH ROW IS SET BY HAND and by nothing else. Neither raising the follow-up request nor
-/// approving it moves it, and neither does the parent request's own status: this is the firm's own note
-/// about work that largely happens off this portal, and its value is that whoever is doing that work says
-/// where it stands. See <see cref="RemsRelatedEntityStatuses"/>.
-/// </para>
-/// <para>
-/// OPEN TO EVERY SIGNED-IN USER, read and write, and NOT narrowed to the caller's own requests — unlike
-/// every other REMS list, which returns what the caller raised or is named on. This one is a shared
-/// tracking board: the point of it is that anybody chasing a client group can see the whole picture and
-/// say where a piece of it has got to. Every change is attributed all the same — the row's own audit
-/// columns, plus a timeline entry on the parent request — which is what makes an open board answerable.
-/// </para>
+/// Related Entities: every submitted request whose client declared somebody ALONGSIDE themselves, and
+/// how far each of those related clients has got.
 /// </summary>
 [ApiController]
 [Route("api/rems/related-entities")]
@@ -50,11 +29,7 @@ namespace EmsPortal.Api.Controllers;
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 public sealed class RemsRelatedEntitiesController : ControllerBase
 {
-    /// <summary>
-    /// Which table a row is in, as it travels on the wire. The row carries it and the write route takes
-    /// it, so a screen builds the URL straight out of the row it is acting on — singular, because it
-    /// names ONE row's kind rather than a collection.
-    /// </summary>
+    /// <summary>Which table a row is in, as it travels on the wire.</summary>
     private const string KindIndividual = "individual";
 
     /// <inheritdoc cref="KindIndividual"/>
@@ -85,15 +60,10 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
 
     // -------------------- The list --------------------
 
-    /// <summary>
-    /// The paginated Related Entities list — one row per request, with its related clients nested.
-    /// </summary>
+    /// <summary>The paginated Related Entities list — one row per request, with its related clients nested.</summary>
     /// <param name="search">REMS number, client name, or a RELATED client's name.</param>
-    /// <param name="entityType">Option-set CODE (REMS.IndustryGroup) — what kind of entity the client is.</param>
-    /// <param name="relatedStatus">
-    /// Option-set CODE (REMS.RelatedEntityStatus). Narrows to requests holding at least one related client
-    /// at that status — a request is not at one status, its rows are.
-    /// </param>
+    /// <param name="entityType">Option-set CODE (REMS.EntityType) — what kind of entity the client is.</param>
+    /// <param name="relatedStatus"> Option-set CODE (REMS.RelatedEntityStatus). Narrows to requests holding at least one related client at that status — a request is not at one status, its rows are. </param>
     [HttpGet]
     [Authorize]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsRelatedEntityRow>>>(StatusCodes.Status200OK)]
@@ -137,11 +107,8 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
 
         string? NameOf(Guid? id) => id is { } uid && names.TryGetValue(uid, out var n) ? n : null;
 
-        // Whether the caller may open a request as a FORM, asked once for the page: the permission half
-        // is the caller's, so only the record half varies per row. The rule is
-        // RemsRequestsController.ActionsFor's — a REMS admin, or a request the caller raised (or had
-        // raised for them) — and it is answered here rather than in the browser because this list is open
-        // to everyone, so most callers may edit none of what they can see.
+        // Whether the caller may open a request as a FORM, asked once for the page: the permission half is the
+        // caller's, so only the record half varies per row.
         var me = User.GetUserId();
         var isRemsAdmin = RemsSetupAccess.IsRemsAdmin(User);
         var mayUpdate = User.HasPermission(Permissions.RemsRequestsUpdate);
@@ -168,10 +135,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
 
     // -------------------- Setting a row's status --------------------
 
-    /// <summary>
-    /// Move one related client along. The only write on this list, and the only thing that ever changes
-    /// the status — see the class remarks.
-    /// </summary>
+    /// <summary>Move one related client along.</summary>
     /// <param name="kind"><c>individual</c> or <c>entity</c> — which table the row is in.</param>
     [HttpPut("{kind}/{id:guid}/status")]
     [Authorize]
@@ -195,9 +159,8 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 "Choose one of the values on the Related Entity Status list."));
         }
 
-        // Resolved against the TENANT's own copy of the list, so a firm that has added a fifth position can
-        // set it, and a code that is not on their list is refused rather than stored as a dangling
-        // reference.
+        // Resolved against the TENANT's own copy of the list, so a firm that has added a fifth position can set
+        // it, and a code that is not on their list is refused rather than stored as a dangling reference.
         if (await _codes.RemsIdAsync(RemsOptionSetKeys.RelatedEntityStatus, code, cancellationToken)
             is not { } resolved)
         {
@@ -239,9 +202,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 $"Expected '{KindIndividual}' or '{KindEntity}' in the URL."));
         }
 
-        // On the PARENT request, because that is the only record these rows have a timeline on. Old and
-        // new together: the status moves only by hand, so who moved it and from what is the whole audit of
-        // it. A row nobody had answered for reads as its default rather than as a blank.
+        // On the PARENT request, because that is the only record these rows have a timeline on.
         await _activity.WriteAsync(
             new CreateActivityEventDto(
                 EntityType.Rems, remsId, ActivityEventTypes.RemsRelatedEntityStatusChanged,
@@ -250,8 +211,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Read back rather than patched together here: the row's REFERENCE turns on its position among its
-        // siblings and on whether the status has left Not Initiated, so the answer to "what does this row
-        // look like now" is the same mapping the list itself does.
+        // siblings and on whether the status has left Not Initiated.
         var refreshed = await BuildRelatedClientAsync(remsId, id, cancellationToken);
         return refreshed is null
             ? NotFound(ApiResponseFactory.NotFound("Related client not found."))
@@ -261,19 +221,8 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
     // -------------------- Mapping --------------------
 
     /// <summary>
-    /// Splits what the client declared into the two things the nested table shows: the PARENT header, and
-    /// the rows under it.
-    /// <para>
-    /// A person filing JOINTLY with the client goes into the header rather than becoming a row of their
-    /// own. One return means one client and one invoice, so a row for them — with a status, and a
-    /// reference inviting somebody to raise a request — would be a second request for a person who is
-    /// already on this one. The header names them instead, with the reason beside them.
-    /// </para>
-    /// <para>
-    /// The rest are numbered in the order the client declared them, ACROSS both kinds, which is what makes
-    /// <c>REMS-1042-C1</c> a thing a reader can count to. The number is only printed once the row has left
-    /// Not Initiated: before that there is nothing for it to point at.
-    /// </para>
+    /// Splits what the client declared into the two things the nested table shows: the PARENT header,
+    /// and the rows under it.
     /// </summary>
     private static (RemsRelatedParentView Parent, List<RemsRelatedClientView> Children) MapRelated(
         string remsNumber,
@@ -318,11 +267,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         return (parent, children);
     }
 
-    /// <summary>
-    /// What this related client is referred to by. A row that has actually produced a request is named by
-    /// THAT request — a real number beats a derived one, and it links somewhere. Otherwise the derived
-    /// reference, and only once somebody has moved the row along.
-    /// </summary>
+    /// <summary>What this related client is referred to by.</summary>
     private static string? Reference(
         string remsNumber,
         int ordinal,
@@ -337,7 +282,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         return RemsRelatedEntityStatuses.IsUnderway(row.Status) ? $"{remsNumber}-C{ordinal}" : null;
     }
 
-    /// <summary>One row as the list would draw it, re-read after a write. Null when it has gone.</summary>
+    /// <summary>One row as the list would draw it, re-read after a write.</summary>
     private async Task<RemsRelatedClientView?> BuildRelatedClientAsync(
         Guid remsId, Guid rowId, CancellationToken cancellationToken)
     {
@@ -356,9 +301,8 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 .ToList(),
             cancellationToken);
 
-        // The parent header is discarded here — only one CHILD is being rebuilt, and all that needs from
-        // the parent is its REMS number for the reference. So the client's name is not read at all, which
-        // is just as well: GetByIdAsync does not load ClientPerson.
+        // The parent header is discarded here — only one CHILD is being rebuilt, and all that needs from the
+        // parent is its REMS number for the reference.
         var (_, children) = MapRelated(
             rems.REMSNumber, string.Empty, null, declared, createdNumbers);
         return children.FirstOrDefault(c => c.Id == rowId);

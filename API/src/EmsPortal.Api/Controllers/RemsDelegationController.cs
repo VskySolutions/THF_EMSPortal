@@ -11,22 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>
-/// REMS delegation: a shareholder or CSE naming someone to work their requests, modelled on Concur.
-/// <para>
-/// Two doors onto the same rows, with different locks. The <c>api/rems/delegations</c> endpoints are
-/// self-service: they only ever read or write the CALLER's own delegations, either as the principal
-/// (who may act for me) or as the delegate (who may I act for), so no permission gates them — the
-/// caller's own identity is the whole boundary. The <c>api/admin/users/{id}/rems-delegates</c> endpoints
-/// are the administrative door: a Tenant Admin arranging cover for somebody from that person's own
-/// detail page. Those are gated on <c>rems.delegations.manage</c> and confined to the caller's tenant,
-/// because there the caller's identity says nothing about whose delegations they are touching.
-/// </para>
-/// <para>
-/// Delegation covers preparing and, optionally, sending. It does NOT extend to approving — see
-/// <see cref="REMSDelegation"/> for why that is a different decision with a real integrity hazard behind it.
-/// </para>
-/// </summary>
+/// <summary>REMS delegation: a shareholder or CSE naming someone to work their requests, modelled on Concur.</summary>
 [ApiController]
 [Route("api/rems/delegations")]
 [Produces("application/json")]
@@ -68,10 +53,7 @@ public sealed class RemsDelegationController : ControllerBase
         return Ok(ApiResponseFactory.Success(rows.Select(ToView).ToList(), "REMS delegates retrieved."));
     }
 
-    /// <summary>
-    /// Who I may act for right now. Filtered to grants in force today, so an expired or future-dated one
-    /// is simply not offered rather than being offered and then refused.
-    /// </summary>
+    /// <summary>Who I may act for right now.</summary>
     [HttpGet("acting-for")]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsActingForView>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ActingFor(CancellationToken cancellationToken)
@@ -90,10 +72,7 @@ public sealed class RemsDelegationController : ControllerBase
         return Ok(ApiResponseFactory.Success(views, "REMS delegations retrieved."));
     }
 
-    /// <summary>
-    /// Name a delegate, or change what an existing one may do. Upserts on the pair rather than adding a
-    /// second grant: two live grants for one pair would leave "which rights apply?" unanswerable.
-    /// </summary>
+    /// <summary>Name a delegate, or change what an existing one may do.</summary>
     [HttpPut]
     [ProducesResponseType<ApiResponse<RemsDelegationView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Upsert([FromBody] SaveRemsDelegationRequest request, CancellationToken cancellationToken)
@@ -113,7 +92,7 @@ public sealed class RemsDelegationController : ControllerBase
         return Ok(ApiResponseFactory.Success(ToView(saved), "REMS delegate saved."));
     }
 
-    /// <summary>Withdraw a delegation. Only the principal who granted it may.</summary>
+    /// <summary>Withdraw a delegation.</summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType<ApiResponse<object>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Remove(Guid id, CancellationToken cancellationToken)
@@ -138,11 +117,7 @@ public sealed class RemsDelegationController : ControllerBase
 
     // -------------------- Administration: somebody else's delegates --------------------
 
-    /// <summary>
-    /// The delegates a given user has named. Administration rather than self-service: a Tenant Admin
-    /// setting up cover — for a shareholder on leave, or a new joiner who has not thought about it —
-    /// does it from that person's own detail page.
-    /// </summary>
+    /// <summary>The delegates a given user has named.</summary>
     [HttpGet("~/api/admin/users/{userId:guid}/rems-delegates")]
     [RequirePermission(Permissions.RemsDelegationsManage)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsDelegationView>>>(StatusCodes.Status200OK)]
@@ -158,9 +133,8 @@ public sealed class RemsDelegationController : ControllerBase
     }
 
     /// <summary>
-    /// Who the user's work could be delegated to: the active users of the caller's tenant, minus the user
-    /// themselves. Wider than the self-service picker, which offers admins only — an admin arranging cover
-    /// is choosing from the whole firm, and the delegate needs no standing of their own to prepare work.
+    /// Who the user's work could be delegated to: the active users of the caller's tenant, minus the
+    /// user themselves.
     /// </summary>
     [HttpGet("~/api/admin/users/{userId:guid}/rems-delegates/candidates")]
     [RequirePermission(Permissions.RemsDelegationsManage)]
@@ -226,11 +200,7 @@ public sealed class RemsDelegationController : ControllerBase
 
     // -------------------- Shared --------------------
 
-    /// <summary>
-    /// The boundary on the administrative door: the caller works in a tenant, the user belongs to it, and
-    /// a Super Admin is nobody else's to arrange — the same three rules the user page keeps everywhere.
-    /// A user outside the caller's tenant reads as missing rather than forbidden.
-    /// </summary>
+    /// <summary>The boundary on the administrative door: the caller works in a tenant, the user belongs.</summary>
     private async Task<IActionResult?> AdminAccessErrorAsync(Guid userId, CancellationToken cancellationToken)
     {
         if (User.GetActiveTenantId() is not { } tenantId)
@@ -275,9 +245,8 @@ public sealed class RemsDelegationController : ControllerBase
     }
 
     /// <summary>
-    /// Upserts on the (principal, delegate) pair rather than adding a second grant: two live grants for one
-    /// pair would leave "which rights apply?" unanswerable. Returns the saved row with its navigations
-    /// loaded, so the view carries the delegate's name.
+    /// Upserts on the (principal, delegate) pair rather than adding a second grant: two live grants
+    /// for one pair would leave "which rights apply?" unanswerable.
     /// </summary>
     private async Task<REMSDelegation> UpsertAsync(
         Guid principalUserId, SaveRemsDelegationRequest request, CancellationToken cancellationToken)
@@ -298,11 +267,7 @@ public sealed class RemsDelegationController : ControllerBase
         existing.StartsOn = request.StartsOn;
         existing.EndsOn = request.EndsOn;
 
-        // Added OR Modified, never both. Calling Update() on a row that was just Added flips the tracked
-        // entry to Modified — the key is already set, so EF reads it as an existing detached row — and
-        // then issues an UPDATE that matches nothing, which surfaces as a concurrency exception on a
-        // record nobody else has touched. An existing row needs no Update() call at all here: it is
-        // tracked from the read above, so the assignments are picked up on save.
+        // Added OR Modified, never both.
         if (isNew)
         {
             await _delegations.AddAsync(existing, cancellationToken);

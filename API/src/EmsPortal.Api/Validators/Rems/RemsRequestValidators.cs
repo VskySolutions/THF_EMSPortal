@@ -5,8 +5,8 @@ using FluentValidation;
 namespace EmsPortal.Api.Validators.Rems;
 
 /// <summary>
-/// Validates a REMS request create payload (WO-111): the client name is required; at least one of customer
-/// email / mobile is required (AC-REMS-004.7); the type must be a known option-set code.
+/// Validates a REMS request create payload (WO-111): the client name is required; at least one of
+/// customer email / mobile is required (AC-REMS-004.7); the type must be a known option-set code.
 /// </summary>
 public sealed class CreateRemsRequestRequestValidator : AbstractValidator<CreateRemsRequestRequest>
 {
@@ -18,8 +18,6 @@ public sealed class CreateRemsRequestRequestValidator : AbstractValidator<Create
         RuleFor(x => x.ClientNameSuffix).MaximumLength(16).When(x => !string.IsNullOrWhiteSpace(x.ClientNameSuffix));
         // The partner's message is client-facing now and holds pasted correspondence; the column is
         // nvarchar(max), so nothing is capped here either.
-        // No reviewing admin is asked for. A request is raised for the admins as a body, not for one of
-        // them, and it stays unassigned until one picks it up.
         RuleFor(x => x.CustomerEmail).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.CustomerEmail));
         RuleFor(x => x.CustomerMobileNumber).MaximumLength(32).When(x => !string.IsNullOrWhiteSpace(x.CustomerMobileNumber));
 
@@ -34,7 +32,7 @@ public sealed class CreateRemsRequestRequestValidator : AbstractValidator<Create
     }
 }
 
-/// <summary>Validates a REMS request edit payload (WO-111). Supplied fields must be valid; all are optional.</summary>
+/// <summary>Validates a REMS request edit payload (WO-111).</summary>
 public sealed class UpdateRemsRequestRequestValidator : AbstractValidator<UpdateRemsRequestRequest>
 {
     public UpdateRemsRequestRequestValidator()
@@ -60,16 +58,10 @@ public sealed class AddRemsFilesRequestValidator : AbstractValidator<AddRemsFile
     }
 }
 
-/// <summary>
-/// The seeded <c>REMS.Type</c> option-set codes (see <c>DefaultOptionSets</c>). Type is trivially closed
-/// so it is validated against the known codes; status transitions are driven by the endpoints, not the
-/// client.
-/// </summary>
+/// <summary>The seeded <c>REMS.Type</c> option-set codes (see <c>DefaultOptionSets</c>).</summary>
 internal static class RemsRequestOptionCodes
 {
     // From RemsRequestTypes so the accepted set and the codes the controllers branch on cannot drift.
-    // 'new_engagement' was merged into 'existing_client' (MergeRemsExistingClientTypes) and is no longer
-    // accepted: the migration re-pointed every row that held it, so nothing can still be carrying it.
     public static readonly IReadOnlyList<string> Types = RemsRequestTypes.All;
 
     public static bool IsKnownType(string? value) => value is not null && Types.Contains(value);

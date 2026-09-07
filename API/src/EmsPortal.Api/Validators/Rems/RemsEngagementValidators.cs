@@ -3,7 +3,7 @@ using FluentValidation;
 
 namespace EmsPortal.Api.Validators.Rems;
 
-/// <summary>Validates a client-record edit (WO-114). The client email is not editable and is absent from the payload.</summary>
+/// <summary>Validates a client-record edit (WO-114).</summary>
 public sealed class UpdateRemsClientRequestValidator : AbstractValidator<UpdateRemsClientRequest>
 {
     public UpdateRemsClientRequestValidator()
@@ -31,18 +31,14 @@ public sealed class UpdateRemsEntityContactsRequestValidator : AbstractValidator
     }
 }
 
-/// <summary>
-/// Validates an engagement update (WO-114): realization is 0–100, the fee estimate is non-negative, and
-/// every option-set code and free-text field fits its column — so an over-long value is refused with a
-/// message rather than by the database.
-/// </summary>
+/// <summary>Validates an engagement update (WO-114): realization is 0–100, the fee estimate is non-negative.</summary>
 public sealed class UpdateRemsEngagementRequestValidator : AbstractValidator<UpdateRemsEngagementRequest>
 {
     public UpdateRemsEngagementRequestValidator()
     {
         RuleFor(x => x.Department).MaximumLength(64).When(x => x.Department is not null);
-        RuleFor(x => x.SubServiceLine).MaximumLength(64).When(x => x.SubServiceLine is not null);
-        RuleFor(x => x.SubIndustry).MaximumLength(64).When(x => x.SubIndustry is not null);
+        RuleFor(x => x.ServiceLine).MaximumLength(64).When(x => x.ServiceLine is not null);
+        RuleFor(x => x.Industry).MaximumLength(64).When(x => x.Industry is not null);
         RuleFor(x => x.BillingPeriod).MaximumLength(64).When(x => x.BillingPeriod is not null);
         RuleFor(x => x.FirstYearFeeEstimate)
             .GreaterThanOrEqualTo(0).WithMessage("firstYearFeeEstimate must be zero or greater.")
@@ -133,8 +129,8 @@ public sealed class SetRemsMarketingRequestValidator : AbstractValidator<SetRems
 }
 
 /// <summary>
-/// Validates setting commission splits (WO-114, AC-REMS-016.1/2): up to ten distinct recipients, each with
-/// a percentage greater than 0 and at most 100, and no more than 100% allocated in total.
+/// Validates setting commission splits (WO-114, AC-REMS-016.1/2): up to ten distinct recipients, each
+/// with a percentage greater than 0 and at most 100, and no more than 100% allocated in total.
 /// </summary>
 public sealed class SetRemsCommissionRequestValidator : AbstractValidator<SetRemsCommissionRequest>
 {

@@ -1,18 +1,11 @@
 <template>
   <div>
-    <!-- Core engagement placement + team + fee/realization (AC-REMS-014.5-10).
-         The column widths ARE the grouping: 4+4+4 wraps to a trio per line and 6+6 to a pair, so the
-         lines below read as what they are — what the firm does and where the work sits, who runs it, what
-         it is worth, and how it is billed.
-         What the CLIENT is — Entity Type and Industry — is not here: both describe the client rather than
-         the engagement, so they are asked on the Client Information tab with the rest of what is known
-         about them. This form still reads the entity type, because the Government Audit rule keys off it
-         together with the department below, but as a prop it does not own. -->
+    <!-- Core engagement placement + team + fee/realization (AC-REMS-014.5-10). -->
     <q-form ref="formRef" greedy>
       <div class="row q-col-gutter-md">
         <!-- ── What the firm does, where the work sits, and who heads that ──────────────────────── -->
         <app-select
-          v-model="core.subServiceLine" :options="subServiceLineOptions" label="Service Line" required
+          v-model="core.serviceLine" :options="serviceLineOptions" label="Service Line" required
           class="col-12 col-sm-4" :readonly="!editable" :clearable="false"
           :rules="[requiredRule('a Service Line')]"
           info="From the REMS Service Line option list (Administration → Option Sets). What the firm is actually engaged to do."
@@ -23,20 +16,14 @@
           info="From the REMS Department option list (Administration → Option Sets). The choice decides what else this form asks: CAS is asked how it is billed, Audit needs a signed CAF, Tax a fiscal year end."
         />
         <!-- Read-only Department Director: the selected department's head, resolved as soon as the
-             department is picked and written server-side on save (AC-REMS-014.7). Beside the department
-             it is derived from, so the pair reads as one answer and its second half explains itself. -->
+             department is picked and written server-side on save (AC-REMS-014.7). -->
         <app-readonly-field
           :model-value="directorName" label="Department Director" placeholder="Not assigned"
           :hint="directorHint" :hint-alert="directorHintAlert" class="col-12 col-sm-4"
         />
 
         <!-- ── The two people who run it ────────────────────────────────────────────────────────── -->
-        <!-- Each is scoped to the ROLE of its own name. When nobody holds the role the picker is empty on
-             purpose and the hint names the role to assign.
-             The CSE is NOT here. It belongs to the request rather than to its engagement — it is filed on
-             the EMS form record the client's invite is minted from, and it has to be answered before the
-             form can go out at all — so it is asked on the Client Information tab, beside the entity type
-             it is saved with. -->
+        <!-- Each is scoped to the ROLE of its own name. -->
         <app-select
           v-model="core.engagementExecutiveId" :options="executiveOptions" label="Engagement Executive"
           required class="col-12 col-sm-6" :readonly="!editable"
@@ -51,12 +38,7 @@
         />
 
         <!-- ── What it is worth ─────────────────────────────────────────────────────────────────── -->
-        <!-- Two fee questions, and an engagement is asked exactly one of them. Assurance prices the whole
-             engagement; every other department that quotes a fee quotes it for the first year. They are
-             separate columns rather than one relabelled box, so a department corrected from one to the
-             other does not read its predecessor's figure back as its own answer.
-             GCS is asked neither: a GCS engagement is priced by its purchase order and its bill rate,
-             both on the card below. -->
+        <!-- Two fee questions, and an engagement is asked exactly one of them. -->
         <app-text-field
           v-if="showFeeEstimate"
           v-model="core.firstYearFeeEstimate" label="First-Year Fee Estimate" type="number"
@@ -79,16 +61,7 @@
         </app-text-field>
 
         <!-- ── How it is billed ─────────────────────────────────────────────────────────────────── -->
-        <!-- CAS only. Client Accounting Services is the recurring arrangement — how often the client is
-             billed and how the billing actually runs are part of what is being set up. Every other
-             department bills against the work as it is done, and these two boxes were left empty on all
-             of their engagements, which is a question asked for no reason and an empty pair of fields on
-             every approval packet.
-             How often, and how it actually works. The second was a COUNT — "No. of Bills" — which said
-             how many invoices without saying what triggered one, and could not record a schedule that
-             does not reduce to a number at all ("three progress bills, the balance on delivery"). It is
-             the sentence now, and the frequency beside it offers Milestone for the schedules that are
-             not a calendar cycle. -->
+        <!-- CAS only. -->
         <template v-if="showBilling">
           <app-select
             v-model="core.billingPeriod" :options="billingPeriodOptions" label="Billing Frequency"
@@ -104,14 +77,9 @@
         </template>
       </div>
 
-      <!-- No save button of its own. A page that asks to be saved in pieces — client details here, setup
-           there — is the one thing this form is meant not to do: it has ONE Save, and that writes this
-           section and the conditional cards below along with everything else. -->
+      <!-- No save button of its own. -->
 
-      <!-- Conditional: Audit and Assurance → required signed CAF PDF upload (AC-REMS-014.11/12).
-           One card for both, because the form is the same compliance artifact under either department and
-           is filed, read and gated on identically. Assurance is asked three more things underneath it —
-           the client's fiscal year end, and whether administrative fees are charged. -->
+      <!-- Conditional: Audit and Assurance → required signed CAF PDF upload (AC-REMS-014.11/12). -->
       <q-card v-if="showAudit" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
           <q-icon name="o_fact_check" size="18px" class="q-mr-xs" />{{ attestCardTitle }}
@@ -119,9 +87,7 @@
         <q-separator />
         <q-card-section>
           <!-- Where the form stands, then the picker, then the document itself — and the document is at
-               the BOTTOM in both states. A file waiting to be saved is previewed by the picker, which
-               renders its row underneath the dropzone; the saved row used to sit ABOVE it, so the same
-               document jumped from one end of the card to the other the moment the auto-save landed. -->
+               the BOTTOM in both states. -->
           <q-banner v-if="hasCaf && cafFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
             <template #avatar><q-icon name="o_swap_horiz" color="teal-9" /></template>
             Saving replaces the signed client-acceptance form on file with the one you have just chosen.
@@ -146,18 +112,13 @@
             :hint="`PDF only, up to ${MAX_UPLOAD_MB} MB`"
           />
           <!-- The document itself, not just the claim that one exists: the same preview row every other
-               saved file gets, and a click opens it in a new tab. The ✕ takes it back off the engagement —
-               uploading again replaces it, but "replace" is not an answer to a form that should never have
-               been attached, and until this existed there was no way back to none. -->
+               saved file gets, and a click opens it in a new tab. -->
           <app-stored-file-item
             v-if="hasCaf" :file="storedCaf" :removable="editable" :disable="removingCaf" class="q-mt-sm"
             @remove="removeCaf"
           />
 
-          <!-- Assurance only. The client's fiscal year end DATES the period being examined — it is not the
-               Tax department's, which drives a filing schedule and computes two due dates from it. And the
-               administrative fees: a yes/no, with the figure appearing only once the answer is yes, because
-               an amount beside an unanswered question is an amount nobody has agreed to. -->
+          <!-- Assurance only. -->
           <template v-if="showAssurance">
             <q-separator class="q-my-md" />
             <div class="row q-col-gutter-md">
@@ -184,7 +145,7 @@
       </q-card>
 
       <!-- Conditional: Government Audit (Department=audit + Entity Type=government) → contract number +
-           Florida 1% state-fee flag (AC-REMS-014.13). Saved by Save & Next along with everything else. -->
+           Florida 1% state-fee flag (AC-REMS-014.13). -->
       <q-card v-if="showGovernment" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
           <q-icon name="o_gavel" size="18px" class="q-mr-xs" />Government Audit — Contract
@@ -217,9 +178,7 @@
       </q-card>
 
       <!-- Conditional: GCS → the purchase order the engagement is set up against, and the level and rate
-           it is staffed at. The two dates are the SAME two the card above shows read-only: a government
-           client answers for its PO on the intake form and those answers are copied onto this one row, so
-           a GCS engagement edits them rather than recording a second PO that can disagree with the first. -->
+           it is staffed at. -->
       <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
           <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
@@ -259,11 +218,9 @@
             </app-text-field>
           </div>
 
-          <!-- The purchase order itself. Same shape as the signed CAF above: held until the page saves,
-               because a brand-new request has no engagement to link it to yet. -->
+          <!-- The purchase order itself. -->
           <!-- Same order as the CAF card above: what is on file, the picker, then the document at the
-               bottom — which is where the picker previews an unsaved one, so the row does not move when
-               the save lands. -->
+               bottom — which is where the picker previews an unsaved. -->
           <div class="q-mt-md">
             <q-banner v-if="hasPurchaseOrderFile && poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
               <template #avatar><q-icon name="o_swap_horiz" color="teal-9" /></template>
@@ -280,8 +237,7 @@
               :hint="`PDF, image, Word or Excel, up to ${MAX_UPLOAD_MB} MB`"
             />
             <!-- The ✕ takes it back off the engagement, as it does on the CAF above: uploading again
-                 replaces the order, but "replace" is no answer to one that should never have been
-                 attached, and until this there was no way back to none on file. -->
+                 replaces the order. -->
             <app-stored-file-item
               v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder" :removable="editable"
               :disable="removingPurchaseOrder" class="q-mt-sm" @remove="removePurchaseOrder"
@@ -290,8 +246,8 @@
         </q-card-section>
       </q-card>
 
-      <!-- Conditional: Tax → fiscal year end + calculated due dates + tax-form checklist (AC-REMS-014.14).
-           Saved by Save & Next along with everything else. -->
+      <!-- Conditional: Tax → fiscal year end + calculated due dates + tax-form checklist
+           (AC-REMS-014.14). -->
       <q-card v-if="showTax" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
           <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year &amp; Forms
@@ -299,10 +255,7 @@
         <q-separator />
         <q-card-section>
           <!-- The two due dates follow from the fiscal year end — the 15th of the fourth month after it,
-               and six months past that — and are then EDITABLE. They were read-only until now, which meant
-               a return whose dates did not follow the ordinary rule could not be recorded at all. Changing
-               the fiscal year end re-derives both, because that is what the reader has just told us they
-               follow from; typing over either one afterwards is what sticks. -->
+               and six months past that — and are then EDITABLE. They were read-only until now. -->
           <div class="row q-col-gutter-md">
             <app-date-field
               v-model="tax.fiscalYearEnd" label="Fiscal Year End" class="col-12 col-sm-4" :readonly="!editable"
@@ -321,9 +274,7 @@
           <div v-if="taxFormUnavailable" class="text-caption text-grey-6">
             The tax-form list could not be loaded for your account.
           </div>
-          <!-- Three across on a desktop, two on a tablet, one on a phone. The list is sixteen returns
-               now rather than five, and in a single pair of columns that is eight rows of checkboxes to
-               scan for the two or three that apply. -->
+          <!-- Three across on a desktop, two on a tablet, one on a phone. -->
           <div v-else class="row q-col-gutter-x-md">
             <q-checkbox
               v-for="opt in taxFormOptions" :key="opt.value" v-model="tax.taxFormIds" :val="opt.value"
@@ -339,35 +290,6 @@
 <script setup>
 // The request's engagement setup (AC-REMS-014/015): what the firm does, where the work sits and the mapped
 // department director (read-only), the engagement team, and then whatever the chosen DEPARTMENT is asked.
-//
-// Five fields are asked of every engagement — Service Line, Department, Department Director, Engagement
-// Executive, Billing Manager — and % Realization is asked of every one too. Everything else keys off the
-// department:
-//
-//   Tax        first-year fee · fiscal year end · original + first-extension due dates · tax forms
-//   Assurance  ENGAGEMENT fee · signed CAF · client's fiscal year end · admin fees (yes/no + amount)
-//   GCS        no fee at all · the purchase order (no., amount, dates, document) · personnel level + rate
-//   CAS        first-year fee · billing frequency · description of billing process
-//   Audit      first-year fee · signed CAF (+ the contract block for a government entity) — unchanged
-//   Admin      first-year fee and nothing conditional — unchanged
-//
-// Switching department HIDES what no longer applies and leaves what is stored alone: saveSetup writes only
-// the blocks on screen, so a department picked by mistake and corrected does not take the answers with it.
-//
-// Three answers that are asked on the CLIENT INFORMATION tab are not here: Entity Type and Industry, which
-// describe the client rather than the engagement, and the CSE, which belongs to the REQUEST — it is filed
-// on the EMS form record the client's invite is minted from, and the invite cannot be sent without it. The
-// entity type still arrives here as a prop, because the Government Audit card keys off it together with
-// the department chosen below.
-//
-// Service Line is labelled here differently from the data it holds — it is `subServiceLine`. The note at
-// the top of useRemsMeta says why the data kept its name.
-//
-// Controlled by the page rather than saving itself. It holds the fields, announces every edit (`change`)
-// and exposes saveSetup(engagementId, remsId) for the page's auto-save to call — which is also why the
-// engagement id is an argument rather than read off the prop: a request created moments ago has one only
-// once the page has filed it. `remsId` rides along because the signed CAF is filed under the request on
-// the server, not under the engagement: one request has one engagement, so one folder holds both.
 import { ref, computed, watch, nextTick } from "vue";
 import { remsApi, mediaApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -389,7 +311,7 @@ const props = defineProps({
   engagement: { type: Object, required: true },
   deptOptions: { type: Array, default: () => [] },
   // Rendered as "Service Line"; still named for the data behind it. See the note at the top of useRemsMeta.
-  subServiceLineOptions: { type: Array, default: () => [] },
+  serviceLineOptions: { type: Array, default: () => [] },
   taxFormOptions: { type: Array, default: () => [] },
   taxFormUnavailable: { type: Boolean, default: false },
   billingPeriodOptions: { type: Array, default: () => [] },
@@ -406,7 +328,7 @@ const props = defineProps({
 
   // Read-only here, and owned by the Client Information tab. Present because the Government Audit card
   // below appears only for an Audit department on a Government entity.
-  industryGroup: { type: String, default: null }
+  entityType: { type: String, default: null }
 });
 // `change` says the engagement half has something to save — the page cannot see the local copies below.
 const emit = defineEmits(["change"]);
@@ -415,24 +337,15 @@ const notify = useNotify();
 const { confirm } = useConfirm();
 
 // Set while this component is writing to its own state rather than the user: re-seeding from a fresh
-// engagement view, or clearing the CAF picker once its file is uploaded. Neither is an edit, and
-// announcing them would queue a save of what was just saved.
+// engagement view, or clearing the CAF picker once its file is uploaded.
 let syncing = false;
 
 // Calendar dates read MM/DD/YYYY and are never timezone-shifted — see formatDateOnly, which every screen
 // showing a DateOnly now shares rather than keeping a copy of.
 const dateOnly = formatDateOnly;
 
-/**
- * The tax due dates a fiscal year end implies: the ORIGINAL is the 15th of the fourth month after it, and
- * the FIRST EXTENSION is six months past that. A twin of the server's RemsTaxDueDates, which is what
- * actually fills either date in when a caller leaves it blank — this one exists so the two boxes answer as
- * the year end is picked rather than after a round trip.
- *
- * Built from the date STRING rather than through a Date object on purpose: a "YYYY-MM-DD" parsed as a date
- * is parsed as UTC midnight and read back in the browser's zone, which walks a fiscal year end of 31
- * December back to the 30th for anyone west of Greenwich.
- */
+/** The tax due dates a fiscal year end implies: the ORIGINAL is the 15th of the fourth month after it, and
+    the FIRST EXTENSION is six months past that. */
 const deriveDueDates = (fiscalYearEnd) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(fiscalYearEnd || ""));
   if (!m) return { originalDueDate: "", firstExtensionDueDate: "" };
@@ -452,10 +365,8 @@ const deriveDueDates = (fiscalYearEnd) => {
 // ---- Core engagement fields (local editable copy, re-synced from the source view) ----
 const buildCore = (e) => ({
   department: e.department || null,
-  // No `subIndustry`: the industry is asked on the Client Information tab and written by the page.
-  // Leaving a field out of the payload is what preserves it — the endpoint reads an omitted field as
-  // "leave this alone" — so this form saving cannot undo it.
-  subServiceLine: e.subServiceLine || null,
+  // No `industry`: the industry is asked on the Client Information tab and written by the page.
+  serviceLine: e.serviceLine || null,
   engagementExecutiveId: e.engagementExecutive?.id || null,
   billingManagerId: e.billingManager?.id || null,
   firstYearFeeEstimate: e.firstYearFeeEstimate ?? "",
@@ -466,9 +377,7 @@ const buildCore = (e) => ({
 });
 const core = ref(buildCore(props.engagement));
 
-// One row, two cards: the government audit's contract block and the GCS purchase order. Every field is
-// held here whichever card is on screen, because the endpoint writes the whole row from the payload —
-// sending only half of it would blank the other half.
+// One row, two cards: the government audit's contract block and the GCS purchase order.
 const buildGov = (g) => ({
   contractNumber: g?.contractNumber || "",
   floridaOnePercentStateFeeApplies: g?.floridaOnePercentStateFeeApplies ?? false,
@@ -494,9 +403,7 @@ const buildAudit = (a) => ({
 });
 const audit = ref(buildAudit(props.engagement.audit));
 
-// The two due dates come off the stored row where it has them. A row written before they were columns
-// carries only the fiscal year end, so the rule fills them in — which is a display default, not an edit:
-// this runs inside the re-seed, where `syncing` stops it announcing a change.
+// The two due dates come off the stored row where it has them.
 const buildTax = (t) => {
   const fiscalYearEnd = t?.fiscalYearEnd || "";
   const derived = deriveDueDates(fiscalYearEnd);
@@ -509,9 +416,7 @@ const buildTax = (t) => {
 };
 const tax = ref(buildTax(props.engagement.tax));
 
-// Re-sync every local form when the parent adopts a fresh engagement view. Both document overrides go
-// with them: a re-seed is the page telling this form what the server now holds, which is exactly the
-// question they were standing in for.
+// Re-sync every local form when the parent adopts a fresh engagement view.
 watch(() => props.engagement, (e) => {
   syncing = true;
   core.value = buildCore(e);
@@ -547,12 +452,11 @@ const showGcs = computed(() => isGcsDepartment(department.value));
 const showBilling = computed(() => isCasDepartment(department.value));
 // The entity type is the page's, not this form's local copy — it is saved by a different endpoint — so
 // this reads the prop. Same rule the API applies when the round is routed.
-const showGovernment = computed(() => isGovernmentAudit(department.value, props.industryGroup));
+const showGovernment = computed(() => isGovernmentAudit(department.value, props.entityType));
 
 // ---- What it is worth, per department ----
-// Assurance prices the engagement; GCS prices neither, because a GCS engagement is worth its purchase
-// order times its bill rate. Everyone else quotes a first-year estimate — stated as "not the other two"
-// so a department nobody has written a rule for keeps the field it has always had.
+// Assurance prices the engagement; GCS prices neither, because a GCS engagement is worth its purchase order
+// times its bill rate.
 const showEngagementFee = computed(() => isAssuranceDepartment(department.value));
 const showFeeEstimate = computed(() =>
   !isAssuranceDepartment(department.value) && !isGcsDepartment(department.value));
@@ -607,13 +511,7 @@ const directorHintAlert = computed(() =>
 
 // ---- The signed client-acceptance form on file ----
 // What this component has done to the CAF SINCE the engagement it was handed was read: the row returned by
-// an upload, or null once one has been removed. `undefined` means "nothing has happened here" and the
-// prop answers.
-//
-// It exists because the prop cannot answer on its own. The page seeds these tabs from the workspace it
-// loaded and deliberately does NOT re-seed them after an auto-save — that would overwrite whatever is
-// being typed — so `engagement.audit` still reads as it did when the page opened, and a form uploaded
-// moments ago showed no preview at all until the whole page was reloaded.
+// an upload.
 const cafOverride = ref(undefined);
 const cafDetail = computed(() =>
   (cafOverride.value === undefined ? props.engagement.audit : cafOverride.value));
@@ -656,9 +554,7 @@ const hasContractDates = computed(() =>
     .some((d) => !!d));
 
 // The GCS purchase-order document, the same way the CAF above is held and shown — including the override,
-// and for the same reason. The prop still describes the engagement as it read when the page opened, so
-// without this an order uploaded a moment ago vanished from the card: the auto-save consumed the picked
-// file and nothing had told the row on file that there now was one.
+// and for the same reason.
 const govOverride = ref(undefined);
 const govDetail = computed(() =>
   (govOverride.value === undefined ? props.engagement.government : govOverride.value));
@@ -670,9 +566,7 @@ const storedPurchaseOrder = computed(() => ({
 }));
 
 // Taking it back off, the same way the CAF is: confirmed and written immediately rather than queued with
-// the rest of the form, because it is a document the approvers read. No approval gate requires one, so
-// unlike the CAF this never leaves the engagement unable to be sent — it just stops naming an order that
-// is not the one.
+// the rest of the form, because it is a document the approvers read.
 const removingPurchaseOrder = ref(false);
 const removePurchaseOrder = async () => {
   if (!props.engagement.id || removingPurchaseOrder.value) return;
@@ -699,9 +593,6 @@ const removePurchaseOrder = async () => {
 
 // Service Line, Department, the engagement team and % Realization are mandatory (they are also the
 // backend's send-for-approval prerequisites), so Save & Next cannot pass with any of them blank.
-//
-// Service Line is among them because it is what the firm is actually engaged to DO — an engagement routed
-// for approval without one asks the approvers to sign off a piece of work nobody has named.
 const requiredRule = (what) => (v) => (v !== null && v !== undefined && v !== "") || `Select ${what}`;
 
 // Money: blank is "not known yet", a negative is wrong however early it is typed. One rule, five boxes.
@@ -740,18 +631,8 @@ const billingManagerHint = computed(() => seatHint(props.billingManagerOptions, 
 const toNum = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
 
 // ---- Save, driven by the page ----
-// The whole section in one write: the core first (it is what decides whether the conditional cards apply
-// at all), then each card that is on screen, then the signed CAF if one is waiting. Called by the page's
-// Save with the engagement id, which on a brand-new request only exists once the request has been created
-// — the reason this is a method the page calls rather than a button of its own.
-//
-// Saves what has been filled, not only a complete setup: an initiator entering a referral may not know
-// the fee or the billing manager yet, and refusing to store the half they do know would be the two-step
-// form the page exists to replace. The fields still carry their `required` markers, because they ARE
-// required — of an engagement being sent for approval, which is where the API enforces them.
-//
-// Ranges are checked all the same. A blank fee means "not known yet"; a fee of -5 or a realization of
-// 300% is wrong however early it is typed, and both the API and the DB reject them.
+// The whole section in one write: the core first (it is what decides whether the conditional cards apply at
+// all), then each card that is on screen, then the signed CAF if one is waiting.
 const saveSetup = async (engagementId, remsId = null) => {
   if (!validateFormats()) {
     throw new Error(
@@ -762,9 +643,8 @@ const saveSetup = async (engagementId, remsId = null) => {
   let view = (await remsApi.updateEngagement(engagementId, {
     department: core.value.department,
     // Empty string rather than null for the clearable one: the endpoint reads null as "leave this field
-    // alone" and only an empty value clears it, so sending null would make Clear look like it worked and
-    // then bring the old value back on the next read.
-    subServiceLine: core.value.subServiceLine ?? "",
+    // alone" and only an empty value clears.
+    serviceLine: core.value.serviceLine ?? "",
     engagementExecutiveId: core.value.engagementExecutiveId,
     billingManagerId: core.value.billingManagerId,
     // One fee question per engagement, and only the one that was asked is written. Omitted — not blanked —
@@ -772,17 +652,12 @@ const saveSetup = async (engagementId, remsId = null) => {
     ...(showFeeEstimate.value ? { firstYearFeeEstimate: toNum(core.value.firstYearFeeEstimate) } : {}),
     ...(showEngagementFee.value ? { engagementFee: toNum(core.value.engagementFee) } : {}),
     realizationPercentage: toNum(core.value.realizationPercentage),
-    // The billing pair only where it is asked (CAS). Omitted — not blanked — on every other department:
-    // an omitted field is what the endpoint reads as "leave this alone", so a department typed in by
-    // mistake and corrected does not take a billing schedule down with it, and putting the department
-    // back brings the answer back. Same shape as the conditional cards below, which are written only
-    // when they apply.
+    // The billing pair only where it is asked (CAS).
     ...(showBilling.value
       ? {
         billingPeriod: core.value.billingPeriod,
         // Empty string rather than null, like the clearable code above it: the endpoint reads null as
-        // "leave this field alone", so a description taken back out would otherwise come back on the
-        // next read.
+        // "leave this field alone".
         billingProcessDescription: core.value.billingProcessDescription ?? ""
       }
       : {})
@@ -818,9 +693,7 @@ const saveSetup = async (engagementId, remsId = null) => {
     const media = await mediaApi.upload(
       cafFile.value, "ClientAcceptance", remsId ? { type: "Rems", id: remsId } : null);
     view = await remsApi.uploadCaf(engagementId, media.id);
-    // What the card shows from now on. The page will not re-seed this form after an auto-save — it must
-    // not, or it would overwrite fields being typed — so without this the form just uploaded stays
-    // invisible on the card that asked for it until the whole page is reloaded.
+    // What the card shows from now on.
     cafOverride.value = view?.audit ?? null;
     syncing = true;
     cafFile.value = null;
@@ -849,9 +722,7 @@ const validateFormats = () => {
   const inRange = (v, min, max) =>
     blank(v) || (Number.isFinite(Number(v)) && Number(v) >= min && Number(v) <= max);
   const positive = (v) => inRange(v, 0, Number.MAX_SAFE_INTEGER);
-  // Each money box is checked only where it is ASKED — and therefore sent. A figure left on a record from
-  // a department it no longer belongs to is not this save's business, and blocking on a field nobody can
-  // see is a dead end.
+  // Each money box is checked only where it is ASKED — and therefore sent.
   return (!showFeeEstimate.value || positive(core.value.firstYearFeeEstimate)) &&
     (!showEngagementFee.value || positive(core.value.engagementFee)) &&
     inRange(core.value.realizationPercentage, 0, 100) &&
@@ -867,8 +738,7 @@ const cafFile = ref(null);
 const poFile = ref(null);
 
 // A purchase order arrives as whatever the client's procurement system produced — a PDF, a scan, or the
-// Word or Excel document it was raised in. Narrower than the general attachment list all the same: this
-// box wants a purchase order, not a zip of everything about one.
+// Word or Excel document it was raised in.
 const PURCHASE_ORDER_ACCEPT = ".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx";
 
 // Declared here rather than beside the re-seed watcher above because the file pickers are part of what the

@@ -219,11 +219,10 @@ public static class DefaultOptionSets
                 "Set out the milestones in the Description of Billing Process."),
         }),
         // What KIND of entity the client is — an individual, a not-for-profit, an insurer, a commercial
-        // business, a government body. Shown as "Entity Type"; the key stays REMS.IndustryGroup because
-        // every tenant's own copy of the list is keyed by it. An "audit" department for a "government"
+        // business, a government body. An "audit" department for a "government"
         // entity is a Government Audit and additionally requires a contract number + Florida 1%
         // state-fee flag (RemsEngagementCodes.IsGovernmentAudit).
-        new Definition(EntityType.Rems, "REMS.IndustryGroup", "REMS Entity Type", OptionItemSortMode.Custom, new[]
+        new Definition(EntityType.Rems, "REMS.EntityType", "REMS Entity Type", OptionItemSortMode.Custom, new[]
         {
             // "Business" was split into the three kinds THF actually onboards. All three ask the client
             // exactly the same questions the old single group did (EIN, CEO/CFO/AP, banker, lawyer) — see
@@ -256,14 +255,13 @@ public static class DefaultOptionSets
         // (RemsFormPayloadValidator). Deleting or re-coding one would leave submitted forms nobody can
         // validate, so the seeded six are locked — while the list stays open to an entity type a firm adds.
         }, LockSeededValues: true),
-        // The client's trade. Shown as "Industry"; the key stays REMS.SubIndustry for the same reason as
-        // the entity type above. Unlike the entity type — which decides which questions the client's
+        // The client's trade. Unlike the entity type — which decides which questions the client's
         // intake form asks and is therefore frozen once that form goes out — this is an internal
         // classification only, so it stays editable for as long as the setup does. One flat list rather
         // than one filtered by the entity type: the two do not partition cleanly (a hospital is Health
         // Care whether it is Commercial or Not-for-Profit), and a tenant adding a trade should not have to
         // say which entity types may see it.
-        new Definition(EntityType.Rems, "REMS.SubIndustry", "REMS Industry", OptionItemSortMode.Custom, new[]
+        new Definition(EntityType.Rems, "REMS.Industry", "REMS Industry", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("affordable_housing", "Affordable Housing", 1),
             new ItemDefinition("agribusiness", "Agribusiness", 2),
@@ -372,12 +370,10 @@ public static class DefaultOptionSets
             new ItemDefinition("project_analyst", "Project Analyst", 5),
             new ItemDefinition("program_admin_support", "Program and Administrative Support", 6),
         }),
-        // The service actually being sold. This IS "Service Line" now (its key stays REMS.SubServiceLine,
-        // because a tenant's own copy of a list is keyed by it and renaming the key would orphan theirs).
-        // A classification field: what the firm is engaged to do, for reporting and for the
-        // billing/marketing view. The Internal-* values are the firm's own work, booked as engagements so
-        // the same setup and approval route covers them.
-        new Definition(EntityType.Rems, "REMS.SubServiceLine", "REMS Service Line", OptionItemSortMode.Custom, new[]
+        // The service actually being sold. A classification field: what the firm is engaged to do, for
+        // reporting and for the billing/marketing view. The Internal-* values are the firm's own work,
+        // booked as engagements so the same setup and approval route covers them.
+        new Definition(EntityType.Rems, "REMS.ServiceLine", "REMS Service Line", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("attest_services", "Attest Services", 1),
             new ItemDefinition("tax_compliance", "Tax Compliance", 2),

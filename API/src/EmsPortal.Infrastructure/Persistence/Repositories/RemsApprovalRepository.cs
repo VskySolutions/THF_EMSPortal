@@ -53,8 +53,8 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
             // The engagement's own option references, and the request's status -- the packet renders the
             // codes behind all of them.
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Department)
-            .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.SubServiceLine)
-            .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.SubIndustry)
+            .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.ServiceLine)
+            .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Industry)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.BillingPeriod)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Rems).ThenInclude(r => r!.Status)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Rems).ThenInclude(r => r!.Type)

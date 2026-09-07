@@ -3,13 +3,9 @@
     <app-detail-header :items="breadcrumbs" :back-to="{ name: 'rems_approvals' }">
       <template #actions>
         <!-- The ENGAGEMENT's status, which is the request's answer rather than the reader's: it turns
-             Approved only when the round does. The tooltip says so, since "Pending Approval" beside a
-             task the reader has already signed is exactly the pair that reads as a contradiction. -->
+             Approved only when the round does. -->
         <app-option-badge v-if="task" :option="engagementStatus" />
-        <!-- The reader's OWN decision is deliberately not a second badge up here. It belongs to them, not
-             to the request, and beside the engagement's status it read as a competing answer to the same
-             question — "Approved" next to "Pending Approval" on one header. It is on the banner below and
-             on their row in the Approvers list, both of which say whose decision it is. -->
+        <!-- The reader's OWN decision is deliberately not a second badge up here. -->
       </template>
     </app-detail-header>
 
@@ -22,9 +18,7 @@
 
     <template v-else-if="task">
       <!-- Decision-state banner. -->
-      <!-- Signing is the reader's own act, and it is NOT the request being approved. A round of four is
-           approved when all four have signed, so the banner says what is still outstanding rather than
-           leaving a green box to imply the whole thing is done. -->
+      <!-- Signing is the reader's own act, and it is NOT the request being approved. -->
       <q-banner
         v-if="task.status === 'Approved'" dense
         :class="`${roundOutstanding ? 'bg-teal-1 text-teal-9' : 'bg-green-1 text-green-9'} rounded-borders q-mb-md`"
@@ -71,7 +65,7 @@
             <q-separator />
 
             <!-- The same material staff filled in, in the same order as the engagement workspace, plus the
-                 request that started it. Read-only throughout: an approver reviews, never edits. -->
+                 request that started it. -->
             <q-tabs
               v-model="tab" dense align="left" active-color="primary" indicator-color="primary"
               class="text-grey-7" no-caps inline-label
@@ -83,9 +77,7 @@
             <q-tab-panels v-model="tab" keep-alive animated>
               <!-- ---------- Client Form ---------- -->
               <!-- What the CLIENT answered on their intake form: who they are, how to reach them, where
-                   they are, who to speak to, and the other businesses they named. The addresses and
-                   contacts are here rather than on the tab beside it because they are the client's own
-                   answers too — they were asked on this form and nowhere else. -->
+                   they are, who to speak to, and the other businesses they named. -->
               <q-tab-panel name="clientForm">
                 <div class="row q-col-gutter-md">
                   <div v-for="item in clientRows" :key="item.label" class="col-12 col-sm-6">
@@ -105,8 +97,7 @@
                     <div class="rems-value">{{ addressOf("Mailing") }}</div>
                   </div>
                   <!-- However many places the client is invoiced at, each with the person the invoice is
-                       addressed to underneath it. An approver signing off a fee wants to know where the
-                       bill goes, and a client invoiced at two offices has two answers to that. -->
+                       addressed to underneath it. -->
                   <div v-for="(b, i) in billingAddresses" :key="b.id || i" class="col-12 col-sm-6">
                     <div class="rems-label">
                       Billing Address<template v-if="billingAddresses.length > 1"> {{ i + 1 }}</template>
@@ -157,9 +148,8 @@
               </q-tab-panel>
 
               <!-- ---------- Client Information ---------- -->
-              <!-- The request the FIRM raised about this client — who it is for, how it is classified, who
-                   is on it, and what was attached to it. The same tab the staff request page calls Client
-                   Information, so the two read as one screen seen from two sides. -->
+              <!-- The request the FIRM raised about this client — who it is for, how it is classified,
+                   who is on it, and what was attached to it. -->
               <q-tab-panel name="request">
                 <div class="row q-col-gutter-md">
                   <div v-for="item in requestRows" :key="item.label" class="col-12 col-sm-6">
@@ -194,7 +184,7 @@
                 <q-separator class="q-my-md" />
                 <div class="rems-subhead">Attachments</div>
                 <!-- The same preview row the request form shows, minus the ✕: an approver reads the
-                     packet, they do not edit it. Clicking opens the document in a new tab. -->
+                     packet, they do not edit it. -->
                 <div v-if="request.files && request.files.length" class="column q-gutter-xs">
                   <app-stored-file-item v-for="f in request.files" :key="f.id" :file="f" />
                 </div>
@@ -209,8 +199,7 @@
                     <div class="rems-value">{{ item.value }}</div>
                   </div>
 
-                  <!-- Fee + realization are reserved to the Department Director (AC-REMS-019.10).
-                       Saying so beats an empty field that reads as "never filled in". -->
+                  <!-- Fee + realization are reserved to the Department Director (AC-REMS-019.10). -->
                   <div v-if="engagement.financialsRestricted" class="col-12">
                     <div class="rems-label">First-Year Fee Estimate · % Realization</div>
                     <div class="rems-value text-grey-6">
@@ -221,12 +210,7 @@
                 </div>
 
                 <!-- Every card below appears on exactly the rule the setup FORM asked its questions on —
-                     the engagement's department, and for the contract block the client's entity type
-                     beside it — rather than on whether a detail row happens to exist. The two differ in
-                     both directions: an audit engagement whose CAF was never uploaded has no audit row and
-                     was showing the approver nothing at all about a document their sign-off depends on,
-                     and an engagement moved off Tax keeps the tax row it was written with and went on
-                     showing a due-date schedule that no longer applies to it. -->
+                     the engagement's department. -->
 
                 <!-- Audit and Assurance: the signed client-acceptance form, and for Assurance the client's
                      fiscal year end and the administrative fees underneath it. -->
@@ -257,9 +241,7 @@
                   </q-card-section>
                 </q-card>
 
-                <!-- Government audit: the contract block. An Audit department on a Government entity, which
-                     is the same pair the setup form keys it off. Not shown for a GCS engagement, whose own
-                     card is below — the two share a stored row but answer different questions. -->
+                <!-- Government audit: the contract block. -->
                 <q-card v-if="showGovernment" flat bordered class="rems-inner q-mt-md">
                   <q-card-section class="q-py-sm text-subtitle2 text-primary">
                     <q-icon name="o_gavel" size="18px" class="q-mr-xs" />Government Audit — Contract
@@ -276,8 +258,7 @@
                 </q-card>
 
                 <!-- GCS: the purchase order the engagement is set up against, and the rate it is staffed
-                     at. Shown for a GCS department only — the card above it is the government AUDIT's
-                     contract block, which shares the same stored row but answers a different question. -->
+                     at. -->
                 <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
                   <q-card-section class="q-py-sm text-subtitle2 text-primary">
                     <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
@@ -305,9 +286,7 @@
                   </q-card-section>
                   <q-separator />
                   <q-card-section>
-                    <!-- The dates the engagement was SENT with. They are derived from the fiscal year end
-                         and then editable, so an approver reads what staff actually recorded rather than
-                         what the rule would produce today. -->
+                    <!-- The dates the engagement was SENT with. -->
                     <div class="row q-col-gutter-md">
                       <div class="col-12 col-sm-4">
                         <div class="rems-label">Fiscal Year End</div>
@@ -333,9 +312,7 @@
                   </q-card-section>
                 </q-card>
 
-                <!-- CAS: how the client is billed. Client Accounting Services is the recurring arrangement
-                     — how often the client is invoiced and how that billing actually runs are part of what
-                     is being approved, and until now the approver's packet did not carry either of them. -->
+                <!-- CAS: how the client is billed. -->
                 <q-card v-if="showBilling" flat bordered class="rems-inner q-mt-md">
                   <q-card-section class="q-py-sm text-subtitle2 text-primary">
                     <q-icon name="o_receipt" size="18px" class="q-mr-xs" />CAS — Billing
@@ -349,8 +326,7 @@
                       </div>
                       <div class="col-12 col-sm-8">
                         <div class="rems-label">Description of Billing Process</div>
-                        <!-- As staff typed it. The box it was written in grows with the text, so a
-                             three-line schedule is three lines here rather than one run-on sentence. -->
+                        <!-- As staff typed it. -->
                         <div class="rems-value" style="white-space: pre-wrap;">
                           {{ text(engagement.billingProcessDescription) }}
                         </div>
@@ -397,9 +373,7 @@
               <!-- ---------- Approval ---------- -->
               <q-tab-panel name="approval">
                 <!-- Where the ROUND stands, as a badge rather than a word in a column of values: it is the
-                     one thing on this tab everybody came to read, and "Partially Approved" is the answer
-                     the old label could not give — a round of four with two signatures on it was Pending,
-                     which reads as nobody having looked at it. -->
+                     one thing on this tab everybody came to read. -->
                 <div class="row q-col-gutter-md q-mb-md">
                   <div class="col-12 col-sm-6">
                     <div class="rems-label">Approval Status</div>
@@ -422,12 +396,7 @@
                 </div>
 
                 <!-- Server order: by role — shareholder, director, CSE, commission recipient, then anyone
-                     added by hand — so the list reads the same way every time, and a row does not move
-                     under the reader each time somebody signs.
-                     A round asks everybody at once rather than one after another, so "whose turn is it" is
-                     answered by every row still waiting, not by one of them. Those are the rows marked
-                     here; the reader's own is marked hardest, because it is the only one they can act
-                     on. -->
+                     added by hand — so the list reads the same way every time. -->
                 <div class="rems-subhead">Approvers</div>
                 <q-list bordered separator class="rounded-borders">
                   <q-item
@@ -435,9 +404,7 @@
                     :class="{ 'ar--awaiting': awaitingDecision(d), 'ar--you': d.isYou }"
                   >
                     <q-item-section avatar>
-                      <!-- The icon on the ROLE's own option — the tenant's, like its name. Amber while
-                           the round is still waiting on this approver, so the list can be scanned down
-                           its left edge for the rows that have not answered. -->
+                      <!-- The icon on the ROLE's own option — the tenant's, like its name. -->
                       <q-icon
                         :name="approverRoleOption(d.role).icon || 'o_person'"
                         :color="awaitingDecision(d) ? 'amber-9' : 'primary'"
@@ -466,10 +433,7 @@
                   </q-item>
                 </q-list>
 
-                <!-- What the approvers objected to BEFORE now. A resubmission is routed afresh rather than
-                     reopening the last attempt, so those earlier objections are readable nowhere else on
-                     this page. The current ones are left out of it: the list above already gives them in
-                     full. Absent entirely where there is nothing earlier to read. -->
+                <!-- What the approvers objected to BEFORE now. -->
                 <approval-history
                   v-if="engagement.engagementId" :engagement-id="engagement.engagementId"
                   :exclude-round-id="round.id" class="q-mt-md"
@@ -533,9 +497,7 @@
             </template>
           </q-card>
 
-          <!-- The REQUEST's conversation, not a thread of its own: an approver's question needs to reach
-               the partner who raised it and the CSE, who read it on the request detail and in the pool's
-               Conversations dialog. A private per-task thread would be a dead end. -->
+          <!-- The REQUEST's conversation, not a thread of its own. -->
           <q-card v-if="request.remsId" flat bordered class="rems-card">
             <q-card-section class="text-subtitle1 text-weight-medium">Conversation</q-card-section>
             <q-separator />
@@ -579,17 +541,7 @@
 </template>
 
 <script setup>
-// The REMS approval-task review screen (WO-117 Part B, AC-REMS-019/020). Read-only throughout: it renders
-// the same case staff assembled in the engagement workspace — the originating request, the client, the
-// entity's engagement setup with its conditional audit/government/tax detail, the marketing tags, the
-// commission splits — plus the round's other decisions, because an approver cannot sensibly sign off on
-// less than what was filled in. Option-set references arrive from the server already resolved to labels
-// (the approver roles do not carry optionSets.read). The ONE thing still scoped by role is the fee
-// estimate and realization (AC-REMS-019.10), which arrive null with `financialsRestricted` set so the
-// Setup tab can say they are reserved rather than show an empty field.
-//
-// The per-role checklist gates Approve (disabled until every item is completed; the server re-verifies and
-// a 409 is surfaced), and Reject requires a reason. Once decided, the task is read-only.
+// The REMS approval-task review screen (WO-117 Part B, AC-REMS-019/020).
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { remsApi, EntityType, getApiErrorMessage } from "services/api";
@@ -618,13 +570,12 @@ const route = useRoute();
 const notify = useNotify();
 const { confirm } = useConfirm();
 const fmt = useDateFormat();
-// Everything a value is rendered with — its wording, its colour, its icon, the sentence on its tooltip —
-// comes off the option itself. The *Option helpers hand back the whole thing for AppOptionBadge; the
-// *Label ones are for the rows that read as plain text rather than as a badge.
+// Everything a value is rendered with — its wording, its colour, its icon, the sentence on its tooltip
+// — comes off the option itself.
 const {
-  typeLabel, typeHint, requestStatusOption,
-  industryGroupLabel, formStatusOption, submissionStateOption,
-  departmentLabel, subServiceLineLabel, subIndustryLabel, personnelLevelLabel, billingPeriodLabel,
+  typeLabel, typeHint, requestStatusOption, referralSourceLabel,
+  entityTypeLabel, formStatusOption, submissionStateOption,
+  departmentLabel, serviceLineLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
   approverRoleLabel, approverRoleOption, approvalStatusOption,
   engagementStatusOption, roundStatusOption
 } = useRemsMeta();
@@ -639,9 +590,7 @@ const approving = ref(false);
 const savingItemId = ref(null);
 
 // The packet in the order it was assembled: what the client sent, what the firm recorded about them, the
-// engagement built on top of it, how it was won, who is paid for it, and the round being decided. The last
-// four are named exactly as the staff request page names them, so an approver and the admin who filled it
-// in are looking at the same six words.
+// engagement built on top of it, how it was won, who is paid for it, and the round being decided.
 const TABS = [
   { name: "clientForm", icon: "o_description", label: "Client Form" },
   { name: "request", icon: "o_assignment", label: "Client Information" },
@@ -650,9 +599,8 @@ const TABS = [
   { name: "commission", icon: "o_payments", label: "Commission" },
   { name: "approval", icon: "o_approval", label: "Approvals" }
 ];
-// Opens on Approval, not on the packet: the approver came here to decide, and that tab carries the
-// round, where the other approvers stand and their own decision. The tabs before it are the material
-// they read on the way to it, left in the order it was filled in.
+// Opens on Approval, not on the packet: the approver came here to decide, and that tab carries the round,
+// where the other approvers stand and their own decision.
 const tab = ref("approval");
 
 const request = computed(() => task.value?.request || {});
@@ -661,16 +609,12 @@ const client = computed(() => engagement.value.client || {});
 const round = computed(() => task.value?.round || {});
 const engagementStatus = computed(() => engagementStatusOption(engagement.value.status));
 
-// Whose signature the round is still waiting on. Only meaningful while the round is open: once it closes,
-// a task left undecided is Superseded rather than Pending, and a closed round is waiting on nobody — so
-// nothing on a finished round should read as somebody's turn.
+// Whose signature the round is still waiting on.
 const awaitingDecision = (d) => round.value.status === "Pending" && d?.status === "Pending";
 
 // ---- Where the whole round stands ----
 // Counted off the decisions the packet carries rather than taken from the round's own status alone: the
-// round is Pending from the moment it is sent until the last approver signs, so the status by itself
-// cannot tell "nobody has looked at this" from "everybody but you has signed". roundStatusOption turns the
-// pair into the badge — Partially Approved, with the tally on its tooltip.
+// round is Pending from the moment it is sent until the last approver signs.
 const roundDecisions = computed(() => round.value.decisions || []);
 const roundApprovedCount = computed(() => roundDecisions.value.filter((d) => d.status === "Approved").length);
 const roundMeta = computed(() =>
@@ -713,7 +657,7 @@ const requestRows = computed(() => {
     { label: "Request Status", type: "status" },
     { label: "Customer Email", value: text(r.customerEmail) },
     { label: "Customer Phone Number", value: text(r.customerMobileNumber) },
-    { label: "Entity Type", value: r.industryGroup ? industryGroupLabel(r.industryGroup) : "—" },
+    { label: "Entity Type", value: r.entityType ? entityTypeLabel(r.entityType) : "—" },
     // Read off the option, so the wording and the explanation are the tenant's own — the same two rows
     // the request lists render as badges.
     {
@@ -738,15 +682,10 @@ const clientRows = computed(() => {
     { label: "Name", value: text(c.name) },
     { label: "Email", value: text(c.email) },
     { label: "Phone Number", value: text(c.mobileNumber) },
-    { label: "Referral Source", value: text(c.referralSource) }
+    // The packet carries the option-set CODE (RemsApprovalClientView reads ReferralSource.Value).
+    { label: "Referral Source", value: c.referralSource ? referralSourceLabel(c.referralSource) : "—" }
   ];
-  // No billing address row here. Billing addresses are the entity's, and there may be several — they are
-  // read below with the physical and mailing ones, each carrying the person its invoice is addressed to.
-  //
-  // The two billing CONTACT columns are all that stay on the client. They carry an answer given before
-  // the addressee moved onto the billing address, and whatever staff have typed into them by hand since.
-  // Dropped when blank rather than shown as "—", which beside addresses that name their own addressee
-  // would read as a missing answer.
+  // No billing address row here.
   if (c.billingContactName) rows.push({ label: "Billing Contact", value: text(c.billingContactName) });
   if (c.billingEmail) rows.push({ label: "Billing Email", value: text(c.billingEmail) });
   return rows;
@@ -759,8 +698,8 @@ const setupRows = computed(() => {
     { label: "Department", value: departmentLabel(e.department) },
     // Same industry-then-service sequence the setup form is filled in (the Entity Type itself is a
     // request field, so it sits in the request block above rather than here).
-    { label: "Industry", value: subIndustryLabel(e.subIndustry) },
-    { label: "Service Line", value: subServiceLineLabel(e.subServiceLine) },
+    { label: "Industry", value: industryLabel(e.industry) },
+    { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
     { label: "Department Director", value: text(e.departmentDirector?.name) },
     { label: "Engagement Executive", value: text(e.engagementExecutive?.name) },
     { label: "Billing Manager", value: text(e.billingManager?.name) }
@@ -768,8 +707,7 @@ const setupRows = computed(() => {
   // Withheld figures get their own explanatory block in the template instead of a blank pair of fields.
   if (!e.financialsRestricted) {
     // One fee question per engagement — Assurance prices the engagement, GCS prices neither (its purchase
-    // order and bill rate are on its own card), everyone else quotes a first year. The row the department
-    // was never asked is absent rather than blank.
+    // order and bill rate are on its own card), everyone else quotes a first year.
     if (showAssurance.value) {
       rows.push({ label: "Engagement Fee", value: money(e.engagementFee) });
     } else if (!showGcs.value) {
@@ -781,12 +719,7 @@ const setupRows = computed(() => {
 });
 
 // Which questions this engagement was PUT, read off its department — and, for the contract block, the
-// client's entity type beside it — exactly as the setup form decides what to ask. An approver reads the
-// packet staff actually filled in, so the cards on this tab have to be the cards that were on that one.
-//
-// Keyed off the department rather than off "is there a detail row?", which is what these used to ask and
-// which is wrong in both directions: an audit engagement whose CAF was never uploaded has no audit row at
-// all, and an engagement moved from Tax to CAS keeps the tax row it was written with.
+// client's entity type beside it — exactly as the setup form decides what to ask.
 const department = computed(() => engagement.value.department);
 const showAssurance = computed(() => isAssuranceDepartment(department.value));
 const showGcs = computed(() => isGcsDepartment(department.value));
@@ -794,7 +727,7 @@ const showAttest = computed(() => requiresClientAcceptanceForm(department.value)
 const showTax = computed(() => isTaxDepartment(department.value));
 const showBilling = computed(() => isCasDepartment(department.value));
 // The entity type is the REQUEST's, not the engagement's — same source the setup form reads it from.
-const showGovernment = computed(() => isGovernmentAudit(department.value, request.value.industryGroup));
+const showGovernment = computed(() => isGovernmentAudit(department.value, request.value.entityType));
 
 const taxForms = computed(() => engagement.value.tax?.taxForms || []);
 
@@ -885,9 +818,7 @@ const addressOf = (type) => {
 const billingAddresses = computed(() =>
   entityAddresses.value.filter((a) => a.addressType === "Billing").map((a) => a.address));
 
-// Who the invoice is addressed to, under the address it belongs to. The workspace address view carries
-// the addressee on the address itself, so this reads them off the same row; the name is handed over in
-// two halves so the particle can be drawn after it and in bold.
+// Who the invoice is addressed to, under the address it belongs to.
 const addressee = (address) => {
   const parts = addresseeParts(address);
   const reach = [address?.email, address?.phoneNumber].map((v) => String(v ?? "").trim()).filter(Boolean);
@@ -895,11 +826,7 @@ const addressee = (address) => {
   return { ...parts, reach: reach.join(" · ") };
 };
 
-// A contact's DisplayName already reads with the particle on it. The particle is repeated on the row, so
-// it comes off again here and the two halves are drawn separately.
-//
-// Stripped from EITHER end: it trails the name on anything written since the order settled, and leads it
-// on a contact materialised before that. Left on, an older record would render its particle twice.
+// A contact's DisplayName already reads with the particle on it.
 const nameWithoutSuffix = (contact) => {
   const name = String(contact?.name ?? "").trim();
   const suffix = String(contact?.suffix ?? "").trim();
@@ -910,9 +837,7 @@ const nameWithoutSuffix = (contact) => {
 };
 const roleText = (r) => (r || "").replace(/([a-z])([A-Z])/g, "$1 $2");
 
-// The signed CAF as a stored-file row. The packet resolves the media to a name and a URL, but the URL is
-// not a link anyone can follow — /api/media is refused without a bearer token — so what the row needs
-// from it is the media ID, which is what AppStoredFileItem fetches the bytes by.
+// The signed CAF as a stored-file row.
 const cafFile = computed(() => {
   const audit = engagement.value.audit;
   return audit?.clientAcceptanceFormMediaId

@@ -45,10 +45,7 @@
     <!-- Editable ------------------------------------------------------------------------------------- -->
     <template v-else-if="state === 'Editable'">
       <!-- Intro -->
-      <!-- The entity type is NOT shown. It is THF's classification of the client, not something the
-           client told us or is being asked to confirm — it decides which questions appear below, and
-           that is the whole of its job here. A chip stating it invited the client to query a label they
-           were never asked about and cannot change. -->
+      <!-- The entity type is NOT shown. -->
       <div class="pef-head">
         <div class="row items-center q-gutter-sm">
           <div class="text-h5 text-weight-bold col">EMS Onboarding Form</div>
@@ -69,7 +66,7 @@
           </ul>
         </q-banner>
         <client-intake-fields
-          v-model="payload" :industry-group="industryGroup" :errors="errors"
+          v-model="payload" :entity-type="entityType" :errors="errors"
           :referral-sources="referralSources"
           @confirm-clear-entities="onConfirmClearEntities"
           @confirm-clear-individuals="onConfirmClearIndividuals"
@@ -117,7 +114,7 @@
           <q-separator />
           <q-card-section>
             <rems-review-summary
-              :payload="reviewPayload" :industry-group="industryGroup" :locked-email="payload.email"
+              :payload="reviewPayload" :entity-type="entityType" :locked-email="payload.email"
               :referral-sources="referralSources"
             />
           </q-card-section>
@@ -140,16 +137,7 @@
 </template>
 
 <script setup>
-// Public, anonymous REMS client EMS form (WO-116, Part B). Loads its state by invite code via the
-// unauthenticated remsPublicApi, renders one of Invalid/Unavailable/Submitted/Editable, auto-saves the
-// draft as a durable RemsFormPayloadV1, and drives the Review → Submit → thank-you flow. No auth/tenant
-// stores are touched — everything is authorised by the invite code alone.
-//
-// The FIELDS are not here. They are ClientIntakeFields, and their shape, seeding, building and
-// validation are useRemsIntakeForm — because an Admin correcting a client's answers gets the same form,
-// and two copies of it would be two forms within a release or two. What is left here is everything that
-// is peculiar to the client's own visit: the invite code, the auto-save, the review step, and the four
-// terminal states this page can end in.
+// Public, anonymous REMS client EMS form (WO-116, Part B).
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { debounce } from "quasar";
@@ -169,11 +157,8 @@ const notify = useNotify();
 const { confirm } = useConfirm();
 const inviteCode = route.params.inviteCode;
 
-// The referral-source list, as the SERVER sends it with the form — the tenant's own wording, in their
-// own order, with the descriptions that become each option's caption. Empty until the form loads, which
-// is the same moment the picker it fills appears: this page renders a spinner until then.
-//
-// Anonymous, so it cannot resolve option sets for itself; RemsPublicFormController resolves them for it.
+// The referral-source list, as the SERVER sends it with the form — the tenant's own wording, in their own
+// order, with the descriptions that become each option's caption.
 const referralSources = ref([]);
 
 // ---- Screen state ----
@@ -182,7 +167,7 @@ const loadFailed = ref(false);
 const state = ref("");          // "Invalid" | "Unavailable" | "Submitted" | "Editable"
 const cancelled = ref(false);
 const thankYouName = ref("");
-const industryGroup = ref("");  // lowercase entity-type code, e.g. individual | commercial | government
+const entityType = ref("");  // lowercase entity-type code, e.g. individual | commercial | government
 const step = ref("form");       // "form" | "review"
 
 // ---- Save / validation state ----
@@ -212,10 +197,10 @@ const saveText = computed(() => ({
 }[saveState.value] || "Your progress saves automatically"));
 
 // What still has to be filled in before Review. Mirrors RemsFormPayloadValidator — see useRemsIntakeForm.
-const clientIssues = computed(() => intakeIssues(payload.value, industryGroup.value));
+const clientIssues = computed(() => intakeIssues(payload.value, entityType.value));
 const canReview = computed(() => clientIssues.value.length === 0);
 
-const buildPayload = () => buildIntakePayload(payload.value, industryGroup.value);
+const buildPayload = () => buildIntakePayload(payload.value, entityType.value);
 
 // The review step shows the payload exactly as it will be submitted (wire shape, addresses converted).
 const reviewPayload = computed(() => buildPayload());
@@ -267,7 +252,7 @@ async function load () {
     if (res?.state === "Submitted") {
       thankYouName.value = res.clientName || "";
     } else if (res?.state === "Editable") {
-      industryGroup.value = String(res.industryGroup || "").toLowerCase();
+      entityType.value = String(res.entityType || "").toLowerCase();
       // The tenant's own REMS.ReferralSource list, resolved server-side because this page has no
       // session to resolve it with. Absent (an emptied or missing list) leaves the built-in copy.
       if (res.referralSources?.length) referralSources.value = res.referralSources;

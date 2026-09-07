@@ -39,10 +39,7 @@
       @refresh="load"
       @row-click="(_, row) => openTask(row)"
     >
-      <!-- Flagged only where it says something. A request that is back in front of the approvers is a
-           repeat of a review that already failed once, and the row reads very differently for it. HOW MANY
-           times is not on screen: the count is machinery, and one word is the whole of what a reader
-           does with it. -->
+      <!-- Flagged only where it says something. -->
       <template #body-cell-remsNumber="cell">
         <q-td :props="cell">
           <div class="text-weight-medium">{{ cell.row.remsNumber || "—" }}</div>
@@ -50,14 +47,9 @@
         </q-td>
       </template>
 
-      <!-- Where the REQUEST's approval stands — not where the reader's own signature does. It reads
-           "Approved" only once every approver has signed; a round that is part-signed says PARTIALLY
-           APPROVED and the tooltip gives the tally. Before this, the only status on the row was the
-           reader's own task, which flipped to Approved the moment they signed and left them reading their
-           own signature as the request's outcome. -->
-      <!-- The particle after the name and in bold: on an approver's inbox the name is how a request
-           is recognised, and two clients called John Smith differ by nothing else. The column still SORTS
-           and searches on `clientName`, which is the two joined. -->
+      <!-- Where the REQUEST's approval stands — not where the reader's own signature does. -->
+      <!-- The particle after the name and in bold: on an approver's inbox the name is how a request is
+           recognised, and two clients called John Smith differ by nothing else. -->
       <template #body-cell-client="cell">
         <q-td :props="cell">
           <app-name-with-suffix :name="cell.row.clientName" :suffix="cell.row.clientNameSuffix" />
@@ -70,18 +62,14 @@
         </q-td>
       </template>
 
-      <!-- The reader's OWN decision, named as theirs. Every row on this list is their task, so the badge
-           was never ambiguous about whose it was — only about what it was a decision on. -->
+      <!-- The reader's OWN decision, named as theirs. -->
       <template #body-cell-status="cell">
         <q-td :props="cell">
           <app-option-badge :option="approvalStatusOption(cell.row.status)" />
         </q-td>
       </template>
 
-      <!-- How far the whole ROUND has got, not just this task. Approved and rejected are counted apart
-           because a rejection ENDS the round: "1/4" on its own read as three approvers still thinking
-           about it, when in fact nobody else will ever decide. The red count is what says so, and it is
-           there only when somebody actually rejected — a red 0 on every other row buys nothing. -->
+      <!-- How far the whole ROUND has got, not just this task. -->
       <template #body-cell-approvals="cell">
         <q-td :props="cell">
           <div class="row items-center no-wrap">
@@ -105,8 +93,7 @@
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- A LINK, not a click handler: the task is a place, so the button is written as a route and
-               renders as a real <a href> — which is what makes middle-click and "open in new tab" work.
-               The row click beside it still calls the same route the only way a row can. -->
+               renders as a real <a href> — which is what makes middle-click and "open in new tab" work. -->
           <q-btn flat round dense color="primary" icon="o_visibility" :to="taskRoute(cell.row)">
             <q-tooltip>Open for review</q-tooltip>
           </q-btn>
@@ -131,14 +118,7 @@
 
 <script setup>
 // The task-isolated REMS Approval Inbox (WO-117 Part B, AC-REMS-019): the REQUESTS routed to the caller,
-// one row each. The backend returns only the caller's own tasks, so this surface never exposes another
-// approver's work, an approver picker, or impersonation. Clicking a row opens the role-scoped task detail.
-//
-// One row per request, not per round. A rejected request is re-routed as a NEW round with a new task, and
-// listing every round gave a request that had been round three times three rows — the one still wanting an
-// answer sitting between two that were long since finished. The row carries the caller's task on the
-// LATEST round (the server picks it); the rounds before it are on the task detail, which lists them under
-// the round being decided.
+// one row each.
 import { ref, watch } from "vue";
 import { debounce } from "quasar";
 import { useRouter } from "vue-router";
@@ -165,8 +145,7 @@ const auditColumns = useAuditColumns();
 const { approvalStatusOption, approvalStatusFilterOptions, roundStatusOption } = useRemsMeta();
 
 // Where the whole ROUND stands, from the counts every row carries — the REMS.ApprovalRoundStatus value,
-// which is "Partially Approved" while some but not all approvers have signed. Declared above `columns`,
-// which calls it to build the sortable label.
+// which is "Partially Approved" while some but not all approvers have signed.
 const roundMeta = (row) =>
   roundStatusOption(row?.roundStatus, row?.approvedCount || 0, row?.approverCount || 0);
 
@@ -175,14 +154,11 @@ const roundMeta = (row) =>
 const columns = [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "client", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterable: false },
-  // On by default: an approver deciding on a round needs to know who to ask about it, and the CSE is
-  // that person. Without the column, finding out meant opening the request.
-  // Not sortable: the CSE is a user id the controller turns into a name after the page is read.
+  // On by default: an approver deciding on a round needs to know who to ask about it, and the CSE is that
+  // person.
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", default: true, filterable: false },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the
-  // reader's own decision below is not. Sorted and searched on the label the badge shows, partial state
-  // included, so ordering by this column groups the rounds that are at the same point.
-  // Not sortable: the label is worked out here from the round's tallies, not read from a column.
+  // reader's own decision below is not.
   {
     name: "roundStatus",
     label: "Approval Status",
@@ -191,13 +167,7 @@ const columns = [
     default: true,
     filterable: false
   },
-  // Whose signature, said in the heading. It is a filter as well as a badge, and it narrows on the
-  // caller's own TASK server-side — which is exactly what "Your Decision" means.
-  //
-  // The "Your Role" column that used to sit in front of it is gone entirely. Every row on this list is
-  // the reader's own task, so the role only ever said which seat put them on a round they were already
-  // looking at — machinery, not something anybody reads or acts on. The endpoint still accepts a `role`
-  // filter; nothing on this screen sends one.
+  // Whose signature, said in the heading.
   { name: "status", label: "Your Decision", field: "status", align: "left", sortable: true, default: true, filterOptions: approvalStatusFilterOptions.value },
   // Not sortable: how much of the round is outstanding is counted from the tasks loaded with each row.
   {
@@ -209,17 +179,14 @@ const columns = [
     filterable: false
   },
   { name: "sentOnUtc", label: "Sent", field: "sentOnUtc", align: "left", sortable: true, default: true, filterable: false },
-  // Off by default, but offered in the Columns menu so nothing the row returns is unreachable. The Entity
-  // column went with the field behind it: an approval is about a request and its one engagement, the row
-  // stopped carrying an entity name to put here, and the column had been rendering "—" on every row.
+  // Off by default, but offered in the Columns menu so nothing the row returns is unreachable.
   { name: "decidedOnUtc", label: "Decided", field: (r) => (r.decidedOnUtc ? fmt.formatDateTime(r.decidedOnUtc) : "—"), align: "left", sortable: true, default: false, filterable: false },
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ];
 
 // Paged and filtered SERVER-side, like every other REMS list: loading an approver's whole history and
-// searching it in the browser stops scaling, and makes the pager count the loaded page rather than the
-// matching set.
+// searching it in the browser stops scaling.
 const { rows, loading, totalRecords, search, filterOpen, pagination, load, onRequest } = useListTable({
   pageKey: "rems-approvals",
   fetcher: ({ page, limit, sortBy, descending }) =>

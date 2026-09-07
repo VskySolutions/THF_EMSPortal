@@ -1,6 +1,6 @@
 namespace EmsPortal.Api.Models.Rems;
 
-/// <summary>Name a delegate, or change what an existing one may do. Upserts on the pair.</summary>
+/// <summary>Name a delegate, or change what an existing one may do.</summary>
 public sealed class SaveRemsDelegationRequest
 {
     /// <summary>The person who will act on the caller's behalf.</summary>
@@ -9,16 +9,13 @@ public sealed class SaveRemsDelegationRequest
     /// <summary>May create and fill requests as the caller.</summary>
     public bool CanPrepare { get; set; } = true;
 
-    /// <summary>
-    /// May email the intake link to the client. Off unless asked for: without it the principal sees the
-    /// request before the client does.
-    /// </summary>
+    /// <summary>May email the intake link to the client.</summary>
     public bool CanSend { get; set; }
 
-    /// <summary>First day it applies (inclusive). Null = from now.</summary>
+    /// <summary>First day it applies (inclusive).</summary>
     public DateOnly? StartsOn { get; set; }
 
-    /// <summary>Last day it applies (inclusive). Null = open-ended.</summary>
+    /// <summary>Last day it applies (inclusive).</summary>
     public DateOnly? EndsOn { get; set; }
 }
 

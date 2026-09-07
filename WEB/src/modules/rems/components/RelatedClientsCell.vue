@@ -1,10 +1,6 @@
 <template>
   <div class="rcc">
-    <!-- ONE PANEL, TWO READINGS, decided by what kind of client the request is for.
-         An INDIVIDUAL's related clients are a family: a parent, and the people on their return. A
-         company's are not — the intake form asks it "are there more entities?" and captures a name, an
-         email and a phone, and nothing anywhere says one business owns another. Calling those rows
-         "children" of a "parent" claimed a corporate structure the firm never asked about. -->
+    <!-- ONE PANEL, TWO READINGS, decided by what kind of client the request is for. -->
     <div class="rcc__head">
       <template v-if="isIndividual">
         <q-badge class="rcc__tag rcc__tag--parent">Parent</q-badge>
@@ -12,8 +8,7 @@
           <app-name-with-suffix :name="parent.name" :suffix="parent.suffix" />
         </span>
         <!-- A spouse on a JOINT return is not a related client — one return, one client, one invoice —
-             so they are named here rather than given a row and a status of their own. The note says why,
-             which is the difference between "we have not set them up" and "there is nothing to set up". -->
+             so they are named here rather than given a row and a status of their own. -->
         <span v-if="parent.jointWith" class="rcc__joint">
           <q-icon name="o_add" size="12px" class="rcc__joint-plus" />
           <app-name-with-suffix :name="parent.jointWith.name" :suffix="parent.jointWith.suffix" />
@@ -37,17 +32,13 @@
       :key="`${row.kind}:${row.id}`"
       class="rcc__child"
     >
-      <!-- "Child" for a person on somebody's return; a NUMBER for a business, because that is the only
-           thing that distinguishes one declared entity from the next — the form asks nothing about how
-           they relate to the client or to each other. -->
+      <!-- "Child" for a person on somebody's return; a NUMBER for a business. -->
       <q-badge class="rcc__tag rcc__tag--child">{{ isIndividual ? "Child" : `Entity-${i + 1}` }}</q-badge>
       <span class="rcc__name">
         <!-- The particle after the name and in bold, as the parent above and the Client column beside it
-             draw theirs: a related client is told from their own father by that particle and nothing
-             else. A business carries none and reads as its plain name. -->
+             draw theirs: a related client is told from their own father by that particle and nothing else. -->
         <app-name-with-suffix :name="row.name" :suffix="row.suffix" />
-        <!-- The contact details the client gave for them. Nowhere else on this list shows them, and for
-             a business they are the whole of what was declared besides the name. -->
+        <!-- The contact details the client gave for them. -->
         <q-tooltip v-if="contactHint(row)" :delay="300">{{ contactHint(row) }}</q-tooltip>
       </span>
       <span v-if="relationLabel(row.relation)" class="rcc__relation">({{ relationLabel(row.relation) }})</span>
@@ -55,9 +46,7 @@
       <q-space />
 
       <!-- What this related client is referred to by — the request it produced, or the derived
-           REMS-1042-C1. Absent until the row has been moved off Not Initiated: before that there is
-           nothing for a reference to point at, and printing one invites a hunt for a request that does
-           not exist. -->
+           REMS-1042-C1. -->
       <router-link
         v-if="row.reference && row.createdRemsId"
         class="rcc__ref rcc__ref--link"
@@ -77,9 +66,8 @@
       />
     </div>
 
-    <!-- For an individual this is reachable when everybody declared files on the client's own return,
-         which the header above has already said. Worth saying out loud either way: an empty box under a
-         heading reads as something that failed to load. -->
+    <!-- For an individual this is reachable when everybody declared files on the client's own return, which
+         the header above has already said. -->
     <div v-if="!rows.length" class="rcc__empty">
       <q-icon name="o_info" size="14px" class="q-mr-xs" />
       {{ isIndividual
@@ -91,13 +79,6 @@
 
 <script setup>
 // The nested cell on Related Entities: a client and the clients they brought with them.
-//
-// It draws a table inside a table, which is the point of the column — a request's related clients are a
-// LIST, and flattening them into one cell of comma-separated names would lose the one thing anybody comes
-// to this screen for, which is where each of them has got to.
-//
-// The status control is the only thing here that writes, and it does not write itself: it emits, and the
-// page saves. See RelatedStatusSelect.
 import { computed } from "vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import RelatedStatusSelect from "modules/rems/components/RelatedStatusSelect.vue";
@@ -105,7 +86,7 @@ import { INDIVIDUAL_TYPES } from "modules/rems/useRemsIntakeForm";
 import { isIndividualEntityType } from "modules/rems/useRemsMeta";
 
 const props = defineProps({
-  // The request's entity type (a REMS.IndustryGroup code). It decides which of the two readings above
+  // The request's entity type (a REMS.EntityType code). It decides which of the two readings above
   // applies, because it is what decided which question the client was asked in the first place.
   entityType: { type: String, default: "" },
   // { name, suffix, jointWith: { name, relation } | null } — the client the request was raised for.
@@ -125,10 +106,7 @@ defineEmits(["set-status"]);
 
 const isIndividual = computed(() => isIndividualEntityType(props.entityType));
 
-// What they are to the client, read back as the word the client chose. These are payload CODES rather
-// than an option set — the intake form asks the question with these three answers — so the labels come
-// from the same list the form offered. An unrecognised code renders as itself rather than disappearing.
-// Empty for a business, which is never asked how it relates to anything.
+// What they are to the client, read back as the word the client chose.
 const relationLabel = (relation) => {
   if (!relation) return "";
   return INDIVIDUAL_TYPES.find((o) => o.value === relation)?.label || relation;

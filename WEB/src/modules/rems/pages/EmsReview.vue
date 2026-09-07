@@ -32,10 +32,7 @@
       @request="onRequest"
       @refresh="load"
     >
-      <!-- The two ways to read this queue, beside the column picker in the table's own top bar. It is one
-           list either way — "All" is every request that has reached the admins, mine and everybody
-           else's and the ones nobody has taken; "Assigned to me" is the slice that is my work. Server-
-           side, like every other filter here, so it narrows the whole set rather than the loaded page. -->
+      <!-- The two ways to read this queue, beside the column picker in the table's own top bar. -->
       <template #actions>
         <q-btn-toggle
           v-model="assignment"
@@ -45,12 +42,12 @@
         />
       </template>
 
-      <!-- The number opens the request, which is the one place that carries both the setup and the
-           client's own answers (the latter in a pane beside it). -->
+      <!-- The number opens the request, which is the one place that carries both the setup and the client's
+           own answers (the latter in a pane beside it). -->
       <template #body-cell-remsNumber="cell">
         <q-td :props="cell">
-          <!-- The pin the reader put on this row, beside the number rather than only on the button that
-               set it: the button is at the far right and the reason the row is at the top is here. -->
+          <!-- The pin the reader put on this row, beside the number rather than only on the button that set
+               it: the button is at the far right and the reason the row is at the top is here. -->
           <entity-pinned-mark :pinned="isPinned(cell.row.remsId)" />
           <q-btn
             flat dense no-caps color="primary" class="text-weight-medium"
@@ -61,9 +58,8 @@
         </q-td>
       </template>
 
-      <!-- The particle after the name and heavier than it, even here where the whole name is
-           already medium: it is what tells one "John Smith" row from the next. The column still SORTS
-           and searches on `clientName`, which is the two joined. -->
+      <!-- The particle after the name and heavier than it, even here where the whole name is already
+           medium: it is what tells one "John Smith" row from the next. -->
       <template #body-cell-clientName="cell">
         <q-td :props="cell">
           <div class="text-weight-medium">
@@ -72,30 +68,23 @@
         </q-td>
       </template>
 
-      <!-- Whether the client's answers are in. The row carries a BOOLEAN, but the two states it stands for
-           are the REMS.ClientSubmissionState values — so the badge is rendered from those, and a firm that
-           rewords or recolours either one sees it here too. -->
+      <!-- Whether the client's answers are in. -->
       <template #body-cell-submitted="cell">
         <q-td :props="cell">
           <app-option-badge :option="submittedOption(cell.row.submitted)" />
         </q-td>
       </template>
 
-      <!-- The status the request is IN, except that one nobody has picked up says so. That is the whole
-           point of this list now: the initiator submits to the admins, not to one of them, so the row has
-           to distinguish "on somebody's desk" from "on nobody's". -->
+      <!-- The status the request is IN, except that one nobody has picked up says so. -->
       <template #body-cell-requestStatus="cell">
         <q-td :props="cell">
           <!-- What the stage means, a hover away: the tooltip is the status option's own Description
-               (Administration → Option Sets), and "Waiting for pickup" — which is this application's
-               refinement rather than a stored status — explains itself. -->
+               (Administration → Option Sets). -->
           <app-option-badge :option="requestStatusOption(statusRow(cell.row))" />
         </q-td>
       </template>
 
-      <!-- Who holds the request. The same "Waiting for pickup" the status column shows, said in the
-           column that is actually about the assignment — the two are one fact, and a row that reads
-           "Waiting for pickup — —" would leave the reader wondering which of them was the answer. -->
+      <!-- Who holds the request. -->
       <template #body-cell-assignedAdmin="cell">
         <q-td :props="cell">
           <span v-if="cell.row.assignedAdmin?.name">{{ cell.row.assignedAdmin.name }}</span>
@@ -110,12 +99,7 @@
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- Claiming the request, and the first thing to do with one nobody holds — so it leads the row
-               rather than sitting behind the read actions.
-               An icon like everything beside it. What used to set it apart was its weight — a filled
-               button among flat ones — and that is now carried by its COLOUR: amber, the same amber the
-               row's own "Waiting for pickup" badge is in, so the badge and the action that answers it
-               read as one thing. Its NAME leads the tooltip, because an icon on its own does not carry
-               one. -->
+               rather than sitting behind the read actions. -->
           <q-btn
             v-if="cell.row.canPickUp" type="a"
             flat round dense color="amber-8" icon="o_pan_tool_alt"
@@ -124,11 +108,7 @@
             <q-tooltip>Pick up — take this request on, and its engagement setup becomes yours to work</q-tooltip>
           </q-btn>
 
-          <!-- The undo of Pick up, on the row it was pressed on. Both are asked before they run, but a
-               dialog only catches the misclick that is noticed — and until this button existed the way
-               back from one that was not was to open the request and find Hand back in its header.
-               Grey among the coloured ones, and only on a request this caller actually holds: it is a
-               correction, not a step in the work. -->
+          <!-- The undo of Pick up, on the row it was pressed on. -->
           <q-btn
             v-if="cell.row.canHandBack" type="a"
             flat round dense color="grey-8" icon="o_undo"
@@ -137,12 +117,7 @@
             <q-tooltip>Hand back — put this in the queue for another admin to pick up</q-tooltip>
           </q-btn>
 
-          <!-- View and Edit are the same page in two modes. Separate actions because they are separate
-               intentions: reading a request should never put a form on screen — and they are gated apart
-               for the same reason. Every admin may READ any request in this queue, including one nobody
-               has picked up; that is how you decide whether to take it. Editing is the holder's.
-               Neither waits on the client: the page opens on the intake the initiator filled in, and the
-               client's answers land in it when they arrive. -->
+          <!-- View and Edit are the same page in two modes. -->
           <q-btn
             flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)"
           >
@@ -154,9 +129,8 @@
           >
             <q-tooltip>{{ editBlocked(cell.row) || "Edit" }}</q-tooltip>
           </q-btn>
-          <!-- What the client has been emailed about this request and what came back, plus the reminder
-               for one who still has not answered. Every row here has a form, so there is always a log to
-               open — an empty one is itself the answer for a form nobody has sent yet. -->
+          <!-- What the client has been emailed about this request and what came back, plus the reminder for
+               one who still has not answered. -->
           <q-btn
             v-if="canReadEmailLog" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
@@ -167,9 +141,7 @@
             <q-tooltip>Conversation</q-tooltip>
           </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
-               everything before them acts on the REQUEST, and these two are private to whoever is
-               looking. On a shared queue that distinction is the whole point —
-               "mine to come back to" is not the same as "assigned to me". -->
+               everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
           <entity-row-marks
             v-if="canMarkRows"
             :pinned="isPinned(cell.row.remsId)"
@@ -238,14 +210,7 @@ const {
   requestStatusOption, submissionStateOption, statusFilterOptions, engagementOwnerDenial
 } = useRemsMeta();
 
-// The "EMS State" column is a boolean on the row, but the two states it stands for are values on
-// REMS.ClientSubmissionState — so both the badge and the filter read their words from there rather than
-// carrying a pair of hardcoded strings. The filter VALUES stay "true" / "false": that is the server's
-// contract for this column, and a column filter's value is always a string.
-//
-// It is a NARROWER question than the column of the same name on My Requests, which reads REMS.FormStatus
-// and can say Not started or Sent. Nothing reaches this queue until its form has gone out, so the only
-// two answers left here are the two this list draws: still with the client, or back in hand.
+// The "EMS State" column is a boolean on the row.
 const submittedOption = (submitted) => submissionStateOption(submitted ? "Submitted" : "AwaitingCustomer");
 const submittedFilterOptions = computed(() => [
   { label: submittedOption(true).label, value: "true" },
@@ -258,14 +223,7 @@ const canReadEmailLog = computed(() => has(Permissions.RemsEmailLogRead));
 // `requestStatus`, because the row is about the client's form and the request's status is context on it.
 const statusRow = (row) => ({ status: row?.requestStatus, assignedAdmin: row?.assignedAdmin });
 
-// Why the row's way into the request is shut, or null when it is open. Editing is the holder's alone,
-// which is the rule the server enforces on the setup; saying so on the button beats letting the click end
-// in a 403. Reading is open to every admin whoever holds the request — this is a shared queue, and
-// deciding whether to pick something up means being able to look at it first.
-//
-// Neither waits on the client. Gating them on the submission would leave an admin unable to open — or
-// correct — a request whose intake was already there to read, at exactly the point where a mistake in it
-// is still cheap to fix. What genuinely needs a submission is the button beside these.
+// Why the row's way into the request is shut, or null when it is open.
 const editBlocked = (row) => engagementOwnerDenial(row);
 
 // REMS number and client are covered by the quick search, so they get no duplicate filter box of their
@@ -285,10 +243,7 @@ const columns = computed(() => [
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
 
-// The quick filter. NOT part of the column filters below: those are the drawer's, each with a chip and a
-// Clear, and this one is neither — it is which list you are looking at, and there is always one of the two
-// selected. "All" leads because it is the whole queue, waiting-for-pickup rows included, and seeing those
-// is what this list is for; narrowing to your own work is the deliberate second step.
+// The quick filter.
 const ASSIGNMENT_FILTERS = [
   { label: "All", value: "all" },
   { label: "Assigned to me", value: "mine" }
@@ -318,10 +273,8 @@ const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters, assignment], reload, { deep: true });
 
 // ---- The reader's own marks on these rows ----
-// A pin floats a row to the top of the page and a colour tints it, both stored against the USER — so on
-// a queue every admin shares, neither says anything to anybody else. Every caller here already holds
-// rems.engagements.manage; the check is on rems.requests.read, which is what the UF endpoints actually
-// gate on (UniversalFeatureEntityAccess), so the buttons appear exactly where they will work.
+// A pin floats a row to the top of the page and a colour tints it, both stored against the USER — so on a
+// queue every admin shares, neither says anything to anybody else.
 const canMarkRows = computed(() => has(Permissions.RemsRequestsRead));
 
 const {
@@ -337,10 +290,7 @@ watch(rows, (list) => {
 
 // ---- Picking a request up ----
 // The whole of the new assignment model from this list's side: nobody was named at intake, so a request
-// becomes an admin's by that admin taking it. Tracked per row so only the pressed button spins.
-//
-// Confirmed, the way Hand back is: one click on a list of near-identical rows is an easy click to make
-// on the wrong row, and the request stops being available to the other admins the moment it lands.
+// becomes an admin's by that admin taking it.
 const pickingUp = ref(null);
 const pickUp = async (row) => {
   const ok = await confirm({
@@ -368,8 +318,7 @@ const pickUp = async (row) => {
 
 // ---- Handing one back ----
 // The counterpart of Pick up: a request taken by mistake goes straight back to the queue from the row it
-// was taken on. Confirmed like it — the setup goes read-only to whoever gives it up, and another admin
-// may take it immediately.
+// was taken on.
 const handingBack = ref(null);
 const handBack = async (row) => {
   const ok = await confirm({
@@ -394,18 +343,7 @@ const handBack = async (row) => {
 };
 
 // ---- The request itself ----
-// The review surface IS the form: it opens both the client's answers and the engagement setup, with the
-// admin's send-back and route-for-approval actions on it. `mode` picks which of the two routes it lands
-// on — a record to read, or a form to change. Open whether or not the client has answered: the page shows
-// the intake either way, and the parts that need a submission are disabled on the page itself.
-// LINKS, not click handlers. View and Edit go to a known route, so they are written as routes and Quasar
-// renders each button as a real <a href> — which is what makes middle-click and "open in new tab" work,
-// and what lets an admin working a queue open three requests side by side instead of one at a time.
-// A router.push behind @click renders a <button> and none of that is possible.
-//
-// Everything else on the row stays a button, and correctly: Pick up, Hand back, the email log and the
-// conversation are actions and dialogs, not places. A disabled Edit also stays a button — Quasar drops
-// the anchor when a link is disabled, which is right, since a link that goes nowhere should not be one.
+// The review surface IS the form: it opens both the client's answers and the engagement setup.
 const viewRoute = (row) => ({ name: "rems_request", params: { id: row.remsId } });
 const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.remsId } });
 
@@ -422,8 +360,8 @@ const openConversation = (row) => {
 };
 
 // ---- Email log ----
-// Every intake-form email sent for this request and what the provider reported back, with Send Reminder
-// on it while the client still owes an answer.
+// Every intake-form email sent for this request and what the provider reported back, with Send Reminder on
+// it while the client still owes an answer.
 const emailLogOpen = ref(false);
 const emailLogId = ref(null);
 const emailLogSubtitle = ref("");

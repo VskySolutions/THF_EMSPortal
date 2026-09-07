@@ -1,25 +1,7 @@
 import { ref, reactive, computed, onBeforeUnmount } from "vue";
 import { getApiErrorMessage } from "services/api";
 
-/**
- * Debounced auto-save for a screen made of several independently-written parts.
- *
- * A screen hands over a map of named savers — `{ client: fn, setup: fn, ... }` — and then just says which
- * part the user touched. Nothing is written per keystroke: marks reset a debounce, and one pass writes
- * every part that is dirty, in the order the map declares them (which is the order the records depend on
- * each other in).
- *
- * A saver reports back three ways:
- *   - returns nothing        → written
- *   - returns a string       → NOT written, and that string says why (a half-filled part that is not
- *                              fillable yet — the user has not finished, so this is not a failure)
- *   - throws                 → not written. A rejection carrying an HTTP `response` is the server
- *                              refusing; one without is the screen's own guard, and reads as the same
- *                              "not yet" as a returned reason.
- *
- * The dirty flag is cleared BEFORE its write and put back if the write does not land, so an edit made
- * while a save is in flight is never swallowed by the save that could not have seen it.
- */
+/** Debounced auto-save for a screen made of several independently-written parts. */
 export function useAutoSave (savers, options = {}) {
   const delay = options.delay ?? 1200;
   const isEnabled = options.enabled || (() => true);
