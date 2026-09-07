@@ -166,6 +166,8 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const commissionTotal = computed(() => round2(
   (props.engagement.commissionSplits || []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
 const commissionProblem = computed(() => {
+  // Commission is optional; only a split somebody started has to come to 100%.
+  if (!(props.engagement.commissionSplits || []).length) return "";
   if (commissionTotal.value === 100) return "";
   return `Commission totals ${commissionTotal.value}% — the recipients on the Commission tab must add up ` +
     "to 100% before this engagement can be sent for approval.";

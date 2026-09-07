@@ -1019,11 +1019,10 @@ public sealed class RemsApprovalController : ControllerBase
             return ConflictResult(CodeMarketingRequired, "At least one marketing tag is required before sending for approval.");
         }
 
-        // The commission has to be settled before it is signed off.
-        var allocated = Math.Round(
-            engagement.CommissionSplits.Where(s => !s.Deleted).Sum(s => s.CommissionPercentage),
-            2, MidpointRounding.AwayFromZero);
-        if (allocated != 100m)
+        // Commission is optional; where anyone is named, the split has to be settled before it is signed off.
+        var splits = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();
+        var allocated = Math.Round(splits.Sum(s => s.CommissionPercentage), 2, MidpointRounding.AwayFromZero);
+        if (splits.Count > 0 && allocated != 100m)
         {
             return ConflictResult(
                 CodeCommissionNotFullyAllocated,

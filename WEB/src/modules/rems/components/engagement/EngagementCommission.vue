@@ -3,8 +3,8 @@
     <!-- One line, and only what the screen cannot show for itself: the rule, and the consequence of being
          on this list. -->
     <div class="text-body2 text-grey-8 q-mb-sm">
-      The split must total 100% before the request goes to the client. Each recipient approves the
-      engagement.
+      Optional. If anyone is named, the split must total 100% before the request goes to the client.
+      Each recipient approves the engagement.
     </div>
 
     <!-- Add recipient (searchable CSE-group picker; excludes those already added). -->
@@ -129,13 +129,15 @@ const totalOver = computed(() => totalPercent.value > 100);
 // The whole of the feedback: how far off the split is, and which way. The number is already on screen, so
 // the note says only what the number does not — how much is missing, or how much too much.
 const totalNote = computed(() => {
+  if (!splits.value.length) return "";
   if (totalOver.value) return `${round2(totalPercent.value - 100)}% over`;
   if (totalPercent.value < 100) return `${round2(100 - totalPercent.value)}% unallocated`;
   return "";
 });
 const totalTone = computed(() => {
   if (totalOver.value) return "bad";
-  return totalPercent.value === 100 ? "ok" : "warn";
+  // No recipients is a complete answer, not an unallocated one.
+  return !splits.value.length || totalPercent.value === 100 ? "ok" : "warn";
 });
 const totalIcon = computed(() => ({
   ok: "o_check_circle", warn: "o_pending", bad: "o_error"

@@ -701,7 +701,8 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const commissionTotal = computed(() => round2(
   (engagement.value?.commissionSplits || []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
 const commissionCount = computed(() => (engagement.value?.commissionSplits || []).length);
-const commissionAllocated = computed(() => commissionTotal.value === 100);
+// Commission is optional; a split somebody started has to come to 100%.
+const commissionAllocated = computed(() => !commissionCount.value || commissionTotal.value === 100);
 
 const readyToSend = computed(() =>
   !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.entityType &&
@@ -718,11 +719,6 @@ const sendBlockedReason = computed(() => {
     return "Choose an industry on the Client Information tab — the Entity Type beside it narrows the list.";
   }
   if (!commissionAllocated.value) {
-    // Naming nobody is its own sentence.
-    if (!commissionCount.value) {
-      return "No commission recipients yet — the Commission tab must name recipients adding up to 100% " +
-        "before this request can be sent to the client.";
-    }
     return `Commission totals ${commissionTotal.value}% — the recipients on the Commission tab must add ` +
       "up to 100% before this request can be sent to the client.";
   }

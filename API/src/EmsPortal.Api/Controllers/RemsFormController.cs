@@ -288,20 +288,16 @@ public sealed class RemsFormController : ControllerBase
                 "The client has no email address on file; add one before sending.");
         }
 
-        // The commission has to be settled before the client is written to.
+        // Commission is optional; where anyone is named, the split has to be settled before the client is written to.
         var engagement = await _engagements.GetByRemsIdAsync(remsId, cancellationToken);
         var splits = engagement?.CommissionSplits.Where(s => !s.Deleted).ToList() ?? [];
         var allocated = Math.Round(splits.Sum(s => s.CommissionPercentage), 2, MidpointRounding.AwayFromZero);
-        if (allocated != 100m)
+        if (splits.Count > 0 && allocated != 100m)
         {
-            // Naming nobody is its own sentence.
             return FormConflict(
                 CodeCommissionNotFullyAllocated,
-                splits.Count == 0
-                    ? "No commission recipients yet — the Commission tab must name recipients adding up "
-                      + "to 100% before this request can be sent to the client."
-                    : $"Commission totals {allocated:0.##}% — the recipients on the Commission tab must add up "
-                      + "to 100% before this request can be sent to the client.");
+                $"Commission totals {allocated:0.##}% — the recipients on the Commission tab must add up "
+                + "to 100% before this request can be sent to the client.");
         }
 
         var now = DateTime.UtcNow;
