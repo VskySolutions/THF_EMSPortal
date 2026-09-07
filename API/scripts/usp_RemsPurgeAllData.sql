@@ -38,12 +38,14 @@ GO
    @IncludeSettings      RemsSettings + RemsDepartmentDirector. This is CONFIGURATION — the
                          department→director map — not request data. Off, because clearing it means
                          re-entering the firm's setup by hand.
-   @IncludeClientPersons Persons REMS minted: the clients it captured at intake and the role
-                         contacts from submitted forms. Off, because a client entered once is a
-                         record the platform holds in its own right and other modules may point at
-                         it. Only ever touches persons with no user account and nothing else
-                         referring to them.
-   @IncludeMedia         The Media rows the deleted attachments and signed CAFs pointed at. Off:
+   @IncludeClientPersons Persons REMS minted: the clients it captured at intake, the role contacts
+                         from submitted forms, and the other people declared on an individual's
+                         return (spouse, children — REMSAdditionalIndividual mints one each). Off,
+                         because a client entered once is a record the platform holds in its own
+                         right and other modules may point at it. Only ever touches persons with no
+                         user account and nothing else referring to them.
+   @IncludeMedia         The Media rows the deleted files pointed at — request attachments, signed
+                         client acceptance forms, and a government engagement's purchase order. Off:
                          it removes the DB rows only — the stored files are not this script's to
                          delete, and orphaned Media is harmless.
 
@@ -141,14 +143,21 @@ BEGIN
         JOIN #Engagement e ON e.Id = d.REMSEngagementId
         WHERE d.ClientAcceptanceFormMediaId IS NOT NULL
           AND d.ClientAcceptanceFormMediaId NOT IN (SELECT Id FROM #Media);
+
+        -- The purchase order a government engagement was raised against.
+        INSERT INTO #Media (Id)
+        SELECT DISTINCT d.PurchaseOrderMediaId FROM dbo.REMSEngagementGovernmentDetail d
+        JOIN #Engagement e ON e.Id = d.REMSEngagementId
+        WHERE d.PurchaseOrderMediaId IS NOT NULL
+          AND d.PurchaseOrderMediaId NOT IN (SELECT Id FROM #Media);
     END;
 
     IF @IncludeClientPersons = 1
     BEGIN
-        /* Clients captured at intake and role contacts minted from submitted forms — but never
-           somebody who has since become a user, and never one another module still points at.
-           A person REMS created is REMS's to remove; a person who has grown into anything else
-           is not. */
+        /* Clients captured at intake, role contacts minted from submitted forms, and the other people
+           declared on an individual's return — but never somebody who has since become a user, and
+           never one another module still points at. A person REMS created is REMS's to remove; a
+           person who has grown into anything else is not. */
         INSERT INTO #Person (Id)
         SELECT p.Id
         FROM dbo.Persons p
@@ -160,7 +169,10 @@ BEGIN
                           WHERE r2.ClientPersonId = p.Id AND r2.Id NOT IN (SELECT Id FROM #Rems))
           AND NOT EXISTS (SELECT 1 FROM dbo.REMSEntityContact c2
                           JOIN dbo.REMSEntity e2 ON e2.Id = c2.REMSEntityId
-                          WHERE c2.PersonId = p.Id AND e2.Id NOT IN (SELECT Id FROM #Entity));
+                          WHERE c2.PersonId = p.Id AND e2.Id NOT IN (SELECT Id FROM #Entity))
+          /* The third place REMS points at a person, and a required FK — same rule as the two above. */
+          AND NOT EXISTS (SELECT 1 FROM dbo.REMSAdditionalIndividual i2
+                          WHERE i2.PersonId = p.Id AND i2.REMSId NOT IN (SELECT Id FROM #Rems));
 
         /* Their addresses, noted NOW: Persons is the child of Addresses, so the address cannot go
            until the person does — and by then there is nothing left to find it by. */
@@ -209,6 +221,7 @@ BEGIN
         ('REMSFiles',                       (SELECT COUNT(*) FROM dbo.REMSFiles x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMSSendBack',                    (SELECT COUNT(*) FROM dbo.REMSSendBack x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMSAdditionalEntity',            (SELECT COUNT(*) FROM dbo.REMSAdditionalEntity x JOIN #Rems r ON r.Id = x.REMSId)),
+        ('REMSAdditionalIndividual',        (SELECT COUNT(*) FROM dbo.REMSAdditionalIndividual x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMSDelegation',                  CASE WHEN @IncludeDelegations = 1
                                                  THEN (SELECT COUNT(*) FROM dbo.REMSDelegation d WHERE @TenantId IS NULL OR d.TenantId = @TenantId)
                                                  ELSE 0 END),
@@ -280,6 +293,10 @@ BEGIN
         DELETE x FROM dbo.REMSEngagementGovernmentDetail x JOIN #Engagement e ON e.Id = x.REMSEngagementId;
         DELETE x FROM dbo.REMSEngagementAuditDetail      x JOIN #Engagement e ON e.Id = x.REMSEngagementId;
         DELETE x FROM dbo.REMSEngagement                 x JOIN #Engagement e ON e.Id = x.Id;
+
+        -- Spouse, children, anyone else on a return. Ahead of the entity block: each row points at the
+        -- request, the entity AND a Person, all three Restrict, so all three refuse to go while it stands.
+        DELETE x FROM dbo.REMSAdditionalIndividual x JOIN #Rems r ON r.Id = x.REMSId;
 
         -- The client and its entities. REMSClient points AT a form submission, so it goes first.
         DELETE x FROM dbo.REMSEntityContact x JOIN #Entity e ON e.Id = x.REMSEntityId;
