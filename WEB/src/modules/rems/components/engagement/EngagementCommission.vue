@@ -68,7 +68,7 @@ const props = defineProps({
   engagement: { type: Object, required: true },
   // Selectable recipients — the holders of the "CSE" role, as [{ label, value }].
   recipientOptions: { type: Array, default: () => [] },
-  // STATIC-APPROVAL-POLICY: the CSE, Department Director and Managing Shareholder on this request, who
+  // STATIC-APPROVAL-POLICY: the CSE, Department Director and Shareholders on this request, who
   // approve at their own stage and so may not also be paid commission.
   excludedRecipientIds: { type: Array, default: () => [] },
   editable: { type: Boolean, default: true }

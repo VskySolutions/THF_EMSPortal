@@ -124,13 +124,12 @@ public sealed class RemsApprovalController : ControllerBase
     public async Task<IActionResult> ApprovalPolicy(CancellationToken cancellationToken)
     {
         var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
-        var ids = policy.TaxExceptionCses.Select(u => u.Id).ToList();
-        if (policy.ManagingShareholder is { } ms) ids.Add(ms.Id);
+        var ids = policy.TaxExceptionCses.Concat(policy.Shareholders).Select(u => u.Id).ToList();
         var names = await _users.GetFullNamesAsync(ids, cancellationToken);
 
         var view = new RemsApprovalPolicyView(
             policy.StaticRouting,
-            RemsWorkspaceMapper.UserRef(policy.ManagingShareholder?.Id, names),
+            policy.Shareholders.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList(),
             policy.TaxExceptionCses.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList());
         return Ok(ApiResponseFactory.Success(view, "REMS approval policy retrieved."));
     }
@@ -196,7 +195,7 @@ public sealed class RemsApprovalController : ControllerBase
             if (policy.StaticRouting && requested.Intersect(RemsStaticApprovalRoute.ReservedUserIds(engagement, policy)).Any())
             {
                 return ConflictResult(CodeApproverReserved,
-                    "The CSE, the Department Director and the Managing Shareholder already approve at their own stage and cannot be added again.");
+                    "The CSE, the Department Director and the Shareholders already approve at their own stage and cannot be added again.");
             }
         }
 

@@ -1016,8 +1016,8 @@ public sealed class RemsEngagementController : ControllerBase
         {
             return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
                 CodeCommissionReserved,
-                "A commission recipient cannot be the CSE, the Department Director or the Managing Shareholder on this request.",
-                "A commission recipient cannot be the CSE, the Department Director or the Managing Shareholder on this request."));
+                "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request.",
+                "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request."));
         }
 
         var existing = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();

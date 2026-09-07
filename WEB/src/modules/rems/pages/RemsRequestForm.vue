@@ -1060,7 +1060,7 @@ const reservedCommissionIds = computed(() => {
   return [
     setupForm.cseUserId,
     setupEngagement.value?.departmentDirector?.id,
-    approvalPolicy.value?.managingShareholder?.id
+    ...(approvalPolicy.value?.shareholders || []).map((s) => s.id)
   ].filter(Boolean);
 });
 

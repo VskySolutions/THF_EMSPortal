@@ -37,9 +37,8 @@
   "Rems": {
     "ApprovalPolicy": {
       "StaticRouting": true,
-      "ManagingShareholder": "Jeff Barbacci",
       "TaxExceptionCses": [ "James Previte", "Stephen Hamic" ],
-      "TaxFeeCeilingWithoutManagingShareholder": 10000
+      "TaxFeeCeilingWithoutShareholder": 10000
     }
   },
   "Serilog": {

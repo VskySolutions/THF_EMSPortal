@@ -5,7 +5,7 @@
         <!-- STATIC-APPROVAL-POLICY: the staged route reads differently from the single round. -->
         <template v-if="staticRouting">
           Who this engagement routes to, one stage at a time: the commission recipients together, then the
-          CSE, then the Department Director with anyone you add below, then the Managing Shareholder. Each
+          CSE, then the Department Director with anyone you add below, then everyone holding the Shareholder role. Each
           stage is asked only once the one before it has approved. Sending for approval locks the list.
         </template>
         <template v-else>

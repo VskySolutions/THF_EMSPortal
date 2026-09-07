@@ -27,7 +27,7 @@ public sealed record RemsApproverList(
 /// <summary>STATIC-APPROVAL-POLICY. The fixed route as it resolves in this tenant.</summary>
 public sealed record RemsApprovalPolicyView(
     bool StaticRouting,
-    RemsUserRef? ManagingShareholder,
+    IReadOnlyList<RemsUserRef> Shareholders,
     IReadOnlyList<RemsUserRef> TaxExceptionCses);
 
 /// <summary>A user selectable as an extra approver: any active user in the tenant (there is no Approver role).</summary>
