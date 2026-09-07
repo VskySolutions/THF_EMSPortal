@@ -20,23 +20,60 @@
         </q-item>
       </template>
 
-      <!-- Collapsed, a group is a single icon: Quasar hides expansion content in a mini drawer, so
-           opening one in place would be a dead click. It reopens the menu instead. -->
+      <!-- Collapsed, a group is one icon whose children hang off it as a flyout. -->
       <q-item
         v-else-if="mini"
         :key="`${section.key}-mini`"
         v-ripple
         dense
         clickable
-        @click="emit('expand')"
+        @mouseenter="openFlyout(section.key)"
+        @mouseleave="scheduleFlyoutClose"
+        @click="openFlyout(section.key)"
       >
         <q-item-section avatar><q-icon :name="section.icon" size="20px" /></q-item-section>
         <q-item-section>{{ section.label }}</q-item-section>
-        <q-tooltip anchor="center right" self="center left">{{ section.label }}</q-tooltip>
+
+        <q-menu
+          :model-value="flyoutKey === section.key"
+          anchor="top right"
+          self="top left"
+          :offset="[0, 0]"
+          no-parent-event
+          no-focus
+          no-refocus
+          transition-show="jump-right"
+          transition-hide="jump-left"
+          @update:model-value="(open) => (flyoutKey = open ? section.key : null)"
+        >
+          <!-- Listeners on the list, not q-menu (which renders into a portal). -->
+          <q-list
+            dense
+            class="app-menu__flyout"
+            @mouseenter="openFlyout(section.key)"
+            @mouseleave="scheduleFlyoutClose"
+          >
+            <q-item-label header class="app-menu__flyout-head">{{ section.label }}</q-item-label>
+            <q-item
+              v-for="item in section.items"
+              :key="item.label"
+              v-ripple
+              v-close-popup
+              dense
+              clickable
+              :to="item.to"
+              :exact="item.exact"
+              active-class="text-primary bg-teal-1"
+              @click="onItem(item)"
+            >
+              <q-item-section avatar><q-icon :name="item.icon" size="20px" /></q-item-section>
+              <q-item-section>{{ item.label }}</q-item-section>
+            </q-item>
+          </q-list>
+        </q-menu>
       </q-item>
 
-      <!-- Labelled sections are collapsible groups. Open by default; collapse state is remembered
-           while the drawer stays mounted. The group that contains the active route stays open. -->
+      <!-- Labelled sections are collapsible groups. -->
       <q-expansion-item
         v-else
         dense
@@ -67,21 +104,36 @@
 </template>
 
 <script setup>
-import { computed, reactive } from "vue";
+import { computed, reactive, ref, onBeforeUnmount } from "vue";
 import { LocalStorage } from "quasar";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
 import { Permissions } from "composables/usePermissions";
 
 defineProps({
-  // The drawer is collapsed to its icon rail: labels are hidden by Quasar, and groups cannot open in
-  // place, so they ask the layout to expand the menu instead.
+  // Collapsed to the icon rail: each group offers its children as a flyout beside its icon.
   mini: { type: Boolean, default: false }
 });
-const emit = defineEmits(["expand"]);
 
 const authStore = useAuthStore();
 const router = useRouter();
+
+// Which group is showing its children beside the rail. One at a time — they would overlap otherwise.
+const flyoutKey = ref(null);
+let flyoutTimer = null;
+
+const openFlyout = (key) => {
+  clearTimeout(flyoutTimer);
+  flyoutKey.value = key;
+};
+
+// Delayed, so the pointer can cross from the icon into the flyout without it closing underneath.
+const scheduleFlyoutClose = () => {
+  clearTimeout(flyoutTimer);
+  flyoutTimer = setTimeout(() => { flyoutKey.value = null; }, 150);
+};
+
+onBeforeUnmount(() => clearTimeout(flyoutTimer));
 
 // Menu items with an `action` (e.g. Logout) run a handler instead of navigating.
 const onItem = async (item) => {
@@ -94,9 +146,8 @@ const onItem = async (item) => {
   }
 };
 
-// Ordered by application flow: overview → set up → configure → operate → personal.
-// `permissions: null` → visible to every authenticated user; otherwise visible when the active
-// tenant grants any one of the listed permissions. `icon` labels the collapsible group header.
+// Ordered by application flow: overview → set up → configure → operate → personal. `permissions:
+// null` → visible to every authenticated user.
 const sections = [
   {
     key: "overview",
@@ -106,29 +157,18 @@ const sections = [
     ]
   },
   {
-    // REMS (Phase 15). Items are gated by permission — never by a role name — so a user sees only the
-    // areas their roles grant. AC-ADM-019.5 / REQ-REMS-001.7.
-    //
-    // My Requests and Approvals are the exceptions: both are open to every signed-in user, because what
-    // each one shows is decided by the RECORDS rather than by a permission. The inbox returns the tasks
-    // that are the caller's own, and anyone can be made an approver (the CSE, a commission recipient,
-    // someone added on the Approval tab); the list returns the requests they raised or are named on, and
-    // being named on one is not something a permission predicts either. A gate on either page hid it from
-    // people who had work waiting on it. Anyone with none simply sees an empty list.
+    // REMS (Phase 15).
     key: "rems",
     label: "REMS",
     icon: "o_business_center",
-    // Three lists, one per role, plus the shared Related Entities board. There is no separate pool or
-    // inbox: the initiator fills the whole request and sends the intake link themselves, so the admins
-    // have one review queue between them.
+    // Three lists, one per role, plus the shared Related Entities board.
     items: [
       // Open to everyone, like Approvals: the list shows the requests you raised or are named on, so a
       // user with no REMS work sees an empty list rather than a menu that hides the page from them.
       { label: "My Requests", icon: "o_space_dashboard", to: "/rems/partner", permissions: null },
       { label: "EMS Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage] },
-      // Open to everyone too, and for a different reason from the two above: this list is not scoped to
-      // the caller's own work at all. It is the firm's shared board of the clients a client brought with
-      // them, and the status on each row is kept by whoever is chasing it.
+      // Open to everyone too, and for a different reason from the two above: this list is not scoped to the
+      // caller's own work at all.
       { label: "Related Entities", icon: "o_account_tree", to: "/rems/related-entities", permissions: null },
       { label: "Approvals", icon: "o_approval", to: "/rems/approvals", permissions: null }
     ]
@@ -237,5 +277,28 @@ const setOpen = (key, open) => {
 /* Indent the items within a group so the hierarchy reads clearly. */
 .app-menu__nested {
   padding-left: 20px;
+}
+
+/* The rail's flyout. Portaled to the body, so .app-menu selectors cannot reach it — spacing restated. */
+.app-menu__flyout {
+  min-width: 208px;
+  padding: 2px 0 4px;
+}
+.app-menu__flyout :deep(.q-item) {
+  min-height: 34px;
+}
+.app-menu__flyout :deep(.q-item__section--avatar) {
+  min-width: 32px;
+  padding-right: 8px;
+}
+/* Names the group, styled as the expanded menu's group headers. */
+.app-menu__flyout-head {
+  min-height: auto;
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--q-primary);
 }
 </style>

@@ -40,9 +40,8 @@
             </q-list>
           </q-btn-dropdown>
 
-          <!-- Active-tenant roles (AC-REMS-001.8): the user's roles for the active tenant, shown on
-               every authenticated screen alongside their name (in user-info). Hidden on very small
-               screens where they are still reachable from the user menu. -->
+          <!-- Active-tenant roles (AC-REMS-001.8): the user's roles for the active tenant, shown on every
+               authenticated screen alongside their name (in user-info). -->
           <div v-if="isLoggedIn && activeRoles.length" class="gt-xs row items-center q-gutter-xs">
             <q-chip
               v-for="r in activeRoles" :key="r" dense square color="teal-1" text-color="primary"
@@ -52,8 +51,7 @@
             </q-chip>
           </div>
 
-          <!-- Super-Admin tenant scope. One control for the whole app, so it lives in the toolbar rather
-               than being repeated per page; the pages that support it simply follow the selection. -->
+          <!-- Super-Admin tenant scope. -->
           <app-tenant-scope-select v-if="isLoggedIn" class="gt-xs" />
 
           <notification-centre v-if="isLoggedIn" />
@@ -63,10 +61,7 @@
       </q-toolbar>
     </q-header>
 
-    <!-- Collapsed, the drawer stays put as a 60px icon rail rather than disappearing. It deliberately does
-         NOT use mini-to-overlay: that promotes the drawer to z-index 3000, above the header, which puts it
-         over the very hamburger button used to reopen it. The rail keeps its place in the layout instead,
-         and clicking a group icon expands the menu (see AppMenu's `mini`). -->
+    <!-- Collapsed, the drawer stays as a 60px icon rail. -->
     <q-drawer
       v-if="isLoggedIn"
       v-model="leftDrawerOpen"
@@ -80,13 +75,12 @@
     >
       <aside-header />
       <q-scroll-area class="fit">
-        <AppMenu :mini="menuCollapsed" @expand="menuCollapsed = false" />
+        <AppMenu :mini="menuCollapsed" />
       </q-scroll-area>
     </q-drawer>
 
     <q-page-container>
-      <!-- The tenant scope is global and sticky (it survives reloads), so it is stated on every screen.
-           Without this a Super Admin can return later and edit the wrong tenant believing it is their own. -->
+      <!-- The tenant scope is global and sticky (it survives reloads), so it is stated on every screen. -->
       <!-- inline-actions keeps the message and the button on ONE row; without it q-banner drops actions
            onto a second line and the banner takes twice the height on every page. -->
       <q-banner
