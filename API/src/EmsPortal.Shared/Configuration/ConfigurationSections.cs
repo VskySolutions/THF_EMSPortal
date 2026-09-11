@@ -22,6 +22,9 @@ public static class ConfigurationSections
     /// <summary>Authentication (JWT / API key) configuration.</summary>
     public const string Authentication = "Authentication";
 
+    /// <summary>"Login with Microsoft" (Entra ID app registration keys), normally supplied via the API's .env file.</summary>
+    public const string MicrosoftSso = "Authentication:Microsoft";
+
     /// <summary>Registered machine-to-machine API keys.</summary>
     public const string ApiKeys = "ApiKeys";
 

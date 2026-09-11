@@ -74,7 +74,12 @@ export const authApi = {
   // never branch the UI on its response, that would leak which accounts are real.
   forgotPassword: (email) => anonApi.post("/api/auth/forgot-password", { email }).then(envelope),
   resetPassword: (token, newPassword) =>
-    anonApi.post("/api/auth/reset-password", { token, newPassword }).then(envelope)
+    anonApi.post("/api/auth/reset-password", { token, newPassword }).then(envelope),
+  // "Login with Microsoft" runs through the API, which holds the Entra keys: the browser is sent to the first URL
+  // and, once back, trades the one-time code the API returned it with for a normal token pair.
+  microsoftLoginUrl: (state) =>
+    `${(process.env.API_BASE_URL || "").replace(/\/+$/, "")}/api/auth/microsoft/login?state=${encodeURIComponent(state)}`,
+  exchangeMicrosoftCode: (code) => anonApi.post("/api/auth/microsoft/exchange", { code }).then(envelope)
 };
 
 export const tenantApi = {

@@ -40,6 +40,12 @@ public sealed class ResetPasswordWithTokenRequest
     public string NewPassword { get; set; } = string.Empty;
 }
 
+/// <summary>Trades the one-time code from the Microsoft sign-in callback for a session.</summary>
+public sealed class MicrosoftSsoExchangeRequest
+{
+    public string Code { get; set; } = string.Empty;
+}
+
 /// <summary>Lifetimes in seconds.</summary>
 public sealed record LoginTokenResponse(
     string AccessToken, int ExpiresIn, string RefreshToken, int RefreshExpiresIn, bool MustChangePassword);

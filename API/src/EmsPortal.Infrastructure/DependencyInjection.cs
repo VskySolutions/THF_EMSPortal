@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.Configure<RemsWebhookOptions>(configuration.GetSection(ConfigurationSections.RemsEmailWebhook));
         // STATIC-APPROVAL-POLICY
         services.Configure<RemsApprovalPolicyOptions>(configuration.GetSection(ConfigurationSections.RemsApprovalPolicy));
+        services.Configure<MicrosoftSsoOptions>(configuration.GetSection(ConfigurationSections.MicrosoftSso));
 
         services.AddSecurity();
         services.AddEmail();
@@ -153,6 +154,9 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<ISigningKeyProvider, RsaSigningKeyProvider>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        // "Login with Microsoft": one client for the process, so Entra's signing keys are fetched once and cached.
+        services.AddHttpClient(MicrosoftIdentityClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IMicrosoftIdentityClient, MicrosoftIdentityClient>();
         // Symmetric encryption for stored SMTP account passwords (Data Protection key ring).
         services.AddSingleton<ICredentialEncryptionService, DataProtectionCredentialEncryptionService>();
         // Default actor identity is the system; the API replaces this with an

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Security.Cryptography;
-using System.Text;
 using EmsPortal.Api.Models.Auth;
 using EmsPortal.Api.Security;
 using EmsPortal.Application.Abstractions.Email;
@@ -19,7 +18,8 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// Authentication and session management (WO-39): login, refresh, logout, logout-all, tenant switch,
-/// profile, change-password (Admin User &amp; Role Management).
+/// profile, change-password (Admin User &amp; Role Management). "Login with Microsoft" lives in
+/// <see cref="MicrosoftSsoController"/>; both start sessions through <see cref="SessionTokenIssuer"/>.
 /// </summary>
 [ApiController]
 [Produces("application/json")]
@@ -36,7 +36,7 @@ public sealed class AuthController : ControllerBase
     private readonly IJwtTokenService _jwt;
     private readonly ITenantRepository _tenants;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly AuthenticationOptions _options;
+    private readonly SessionTokenIssuer _sessions;
     private readonly IEmailDispatcher _emailDispatcher;
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
     private readonly string _baseUrl;
@@ -48,7 +48,7 @@ public sealed class AuthController : ControllerBase
         IJwtTokenService jwt,
         ITenantRepository tenants,
         IUnitOfWork unitOfWork,
-        IOptions<AuthenticationOptions> options,
+        SessionTokenIssuer sessions,
         IEmailDispatcher emailDispatcher,
         IPasswordResetTokenRepository passwordResetTokens,
         IOptions<AppOptions> appOptions)
@@ -59,7 +59,7 @@ public sealed class AuthController : ControllerBase
         _jwt = jwt;
         _tenants = tenants;
         _unitOfWork = unitOfWork;
-        _options = options.Value;
+        _sessions = sessions;
         _emailDispatcher = emailDispatcher;
         _passwordResetTokens = passwordResetTokens;
         _baseUrl = appOptions.Value.BaseUrl;
@@ -81,15 +81,10 @@ public sealed class AuthController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("Account is disabled."));
         }
 
-        var activeTenantId = user.TenantRoles.FirstOrDefault()?.TenantId ?? Guid.Empty;
-        var access = _jwt.CreateAccessToken(user, activeTenantId);
-        var refresh = await IssueRefreshTokenAsync(user.Id, cancellationToken);
+        var session = await _sessions.IssueAsync(user, user.MustChangePassword, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Ok(ApiResponseFactory.Success(
-            new LoginTokenResponse(
-                access.Token, access.ExpiresInSeconds, refresh, RefreshExpiresInSeconds, user.MustChangePassword),
-            "Login successful."));
+        return Ok(ApiResponseFactory.Success(session, "Login successful."));
     }
 
     [HttpPost("/api/auth/refresh")]
@@ -97,7 +92,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType<ApiResponse<RefreshTokenResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken cancellationToken)
     {
-        var stored = await _refreshTokens.GetByHashAsync(HashToken(request.RefreshToken), cancellationToken);
+        var stored = await _refreshTokens.GetByHashAsync(SessionTokenIssuer.HashToken(request.RefreshToken), cancellationToken);
         if (stored is null || stored.IsRevoked || stored.ExpiresAt <= DateTime.UtcNow)
         {
             return Unauthorized(ApiResponseFactory.Unauthorized("Refresh token is invalid or expired."));
@@ -112,14 +107,14 @@ public sealed class AuthController : ControllerBase
         // Rotate: revoke the presented token, issue a new one.
         stored.IsRevoked = true;
         _refreshTokens.Update(stored);
-        var newRefresh = await IssueRefreshTokenAsync(user.Id, cancellationToken);
+        var newRefresh = await _sessions.IssueRefreshTokenAsync(user.Id, cancellationToken);
 
         var activeTenantId = user.TenantRoles.FirstOrDefault()?.TenantId ?? Guid.Empty;
         var access = _jwt.CreateAccessToken(user, activeTenantId);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Ok(ApiResponseFactory.Success(
-            new RefreshTokenResponse(access.Token, access.ExpiresInSeconds, newRefresh, RefreshExpiresInSeconds),
+            new RefreshTokenResponse(access.Token, access.ExpiresInSeconds, newRefresh, _sessions.RefreshExpiresInSeconds),
             "Token refreshed."));
     }
 
@@ -138,7 +133,7 @@ public sealed class AuthController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            var stored = await _refreshTokens.GetByHashAsync(HashToken(request.RefreshToken), cancellationToken);
+            var stored = await _refreshTokens.GetByHashAsync(SessionTokenIssuer.HashToken(request.RefreshToken), cancellationToken);
             if (stored is not null && stored.UserId == user.Id)
             {
                 stored.IsRevoked = true;
@@ -299,32 +294,6 @@ public sealed class AuthController : ControllerBase
         return userId is null ? Task.FromResult<User?>(null) : _users.GetByIdAsync(userId.Value, cancellationToken);
     }
 
-    /// <summary>Configured refresh-token lifetime in days, falling back to the documented default.</summary>
-    private int RefreshTokenDays => _options.RefreshTokenDays <= 0
-        ? AuthenticationOptions.DefaultRefreshTokenDays
-        : _options.RefreshTokenDays;
-
-    /// <summary>The same window in seconds, as returned to the client.</summary>
-    private int RefreshExpiresInSeconds => (int)TimeSpan.FromDays(RefreshTokenDays).TotalSeconds;
-
-    private async Task<string> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var plaintext = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        await _refreshTokens.AddAsync(new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            TokenHash = HashToken(plaintext),
-            ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays),
-            IsRevoked = false,
-            CreatedAt = DateTime.UtcNow,
-        }, cancellationToken);
-        return plaintext;
-    }
-
-    private static string HashToken(string token)
-        => Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
-
     // -------------------- Self-service password reset --------------------
 
     /// <summary>How long an emailed reset link stays valid.</summary>
@@ -363,7 +332,7 @@ public sealed class AuthController : ControllerBase
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            TokenHash = HashToken(plaintext),
+            TokenHash = SessionTokenIssuer.HashToken(plaintext),
             ExpiresAtUtc = now.AddMinutes(ResetTokenLifetimeMinutes),
         }, cancellationToken);
 
@@ -401,7 +370,7 @@ public sealed class AuthController : ControllerBase
             return Invalid();
         }
 
-        var token = await _passwordResetTokens.GetByHashAsync(HashToken(request.Token.Trim()), cancellationToken);
+        var token = await _passwordResetTokens.GetByHashAsync(SessionTokenIssuer.HashToken(request.Token.Trim()), cancellationToken);
         var now = DateTime.UtcNow;
         if (token is null || token.UsedOnUtc is not null || token.ExpiresAtUtc <= now)
         {

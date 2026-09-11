@@ -17,6 +17,36 @@ let sessionGeneration = 0;
 // Only the server saying so ends a session; a network blip or a 5xx must not.
 const isAuthFailure = (error) => error?.response?.status === 401 || error?.response?.status === 403;
 
+// "Login with Microsoft" leaves the SPA for a round trip through the API and Microsoft. What this tab set out
+// with is kept here, so the callback can tell its own trip from a sign-in URL that was pasted or planted.
+// sessionStorage is per tab, which is the scope wanted; where it is unavailable the trip cannot be verified
+// on return and is refused.
+const MICROSOFT_LOGIN_KEY = "microsoftLogin";
+
+const randomState = () => {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+const rememberMicrosoftLogin = (pending) => {
+  try {
+    sessionStorage.setItem(MICROSOFT_LOGIN_KEY, JSON.stringify(pending));
+  } catch {
+    // Storage blocked: the return leg will refuse the trip, which is the safe outcome.
+  }
+};
+
+const takeMicrosoftLogin = () => {
+  try {
+    const raw = sessionStorage.getItem(MICROSOFT_LOGIN_KEY);
+    sessionStorage.removeItem(MICROSOFT_LOGIN_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     token: LocalStorage.getItem("token"),
@@ -50,10 +80,39 @@ export const useAuthStore = defineStore("auth", {
       if (!data?.accessToken) {
         return resp;
       }
+      await this._startSession(data);
+      return resp;
+    },
+
+    // "Login with Microsoft": hands the browser to the API, which runs the Microsoft sign-in (the keys live
+    // there) and returns it to /auth/sso/callback with a one-time code. `returnTo` is where to land afterwards.
+    beginMicrosoftLogin (returnTo) {
+      const state = randomState();
+      rememberMicrosoftLogin({ state, returnTo: returnTo || null });
+      window.location.assign(authApi.microsoftLoginUrl(state));
+    },
+
+    // The return leg. The echoed state must be the one this tab left with; only then is the code traded for
+    // tokens. Resolves to the remembered `returnTo`.
+    async completeMicrosoftLogin ({ code, state }) {
+      const pending = takeMicrosoftLogin();
+      if (!pending || !state || pending.state !== state) {
+        throw new Error("This Microsoft sign-in did not start in this browser tab. Please try again.");
+      }
+      const resp = await authApi.exchangeMicrosoftCode(code);
+      const data = resp?.data;
+      if (!data?.accessToken) {
+        throw new Error("Microsoft sign-in failed. Please try again.");
+      }
+      await this._startSession(data);
+      return pending.returnTo;
+    },
+
+    // The shared tail of every successful sign-in, whichever door it came through.
+    async _startSession (data) {
       this._setTokens(data.accessToken, data.refreshToken, data.refreshExpiresIn);
       this.mustChangePassword = !!data.mustChangePassword;
       await this.loadProfile();
-      return resp;
     },
 
     // GET /api/auth/profile → populate current user + tenant assignments.

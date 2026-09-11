@@ -90,6 +90,11 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
+        // Session issuance shared by password and Microsoft sign-in, and the one-time codes that carry a
+        // Microsoft sign-in from the API's callback to the SPA (process-wide, so a singleton).
+        services.AddScoped<SessionTokenIssuer>();
+        services.AddSingleton<MicrosoftLoginCodeStore>();
+
         return services;
     }
 

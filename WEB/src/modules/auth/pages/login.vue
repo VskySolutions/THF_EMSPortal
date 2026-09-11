@@ -50,6 +50,26 @@
 
       <q-btn label="Login" type="submit" color="primary" unelevated no-caps size="md" class="full-width" :loading="loading" />
     </q-form>
+
+    <div class="row items-center q-my-md">
+      <q-separator class="col" />
+      <span class="q-px-sm text-caption text-grey-6">or</span>
+      <q-separator class="col" />
+    </div>
+
+    <!-- A navigation, not a request: the sign-in runs through the API, which holds the Microsoft keys. -->
+    <q-btn
+      outline no-caps color="grey-8" size="md" class="full-width"
+      :loading="microsoftLoading" :disable="loading" @click="loginWithMicrosoft"
+    >
+      <svg class="microsoft-logo q-mr-sm" viewBox="0 0 21 21" aria-hidden="true">
+        <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+        <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+        <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+        <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+      </svg>
+      Login with Microsoft
+    </q-btn>
   </q-card>
 </template>
 
@@ -61,6 +81,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
 import { getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { setLocalStorage, getLocalStorage, clearLocalStorage } from "assets/utils";
+import { postLoginDestination } from "modules/auth/returnPath";
 import AppTextField from "components/common/AppTextField.vue";
 import AppPasswordField from "components/common/AppPasswordField.vue";
 
@@ -69,7 +90,28 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 const loading = ref(false);
+const microsoftLoading = ref(false);
 const errorMessage = ref("");
+
+// What the API's Microsoft sign-in can send the browser back here with (?ssoError=…), in words.
+const SSO_ERRORS = {
+  not_configured: "Microsoft sign-in is not set up on the server yet. Please sign in with your email and password.",
+  cancelled: "Microsoft sign-in was cancelled.",
+  expired: "The Microsoft sign-in took too long. Please try again.",
+  invalid_state: "The Microsoft sign-in could not be verified. Please try again.",
+  provider: "Microsoft could not complete the sign-in. Please try again.",
+  no_account: "There is no EMS Portal account for that Microsoft account. Ask your administrator to add you, or sign in with your email and password.",
+  disabled: "Your account is disabled. Please contact your administrator.",
+  failed: "Microsoft sign-in failed. Please try again."
+};
+
+if (route.query.ssoError) {
+  errorMessage.value = SSO_ERRORS[route.query.ssoError] || SSO_ERRORS.failed;
+  // Said once: a refresh should not keep repeating it.
+  const query = { ...route.query };
+  delete query.ssoError;
+  router.replace({ query });
+}
 
 // Remember-me persistence (email only; never persist the password).
 const localStorageKey = "Login";
@@ -128,11 +170,16 @@ const login = async () => {
   }
 };
 
+// The browser leaves for the API here; the spinner stays until the page is gone.
+const loginWithMicrosoft = () => {
+  errorMessage.value = "";
+  microsoftLoading.value = true;
+  authStore.beginMicrosoftLogin(route.query.redirect);
+};
+
 const redirectAfterLogin = () => {
-  // `redirect` returns a lapsed session to where it left off. Internal paths only — never an absolute URL.
-  const target = route.query.redirect;
-  const isInternalPath = typeof target === "string" && target.startsWith("/") && !target.startsWith("//");
-  const destination = isInternalPath ? target : "/dashboard";
+  // `redirect` returns a lapsed session to where it left off.
+  const destination = postLoginDestination(route.query.redirect);
   localStorage.setItem("last_route", destination);
   router.push(destination);
 };
@@ -142,6 +189,10 @@ const redirectAfterLogin = () => {
 .auth-card {
   width: 100%;
   border-radius: 16px;
+}
+.microsoft-logo {
+  width: 18px;
+  height: 18px;
 }
 .auth-link {
   text-decoration: none;
