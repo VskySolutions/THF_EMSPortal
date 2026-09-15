@@ -54,6 +54,8 @@ public sealed class OptionSetsController : ControllerBase
             .Add("itemSortMode", s => s.ItemSortMode, s => s.Name)
             .Add("origin", s => s.IsSystem, s => s.Name)
             .Add("isActive", s => s.IsActive, s => s.Name)
+            .Add("createdBy", s => s.CreatedBy, s => s.Name)
+            .Add("updatedBy", s => s.UpdatedBy, s => s.Name)
             .Add("createdOnUtc", s => s.CreatedOnUtc)
             .Add("updatedOnUtc", s => s.UpdatedOnUtc);
 

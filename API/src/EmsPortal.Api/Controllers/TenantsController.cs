@@ -82,12 +82,17 @@ public sealed class TenantsController : ControllerBase
             ApiResponseFactory.Success(new TenantResponse(tenant.Id, tenant.Identifier, tenant.Status.ToString()), "Tenant created."));
     }
 
-    /// <summary>What the Tenants list may be ordered by.</summary>
-    private static readonly SortMap<Tenant> Sorts = new SortMap<Tenant>("updatedOnUtc")
+    /// <summary>
+    /// What the Tenants list may be ordered by. Created By / Updated By order on the names the list shows,
+    /// so the map is built per request around the names already resolved for it.
+    /// </summary>
+    private SortMap<Tenant> SortsWith(IReadOnlyDictionary<Guid, string> names) => new SortMap<Tenant>("updatedOnUtc")
         .Add("name", t => t.Name)
         .Add("identifier", t => t.Identifier)
         .Add("status", t => t.Status, t => t.UpdatedOnUtc)
         .Add("timeZoneId", t => t.TimeZoneId)
+        .Add("createdBy", t => NameOf(names, t.CreatedById), t => t.Name)
+        .Add("updatedBy", t => NameOf(names, t.UpdatedById), t => t.Name)
         .Add("createdOnUtc", t => t.CreatedOnUtc)
         .Add("updatedOnUtc", t => t.UpdatedOnUtc);
 
@@ -123,9 +128,11 @@ public sealed class TenantsController : ControllerBase
 
         // Ordered before it is paged. This list is small enough to be read whole and filtered in memory,
         // but "page 1" still means the first rows OF AN ORDER, so the order has to be settled first.
-        var filtered = Sorts.Apply(filteredSet, sortBy, descending).ToList();
+        // The names come first, and for the whole set: two of the orders are by name.
+        var candidates = filteredSet.ToList();
+        var names = await ResolveActorNamesAsync(candidates.SelectMany(t => new[] { t.CreatedById, t.UpdatedById }), cancellationToken);
+        var filtered = SortsWith(names).Apply(candidates, sortBy, descending).ToList();
         var pageTenants = filtered.Skip((page - 1) * limit).Take(limit).ToList();
-        var names = await ResolveActorNamesAsync(pageTenants.SelectMany(t => new[] { t.CreatedById, t.UpdatedById }), cancellationToken);
         var pageItems = pageTenants.Select(t => new TenantSummary(
             t.Id, t.Name, t.Identifier, t.Status.ToString(), t.TimeZoneId,
             NameOf(names, t.CreatedById), NameOf(names, t.UpdatedById), t.CreatedOnUtc, t.UpdatedOnUtc));

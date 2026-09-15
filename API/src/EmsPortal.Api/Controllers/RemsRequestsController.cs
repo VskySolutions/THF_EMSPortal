@@ -92,8 +92,19 @@ public sealed class RemsRequestsController : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] string? type = null,
         [FromQuery] Guid? assignedAdminUserId = null,
+        [FromQuery] Guid? cseUserId = null,
+        // "NotStarted", or a form status name (Sent, Submitted, Cancelled): the EMS State column's values.
+        [FromQuery] string? emsFormState = null,
+        // A REMS.EntityType code.
+        [FromQuery] string? entityType = null,
         [FromQuery] DateTime? createdFrom = null,
         [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        // A REMS.ClientSubmissionState code: the Client Submission column's values.
+        [FromQuery] string? clientSubmissionState = null,
         [FromQuery] string? scope = null,
         [FromQuery] string? poolScope = null,
         // "mine" or "all" (the default), the My Requests toggle.
@@ -114,7 +125,8 @@ public sealed class RemsRequestsController : ControllerBase
         var options = new RemsRequestListOptions(
             me, privileged, clientName, contact, status, type, assignedAdminUserId,
             createdFrom, createdTo, ParseScope(scope), ParsePoolFilter(poolScope),
-            ParseOwnership(ownership), new SortRequest(sortBy, descending), page, limit);
+            ParseOwnership(ownership), new SortRequest(sortBy, descending), page, limit,
+            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo);
         var (items, total) = await _rems.ListRequestsAsync(options, cancellationToken);
 
         var names = await _users.GetFullNamesAsync(
@@ -126,6 +138,72 @@ public sealed class RemsRequestsController : ControllerBase
 
         var rows = items.Select(r => ToRow(r, me, privileged, names, formStates));
         return Ok(ApiResponseFactory.Paginated(rows, "REMS requests retrieved.", page, limit, total));
+    }
+
+    /// <summary>
+    /// The clients across the requests the caller may see under the given scope, for the Client column's
+    /// dropdown — every client the list could narrow to, so the field filters are not applied.
+    /// </summary>
+    [HttpGet("clients")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Clients(
+        [FromQuery] string? scope = null,
+        [FromQuery] string? poolScope = null,
+        [FromQuery] string? ownership = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var options = new RemsRequestListOptions(
+            me, IsPrivileged(), null, null, null, null, null, null, null,
+            ParseScope(scope), ParsePoolFilter(poolScope), ParseOwnership(ownership),
+            SortRequest.Default, Page: 1, Limit: 1);
+        var clients = await _rems.ListRequestClientsAsync(options, cancellationToken);
+        return Ok(ApiResponseFactory.Success(clients, "REMS request clients retrieved."));
+    }
+
+    /// <summary>The quick-filter counts for the list above, under the same visibility, scope and filters.</summary>
+    [HttpGet("quick-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsRequestQuickCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> QuickCounts(
+        [FromQuery] string? clientName = null,
+        [FromQuery] string? contact = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? type = null,
+        [FromQuery] Guid? assignedAdminUserId = null,
+        [FromQuery] Guid? cseUserId = null,
+        [FromQuery] string? emsFormState = null,
+        [FromQuery] string? entityType = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        // A REMS.ClientSubmissionState code: the Client Submission column's values.
+        [FromQuery] string? clientSubmissionState = null,
+        [FromQuery] string? scope = null,
+        [FromQuery] string? poolScope = null,
+        [FromQuery] string? ownership = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var options = new RemsRequestListOptions(
+            me, IsPrivileged(), clientName, contact, status, type, assignedAdminUserId,
+            createdFrom, createdTo, ParseScope(scope), ParsePoolFilter(poolScope),
+            ParseOwnership(ownership), SortRequest.Default, Page: 1, Limit: 1,
+            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo);
+        var counts = await _rems.CountQuickFiltersAsync(options, cancellationToken);
+        return Ok(ApiResponseFactory.Success(counts, "REMS request quick-filter counts retrieved."));
     }
 
     // Ungated with the list that leads here, and for the same reason. CanSee below is the real boundary:
@@ -750,10 +828,9 @@ public sealed class RemsRequestsController : ControllerBase
     [RequirePermission(Permissions.RemsRequestsCreate)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsClientLookupItem>>>(StatusCodes.Status200OK)]
     /// <param name="entityType">
-    /// The REMS.EntityType code the request is being raised under. It decides which KIND of client the
-    /// picker offers: <c>individual</c> offers people, anything else offers organisations. Omitted, the
-    /// picker offers both — which is what a caller who has not answered the entity type yet should see,
-    /// rather than an empty list they cannot explain.
+    /// The REMS.EntityType code the request is being raised under. Only clients whose own intake form was
+    /// raised under it are offered. Omitted, every REMS client is — which is what a caller who has not
+    /// answered the entity type yet should see, rather than an empty list they cannot explain.
     /// </param>
     public async Task<IActionResult> ClientLookup(
         [FromQuery] string? q, [FromQuery] string? entityType, CancellationToken cancellationToken)
@@ -765,17 +842,10 @@ public sealed class RemsRequestsController : ControllerBase
                 Array.Empty<RemsClientLookupItem>(), "Enter a name, email or phone number to search."));
         }
 
-        // A request for an Individual can only be filed under a person.
-        PartyType? partyType = string.IsNullOrWhiteSpace(entityType)
-            ? null
-            : entityType.Trim().Equals(RemsFormPayloadValidator.Individual, StringComparison.OrdinalIgnoreCase)
-                ? PartyType.Individual
-                : PartyType.Organisation;
-
-        // The ambient tenant filter pins the search to the caller's active tenant.
-        var (items, _) = await _persons.ListAsync(
-            term, tenantId: null, isUser: null, isActive: true, SortRequest.Default, page: 1, limit: 20,
-            sourceEntityType: EntityType.Client, partyType: partyType, cancellationToken: cancellationToken);
+        // Only the people a request names as its client, under the entity type this one is being raised
+        // for: a Person row filed as a client by anything else is not one of the firm's REMS clients. The
+        // ambient tenant filter pins the search to the caller's active tenant.
+        var items = await _rems.LookupClientsAsync(term, entityType, limit: 20, cancellationToken);
 
         // The PARTS, not one joined string.
         var results = items.Select(p => new RemsClientLookupItem(
@@ -1052,7 +1122,9 @@ public sealed class RemsRequestsController : ControllerBase
         var canAct = CanAct(r, me, privileged);
         return new RemsRowActions(
             CanView: true,
-            CanEdit: canAct && User.HasPermission(Permissions.RemsRequestsUpdate),
+            // Not once it is with the approvers, or approved: the page would open every field read-only.
+            CanEdit: canAct && !RemsRequestStatuses.IsFrozen(r.Status!.Value)
+                && User.HasPermission(Permissions.RemsRequestsUpdate),
             // Not gated on CanAct, unlike everything around it: picking up is precisely the move made on
             // somebody ELSE's request, by an admin who has no standing on it yet.
             CanPickUp: User.HasPermission(Permissions.RemsRequestsAssign)

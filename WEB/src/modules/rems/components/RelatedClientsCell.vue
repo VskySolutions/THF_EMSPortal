@@ -23,7 +23,7 @@
            heading that only restates it is a heading that says nothing. -->
       <template v-else>
         <q-icon name="o_apartment" size="16px" class="rcc__head-icon" />
-        <span class="rcc__head-label">Entities</span>
+        <span class="rcc__head-label">Parent Entities</span>
       </template>
     </div>
 
@@ -33,7 +33,7 @@
       class="rcc__child"
     >
       <!-- "Child" for a person on somebody's return; a NUMBER for a business. -->
-      <q-badge class="rcc__tag rcc__tag--child">{{ isIndividual ? "Child" : `Entity-${i + 1}` }}</q-badge>
+      <q-badge class="rcc__tag rcc__tag--child">{{ isIndividual ? "Child" : `Child Entity-${i + 1}` }}</q-badge>
       <span class="rcc__name">
         <!-- The particle after the name and in bold, as the parent above and the Client column beside it
              draw theirs: a related client is told from their own father by that particle and nothing else. -->

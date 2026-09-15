@@ -151,7 +151,7 @@ const columns = [
   { name: "host", label: "Host", field: "host", align: "left", sortable: true, default: true, filterable: false },
   { name: "port", label: "Port", field: "port", align: "left", sortable: true, default: true, filterable: false },
   { name: "fromEmail", label: "From Email", field: "fromEmail", align: "left", sortable: true, default: true, filterable: false },
-  { name: "encryptionType", label: "Encryption", field: "encryptionType", align: "left", default: true, filterable: false },
+  { name: "encryptionType", label: "Encryption", field: "encryptionType", align: "left", sortable: true, default: true, filterable: false },
   { name: "status", label: "Status", field: "isActive", align: "left", sortable: true, default: true, filterOptions: STATUS_OPTIONS },
   // All four from the shared set, so this list keeps the platform convention: the updated pair last and
   // visible, the created pair a click away in the Columns menu.

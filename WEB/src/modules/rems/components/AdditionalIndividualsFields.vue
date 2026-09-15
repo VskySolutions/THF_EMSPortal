@@ -74,38 +74,11 @@
             />
             <!-- Optional, and asked of everybody on the card rather than only of a child: the particle is
                  what tells a father from a son, and either of them may be the one on this return. -->
-            <app-text-field
-              v-model="row.suffix" label="Suffix" class="col-4 col-sm-2" placeholder="Jr."
+            <suffix-field
+              v-model="row.suffix" class="col-4 col-sm-2"
               :error="!!err(i, 'suffix') || suffixTooLong(row)"
               :error-message="err(i, 'suffix') || 'A suffix is at most 16 characters.'"
-            >
-              <template #append>
-                <q-btn
-                  flat dense round size="sm" icon="o_arrow_drop_down" color="grey-7"
-                  aria-label="Suffix suggestions"
-                >
-                  <q-menu anchor="bottom end" self="top end" auto-close>
-                    <q-list dense style="min-width: 150px;">
-                      <q-item
-                        v-for="opt in SUFFIX_OPTIONS" :key="opt.value"
-                        clickable :active="row.suffix === opt.value"
-                        active-class="bg-grey-2 text-primary"
-                        @click="row.suffix = opt.value"
-                      >
-                        <q-item-section>
-                          <q-item-label>{{ opt.label }}</q-item-label>
-                          <q-item-label caption>{{ opt.caption }}</q-item-label>
-                        </q-item-section>
-                      </q-item>
-                      <q-separator />
-                      <q-item clickable :disable="!row.suffix" @click="row.suffix = ''">
-                        <q-item-section class="text-grey-7">No suffix</q-item-section>
-                      </q-item>
-                    </q-list>
-                  </q-menu>
-                </q-btn>
-              </template>
-            </app-text-field>
+            />
             <!-- The email is required; the phone is not. -->
             <app-text-field
               v-model="row.email" label="Email Address" type="email" required class="col-12 col-sm-6"
@@ -157,7 +130,7 @@ import {
   individualAsksMinor, individualBillingLocked, individualFilingLocked, individualLabel,
   newAdditionalIndividual
 } from "modules/rems/useRemsIntakeForm";
-import { CLIENT_NAME_SUFFIXES } from "modules/rems/remsContactRoles";
+import SuffixField from "modules/rems/components/SuffixField.vue";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
@@ -182,9 +155,6 @@ const YES_NO = [
   { label: "Yes", value: true },
   { label: "No", value: false }
 ];
-
-// The same shortlist the client's own Suffix box offers, so the two boxes suggest one vocabulary.
-const SUFFIX_OPTIONS = CLIENT_NAME_SUFFIXES;
 
 // Mirrors the client's own box and the column behind it. Checked here rather than left to the server so a
 // client who pastes a title into it is told before they reach Review.

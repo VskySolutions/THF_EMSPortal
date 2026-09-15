@@ -6,6 +6,7 @@
         :model-value="entityType" :options="entityTypeOptions" label="Entity Type" required
         class="col-12 col-sm-6 col-md-4" :readonly="setupReadonly || entityTypeLocked" :clearable="false"
         :hint="entityTypeLocked ? 'Locked — the intake form has been sent.' : ''"
+        :error="attempted && !entityType" error-message="Choose an entity type."
         info="What kind of entity the client is. It is asked first because it decides the rest: which questions the client's intake form asks, which trades the Industry list offers, and how the client's name is captured. Fixed once the form goes out — and an Audit for a Government entity is a Government Audit, which asks for a contract number."
         @update:model-value="onEntityTypeChosen"
       />
@@ -139,40 +140,12 @@
       </template>
 
       <!-- Only once the client is KNOWN to be a person. -->
-      <app-text-field
+      <suffix-field
         v-if="isIndividualClient && clientIdentitySettled"
-        v-model="model.clientNameSuffix" label="Suffix" :class="suffixCols"
-        placeholder="Jr." :readonly="readonly || clientLocked"
+        v-model="model.clientNameSuffix" :class="suffixCols"
+        :readonly="readonly" :locked="clientLocked"
         :error="suffixTooLong" error-message="A suffix is at most 16 characters."
-      >
-        <template #append>
-          <q-icon v-if="clientLocked" name="o_lock" size="18px" color="grey-6" />
-          <q-btn
-            v-else-if="!readonly" flat dense round size="sm" icon="o_arrow_drop_down" color="grey-7"
-            aria-label="Suffix suggestions"
-          >
-            <q-menu anchor="bottom end" self="top end" auto-close>
-              <q-list dense style="min-width: 150px;">
-                <q-item
-                  v-for="opt in SUFFIX_OPTIONS" :key="opt.value"
-                  clickable :active="model.clientNameSuffix === opt.value"
-                  active-class="bg-grey-2 text-primary"
-                  @click="model.clientNameSuffix = opt.value"
-                >
-                  <q-item-section>
-                    <q-item-label>{{ opt.label }}</q-item-label>
-                    <q-item-label caption>{{ opt.caption }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-separator />
-                <q-item clickable :disable="!model.clientNameSuffix" @click="model.clientNameSuffix = ''">
-                  <q-item-section class="text-grey-7">No suffix</q-item-section>
-                </q-item>
-              </q-list>
-            </q-menu>
-          </q-btn>
-        </template>
-      </app-text-field>
+      />
 
       <!-- Required, not "one of email or mobile": the intake form is emailed, so a request without an
            address has nowhere to send the thing the whole request exists to collect. -->
@@ -204,13 +177,15 @@
     </div>
 
     <!-- How the referral relates to THF's records — DERIVED from what was done above, not asked before
-         it. -->
+         it. The chip that would contradict the client is not on offer, so the answer changes when the
+         client does, not from here. -->
     <div id="rf-type-question" class="rf-question">How does this referral relate to THF's records?</div>
 
     <div class="rf-chips" role="radiogroup" aria-labelledby="rf-type-question">
       <button
         v-for="opt in typeOptions" :key="opt.value"
-        type="button" role="radio" :aria-checked="model.type === opt.value" :disabled="readonly"
+        type="button" role="radio" :aria-checked="model.type === opt.value"
+        :disabled="typeDisabled(opt.value)"
         class="rf-chip" :class="{ 'rf-chip--on': model.type === opt.value }"
         @click="chooseType(opt.value)"
       >
@@ -226,6 +201,8 @@
     <div v-if="attempted && !model.type" class="rf-hint rf-hint--error">
       Choose how this referral relates to THF's records.
     </div>
+    <!-- Why one chip refuses the click — under the row, since a disabled button shows no tooltip. -->
+    <div v-else-if="!readonly" class="rf-hint">{{ typeNote }}</div>
 
     <!-- The trade the client is in, and who at THF owns the relationship. -->
     <div class="row q-col-gutter-md q-mt-md">
@@ -243,6 +220,7 @@
       <app-select
         :model-value="cseUserId" :options="cseOptions" label="CSE" required
         class="col-12 col-sm-6 col-md-4" :readonly="setupReadonly" :clearable="false" :hint="cseHint"
+        :error="attempted && !cseUserId" error-message="Choose a CSE."
         info="Users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. The CSE owns the client relationship and becomes an approver on this request's engagement."
         @update:model-value="$emit('update:cseUserId', $event)"
       />
@@ -284,7 +262,6 @@ import {
   REMS_EXISTING_CLIENT_TYPES, REMS_TYPE_BRAND_NEW_CLIENT, REMS_TYPE_EXISTING_CLIENT,
   isIndividualEntityType
 } from "modules/rems/useRemsMeta";
-import { CLIENT_NAME_SUFFIXES } from "modules/rems/remsContactRoles";
 import { nameRules } from "utils/personName";
 import { dialFromIso, DEFAULT_COUNTRY_ISO } from "composables/useCountries";
 import {
@@ -298,6 +275,7 @@ import AppFieldLabel from "components/common/AppFieldLabel.vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import AppMultiFileUpload from "components/common/AppMultiFileUpload.vue";
 import AppStoredFileItem from "components/common/AppStoredFileItem.vue";
+import SuffixField from "modules/rems/components/SuffixField.vue";
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
@@ -452,8 +430,7 @@ const onIndustryPicked = (value) => {
   emit("update:industry", value);
 };
 
-// The suffix suggestions, and the one thing that can be wrong with a free-text suffix.
-const SUFFIX_OPTIONS = CLIENT_NAME_SUFFIXES;
+// The one thing that can be wrong with a free-text suffix.
 const suffixTooLong = computed(() => (model.clientNameSuffix?.trim().length || 0) > 16);
 
 // ---- Client lookup ----
@@ -472,8 +449,6 @@ const clientSearched = ref(false);
 const clientFocused = ref(false);
 const activeIndex = ref(-1);
 const clientFieldRef = ref(null);
-// A saved type is a deliberate answer, whoever gave it — editing the client name must not rewrite it.
-const typeChosenByUser = ref(!!model.type);
 
 // Which of the two things typing a name here did — matched a record, or named somebody new.
 const clientLinkNote = computed(() => {
@@ -567,15 +542,38 @@ const noMatchNote = computed(() => {
 
 const autoType = (code) => (props.typeOptions.some((o) => o.value === code) ? code : "");
 
-// The request's Type is DERIVED, not asked.
+// The request's Type is DERIVED, not asked: "existing client" means a THF record is linked, "brand-new"
+// means a name with no record behind it. A third answer a tenant has added contradicts neither, so once
+// chosen it stands until the client is cleared.
+const isDerivedType = (code) =>
+  !code || code === REMS_TYPE_BRAND_NEW_CLIENT || REMS_EXISTING_CLIENT_TYPES.includes(code);
+
 const syncTypeToClient = () => {
+  if (!isDerivedType(model.type)) return;
   if (linkedClient.value) {
-    if (!REMS_EXISTING_CLIENT_TYPES.includes(model.type)) model.type = autoType(REMS_TYPE_EXISTING_CLIENT);
+    model.type = autoType(REMS_TYPE_EXISTING_CLIENT);
     return;
   }
-  if (typeChosenByUser.value) return;
   model.type = model.clientName ? autoType(REMS_TYPE_BRAND_NEW_CLIENT) : "";
 };
+
+// The chip that would contradict the client above is not on offer: a linked record is never brand-new, and
+// an existing client is linked by finding them in the search, not by saying so.
+const typeDisabled = (code) => {
+  if (props.readonly) return true;
+  return linkedClient.value
+    ? code === REMS_TYPE_BRAND_NEW_CLIENT
+    : REMS_EXISTING_CLIENT_TYPES.includes(code);
+};
+
+// Why one chip refuses the click, for the state the client above is in.
+const typeNote = computed(() => {
+  const lead = "Decided by the client above";
+  if (props.clientLocked) return `${lead}, whose details are locked — the intake form has been sent.`;
+  if (linkedClient.value) return `${lead}, who is on THF's records. Clear the client to file somebody new.`;
+  if (model.clientName?.trim()) return `${lead} — no THF record is linked. Search above to link one.`;
+  return `${lead} — search to link a client THF already has, or enter a new client's name.`;
+});
 
 // ---- What the search box's text becomes ----
 // The box is the way in for both kinds of client.
@@ -704,9 +702,9 @@ const resetClient = () => {
   // The suffix belongs to the name it was typed beside, so it goes with it. Left standing, the next
   // client typed into this box would inherit the last one's "Jr.".
   model.clientNameSuffix = "";
-  // A manual "brand-new / existing" override belonged to the client being cleared. Released, so the next
-  // one derives its own answer rather than inheriting a decision made about somebody else.
-  typeChosenByUser.value = false;
+  // The answer belonged to the client being cleared, a third one chosen for them included. Blanked, so the
+  // next client derives its own rather than inheriting a decision made about somebody else.
+  model.type = "";
   runLookup("");
   detachClient();
   if (!props.clientLocked) model.customerEmail = "";
@@ -745,15 +743,9 @@ const linkExactMatchIfSettled = () => {
   notify.info(`“${match.name}” is already a THF client — linked to their record.`);
 };
 
-// Overriding the conclusion above. Marking it chosen is what stops the next keystroke in the search box
-// from deriving it away again.
 const chooseType = (value) => {
-  if (props.readonly) return;
-  typeChosenByUser.value = true;
+  if (typeDisabled(value)) return;
   model.type = value;
-  // Saying "brand-new" lets go of whoever was linked: the name on screen is about to be filed as a new
-  // client, and leaving a reference to somebody else's record behind it would file it against them.
-  if (value === REMS_TYPE_BRAND_NEW_CLIENT && linkedClient.value) detachClient();
 };
 
 const openMenuIfResults = () => {
@@ -835,6 +827,13 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 .rf-chip:disabled { cursor: default; opacity: 0.7; }
+/* A chip the client above has ruled out, beside one that is live: muted, so it reads as not on offer
+   before it is clicked and does nothing. */
+.rf-chip:disabled:not(.rf-chip--on) {
+  opacity: 1;
+  color: var(--ink-300);
+  cursor: not-allowed;
+}
 .rf-chip__info { opacity: 0.5; transition: opacity 0.15s; }
 .rf-chip:hover .rf-chip__info,
 .rf-chip--on .rf-chip__info { opacity: 0.9; }

@@ -439,6 +439,19 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? role = null,
         [FromQuery] string? status = null,
+        // The round's standing as the badge says it, and the CSE named on the request.
+        [FromQuery] string? roundStatus = null,
+        [FromQuery] Guid? cseUserId = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] DateTime? sentFrom = null,
+        [FromQuery] DateTime? sentTo = null,
+        [FromQuery] DateTime? decidedFrom = null,
+        [FromQuery] DateTime? decidedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
@@ -458,7 +471,11 @@ public sealed class RemsApprovalController : ControllerBase
             Enum.TryParse<RemsApprovalTaskStatus>(status, ignoreCase: true, out var s) ? s : null;
 
         var (tasks, total) = await _approvals.ListTasksByApproverAsync(
-            new RemsApprovalTaskQuery(me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit), cancellationToken);
+            new RemsApprovalTaskQuery(
+                me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit,
+                roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
+                createdFrom, createdTo, updatedFrom, updatedTo),
+            cancellationToken);
 
         // The audit actors AND each request's CSE, resolved in one read: the CSE is a column on this list
         // now, and a name lookup per row would be one round trip per task.
@@ -491,6 +508,84 @@ public sealed class RemsApprovalController : ControllerBase
                 NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc);
         });
         return Ok(ApiResponseFactory.Paginated(rows, "REMS approval tasks retrieved.", page, limit, total));
+    }
+
+    /// <summary>
+    /// The CSEs across the caller's own inbox, for its CSE filter. Read off the caller's tasks rather
+    /// than the tenant's CSE directory: an approver may hold no REMS permission, so the directory is not
+    /// theirs to read — and a filter offering people none of their requests name would be noise anyway.
+    /// </summary>
+    [HttpGet("approval-tasks/cses")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsUserRef>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskCses(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var ids = await _approvals.ListCseIdsByApproverAsync(me, cancellationToken);
+        var names = await _users.GetFullNamesAsync(ids, cancellationToken);
+        var cses = ids
+            .Select(id => RemsWorkspaceMapper.UserRef(id, names)!)
+            .OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return Ok(ApiResponseFactory.Success(cses, "Approval inbox CSEs retrieved."));
+    }
+
+    /// <summary>The clients across the caller's own inbox, for its Client filter — read off their tasks, like the CSEs.</summary>
+    [HttpGet("approval-tasks/clients")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskClients(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var clients = await _approvals.ListClientsByApproverAsync(me, cancellationToken);
+        return Ok(ApiResponseFactory.Success(clients, "Approval inbox clients retrieved."));
+    }
+
+    /// <summary>The quick-filter counts for the inbox, under the same search and filters.</summary>
+    [HttpGet("approval-tasks/quick-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsApprovalTaskQuickCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskQuickCounts(
+        [FromQuery] string? search = null,
+        [FromQuery] string? role = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? roundStatus = null,
+        [FromQuery] Guid? cseUserId = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] DateTime? sentFrom = null,
+        [FromQuery] DateTime? sentTo = null,
+        [FromQuery] DateTime? decidedFrom = null,
+        [FromQuery] DateTime? decidedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        RemsApproverRole? roleFilter = Enum.TryParse<RemsApproverRole>(role, ignoreCase: true, out var r) ? r : null;
+        RemsApprovalTaskStatus? statusFilter =
+            Enum.TryParse<RemsApprovalTaskStatus>(status, ignoreCase: true, out var s) ? s : null;
+        var counts = await _approvals.CountInboxQuickFiltersAsync(
+            new RemsApprovalTaskQuery(
+                me, search, roleFilter, statusFilter, SortRequest.Default, Page: 1, Limit: 1,
+                roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
+                createdFrom, createdTo, updatedFrom, updatedTo),
+            cancellationToken);
+        return Ok(ApiResponseFactory.Success(counts, "Approval inbox quick-filter counts retrieved."));
     }
 
     /// <summary>
@@ -968,11 +1063,10 @@ public sealed class RemsApprovalController : ControllerBase
             return ConflictResult(CodeMarketingRequired, "At least one marketing tag is required before sending for approval.");
         }
 
-        // The commission has to be settled before it is signed off.
-        var allocated = Math.Round(
-            engagement.CommissionSplits.Where(s => !s.Deleted).Sum(s => s.CommissionPercentage),
-            2, MidpointRounding.AwayFromZero);
-        if (allocated != 100m)
+        // Commission is optional; a split somebody started has to be settled before it is signed off.
+        var splits = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();
+        var allocated = Math.Round(splits.Sum(s => s.CommissionPercentage), 2, MidpointRounding.AwayFromZero);
+        if (splits.Count > 0 && allocated != 100m)
         {
             return ConflictResult(
                 CodeCommissionNotFullyAllocated,

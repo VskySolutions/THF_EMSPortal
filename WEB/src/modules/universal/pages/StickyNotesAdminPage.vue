@@ -88,11 +88,11 @@ const { rows, loading, totalRecords, pagination, load, onRequest } = useListTabl
 });
 
 const columns = [
-  { name: "title", label: "Title", field: "title", align: "left", default: true },
-  { name: "scope", label: "Scope", field: "scope", align: "left", default: true },
+  { name: "title", label: "Title", field: "title", align: "left", sortable: true, default: true },
+  { name: "scope", label: "Scope", field: "scope", align: "left", sortable: true, default: true },
   // Created On is NOT defined here: the shared audit set below carries it, and two columns of the same
   // name is one the visibility map cannot tell from the other.
-  { name: "expiresAtUtc", label: "Expires", field: "expiresAtUtc", align: "left", default: true },
+  { name: "expiresAtUtc", label: "Expires", field: "expiresAtUtc", align: "left", sortable: true, default: true },
   { name: "dismissalCount", label: "Dismissals", field: "dismissalCount", align: "left", sortable: true, default: true },
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }

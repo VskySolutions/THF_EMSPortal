@@ -6,6 +6,7 @@ using EmsPortal.Application.Abstractions.Email;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.UniversalFeatures;
+using EmsPortal.Application.Email;
 using EmsPortal.Domain.Entities;
 using EmsPortal.Domain.Enums;
 using EmsPortal.Shared.Configuration;
@@ -49,6 +50,7 @@ public sealed class RemsFormController : ControllerBase
     private readonly INotificationDispatcher _notifications;
     private readonly IRemsEmailNotifier _emailNotifier;
     private readonly IEmailTemplateService _templates;
+    private readonly ITenantRepository _tenants;
     private readonly IOptionCodeResolver _codes;
     private readonly string _baseUrl;
 
@@ -63,6 +65,7 @@ public sealed class RemsFormController : ControllerBase
         INotificationDispatcher notifications,
         IRemsEmailNotifier emailNotifier,
         IEmailTemplateService templates,
+        ITenantRepository tenants,
         IOptionCodeResolver codes,
         IOptions<AppOptions> appOptions)
     {
@@ -76,6 +79,7 @@ public sealed class RemsFormController : ControllerBase
         _notifications = notifications;
         _emailNotifier = emailNotifier;
         _templates = templates;
+        _tenants = tenants;
         _codes = codes;
         _baseUrl = appOptions.Value.BaseUrl;
     }
@@ -233,7 +237,7 @@ public sealed class RemsFormController : ControllerBase
             ? await _templates.RenderEffectiveAsync(
                 previewTenantId,
                 EmailTemplateKey.RemsFormLink,
-                FormLinkModel(rems, formLink),
+                await FormLinkModelAsync(rems, formLink, cancellationToken),
                 cancellationToken)
             : null;
 
@@ -302,6 +306,8 @@ public sealed class RemsFormController : ControllerBase
 
         var now = DateTime.UtcNow;
         var formLink = BuildFormLink(form.InviteCode);
+        // The sender's wording with every placeholder filled in, so the log and the email say the same thing.
+        var (subject, body) = await ComposeAsync(request, rems, formLink, cancellationToken);
 
         // Mint a stable outbound Message-ID and store it as the ProviderMessageId on the Sent event so a
         // delivery provider can echo it back on delivery/open/failed callbacks that WO-121 ingests.
@@ -332,8 +338,8 @@ public sealed class RemsFormController : ControllerBase
             RecipientEmail = email,
             OccurredOnUtc = now,
             // What the client is about to read, kept alongside the fact that we sent it.
-            Subject = Normalize(request?.Subject),
-            Body = Normalize(request?.Body),
+            Subject = subject,
+            Body = body,
         }, cancellationToken);
 
         await _activity.WriteAsync(new CreateActivityEventDto(EntityType.Rems, remsId, ActivityEventTypes.RemsFormSent), cancellationToken);
@@ -349,7 +355,7 @@ public sealed class RemsFormController : ControllerBase
         // Enqueue the email only after the Sent state is durably persisted.
         _emailNotifier.SendComposedFormLink(
             tenantId, email, new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber),
-            request?.Subject, request?.Body, messageId);
+            subject, body, messageId);
 
         var refreshed = await _forms.GetByRemsIdAsync(remsId, cancellationToken) ?? form;
         var screen = await BuildScreenAsync(rems, refreshed, cancellationToken);
@@ -374,7 +380,8 @@ public sealed class RemsFormController : ControllerBase
         var formLink = BuildFormLink(form.InviteCode);
         var rendered = User.GetActiveTenantId() is { } tenantId
             ? await _templates.RenderEffectiveAsync(
-                tenantId, EmailTemplateKey.RemsFormReminder, FormLinkModel(rems, formLink), cancellationToken)
+                tenantId, EmailTemplateKey.RemsFormReminder,
+                await FormLinkModelAsync(rems, formLink, cancellationToken), cancellationToken)
             : null;
 
         var preview = new RemsFormPreview(
@@ -405,6 +412,7 @@ public sealed class RemsFormController : ControllerBase
         var email = Normalize(rems.CustomerEmail)!; // guaranteed by LoadRemindableAsync
         var formLink = BuildFormLink(form.InviteCode);
         var messageId = BuildOutboundMessageId();
+        var (subject, body) = await ComposeAsync(request, rems, formLink, cancellationToken);
 
         await _forms.AddEmailEventAsync(new REMSFormEmailEvent
         {
@@ -414,8 +422,8 @@ public sealed class RemsFormController : ControllerBase
             EventType = RemsFormEmailEventType.Reminder,
             RecipientEmail = email,
             OccurredOnUtc = DateTime.UtcNow,
-            Subject = Normalize(request?.Subject),
-            Body = Normalize(request?.Body),
+            Subject = subject,
+            Body = body,
         }, cancellationToken);
 
         await _activity.WriteAsync(
@@ -426,7 +434,7 @@ public sealed class RemsFormController : ControllerBase
         // worker; a delivery failure must not roll back the record that we tried.
         _emailNotifier.SendComposedFormReminder(
             tenantId, email, new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber),
-            request?.Subject, request?.Body, messageId);
+            subject, body, messageId);
 
         // Nobody in-app is notified: this is the admin chasing the client, and telling the team each time
         // somebody clicks Remind would be noise about their own action.
@@ -527,11 +535,22 @@ public sealed class RemsFormController : ControllerBase
             events.Select(e => e.CreatedById).Where(id => id.HasValue).Select(id => id!.Value).Distinct(),
             cancellationToken);
 
-        var rows = events.Select(e => new RemsEmailEventRow(
-            e.Id, e.EventType.ToString(), e.RecipientEmail, e.OccurredOnUtc,
-            DescribeFailure(e),
-            e.CreatedById is { } actor && senders.TryGetValue(actor, out var name) ? name : null,
-            e.Subject, e.Body)).ToList();
+        // Sends recorded before the wording was rendered at send time still hold the template's tokens.
+        // Filled in here with the same values, so the preview reads as the email rather than its template.
+        var model = form is null
+            ? null
+            : await FormLinkModelAsync(rems, BuildFormLink(form.InviteCode), cancellationToken);
+        var rows = events.Select(e =>
+        {
+            var (subject, body) = model is null || (e.Subject is null && e.Body is null)
+                ? (e.Subject, e.Body)
+                : RenderComposed(e.Subject, e.Body, model);
+            return new RemsEmailEventRow(
+                e.Id, e.EventType.ToString(), e.RecipientEmail, e.OccurredOnUtc,
+                DescribeFailure(e),
+                e.CreatedById is { } actor && senders.TryGetValue(actor, out var name) ? name : null,
+                subject, body);
+        }).ToList();
 
         // Exactly what POST .../form/reminder would decide, asked ahead of the click.
         var blocked = RemindBlocked(rems, form);
@@ -665,6 +684,44 @@ public sealed class RemsFormController : ControllerBase
         ["FormLink"] = formLink,
         ["RemsNumber"] = rems.REMSNumber,
     };
+
+    /// <summary>
+    /// The form-link model plus the common placeholders the send pipeline adds — the tenant's name, the
+    /// portal's URL — so a preview fills in exactly the tokens the email will.
+    /// </summary>
+    private async Task<Dictionary<string, string?>> FormLinkModelAsync(
+        REMS rems, string formLink, CancellationToken cancellationToken)
+    {
+        var tenant = User.GetActiveTenantId() is { } tenantId
+            ? await _tenants.GetByIdAsync(tenantId, cancellationToken)
+            : null;
+        return CommonEmailPlaceholders.Merge(FormLinkModel(rems, formLink), _baseUrl, tenant?.Name);
+    }
+
+    /// <summary>
+    /// The subject and body as the sender left them, with every placeholder filled in — what is stored
+    /// against the send and what the client is emailed. Null where the sender left a field blank, so the
+    /// template's own wording still applies downstream.
+    /// </summary>
+    private async Task<(string? Subject, string? Body)> ComposeAsync(
+        SendRemsFormRequest? request, REMS rems, string formLink, CancellationToken cancellationToken)
+    {
+        var subject = Normalize(request?.Subject);
+        var body = Normalize(request?.Body);
+        if (subject is null && body is null)
+        {
+            return (null, null);
+        }
+
+        return RenderComposed(subject, body, await FormLinkModelAsync(rems, formLink, cancellationToken));
+    }
+
+    private (string? Subject, string? Body) RenderComposed(
+        string? subject, string? body, IReadOnlyDictionary<string, string?> model)
+    {
+        var rendered = _templates.Render(subject ?? string.Empty, body ?? string.Empty, model);
+        return (subject is null ? null : rendered.Subject, body is null ? null : rendered.Body);
+    }
 
     private string BuildOutboundMessageId()
     {

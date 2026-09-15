@@ -209,23 +209,28 @@ export function useRemsMeta () {
   const departmentOptions = computed(() => options.department);
   const serviceLineOptions = computed(() => options.serviceLine);
   const industryOptions = computed(() => options.industry);
-  // "Waiting For Pickup" is dropped from the FILTER: it is a value on the list, but not one any request is
-  // stored under, so filtering by it would match nothing.
-  const statusFilterOptions = computed(() => {
-    const pickup = options.status.find((o) => o.value === REMS_STATUS_WAITING_FOR_PICKUP);
-    return options.status
-      .filter((o) => o.value !== REMS_STATUS_WAITING_FOR_PICKUP)
-      .map((option) => (option.value === REMS_STATUS.ADMIN_REVIEW && pickup
-        ? { ...option, label: `${option.label}/${pickup.label}` }
-        : option));
-  });
+  // "Waiting For Pickup" is a filter value of its own now. It is not a stored status, but the server reads
+  // it the way the column does — with the admins, and nobody holding it — and reads the two admin stages
+  // as the rows an admin actually holds, so the filter and the badge agree.
+  const statusFilterOptions = computed(() => options.status);
 
   // The approval-decision filter on the Approvals inbox, from the same list its badges are rendered from.
   const approvalStatusFilterOptions = computed(() => options.approvalStatus);
+  // The round's standing, from the list the Approval Status badge is rendered from — "Partially Approved"
+  // included, which the server answers as a pending round some approvers have signed.
+  const roundStatusFilterOptions = computed(() => options.approvalRoundStatus);
 
   // The Related Entities list's status column: the same list drives the dropdown on every row and the
   // filter in the drawer, so a firm that adds a fifth position can both set it and filter by it.
   const relatedEntityStatusOptions = computed(() => options.relatedEntityStatus);
+
+  // The EMS State column's values: the form-status list minus Draft and Saved, which the list reports as
+  // Not started (RemsWorkspaceMapper.FormState) — offering them would match nothing.
+  const formStateFilterOptions = computed(() =>
+    options.formStatus.filter((o) => !["Draft", "Saved"].includes(o.value)));
+
+  // The Client Submission column's values — where the client's answers stand — for its filter.
+  const submissionStateFilterOptions = computed(() => options.clientSubmissionState);
 
   return {
     typeLabel,
@@ -250,6 +255,9 @@ export function useRemsMeta () {
     statusFilterOptions,
     approvalStatusFilterOptions,
     relatedEntityStatusOptions,
+    formStateFilterOptions,
+    submissionStateFilterOptions,
+    roundStatusFilterOptions,
     // The badges: each hands back the whole option, for AppOptionBadge.
     requestStatusOption,
     formStatusOption,

@@ -17,16 +17,34 @@ internal sealed class PermissionGroupRepository : IPermissionGroupRepository
     // ---- Groups ----
 
     // What the Permission Groups list may be ordered by. Roles Using and Members are counted in separate
-    // batched queries after this one, so neither is a column here; nor is Category, which is derived from
-    // the permission keys a group holds.
-    private static readonly SortMap<PermissionGroup> Sorts = new SortMap<PermissionGroup>("updatedOnUtc")
-        .Add("name", g => g.Name)
-        .Add("description", g => g.Description, g => g.Name)
-        .Add("permissionCount", g => g.Permissions.Count, g => g.Name)
-        .Add("status", g => g.IsActive, g => g.Name)
-        .Add("tenantName", g => g.Tenant!.Name, g => g.Name)
-        .Add("createdOnUtc", g => g.CreatedOnUtc)
-        .Add("updatedOnUtc", g => g.UpdatedOnUtc, g => g.Name);
+    // batched queries after this one (CountRolesUsingGroupAsync, CountActiveMembersForGroupsAsync); the
+    // entries here count the same rows as a subquery, so the order agrees with the number shown. Created
+    // By / Updated By order by the ActorNames subquery. Category is not a value on the row at all — the
+    // page carries it only as a filter — so it is not here.
+    private SortMap<PermissionGroup> BuildSorts()
+    {
+        var actors = ActorNames.Of(_dbContext);
+        // Filters may be off on the list query (a Super Admin's spans tenants), so the membership scope is
+        // spelled out here, as CountActiveMembersForGroupsAsync spells it.
+        var memberships = _dbContext.UserTenantRoles.Where(m => !m.Deleted && m.User!.IsActive && !m.User.Deleted);
+        return new SortMap<PermissionGroup>("updatedOnUtc")
+            .Add("name", g => g.Name)
+            .Add("description", g => g.Description, g => g.Name)
+            .Add("permissionCount", g => g.Permissions.Count, g => g.Name)
+            .Add("rolesUsingCount", g => g.RoleLinks.Count, g => g.Name)
+            .Add(
+                "members",
+                g => memberships
+                    .Where(m => m.TenantId == g.TenantId && g.RoleLinks.Any(l => l.RoleId == m.RoleId))
+                    .Select(m => m.UserId).Distinct().Count(),
+                g => g.Name)
+            .Add("status", g => g.IsActive, g => g.Name)
+            .Add("tenantName", g => g.Tenant!.Name, g => g.Name)
+            .Add("createdBy", g => actors.Where(a => a.Id == g.CreatedById).Select(a => a.Name).FirstOrDefault(), g => g.Name)
+            .Add("updatedBy", g => actors.Where(a => a.Id == g.UpdatedById).Select(a => a.Name).FirstOrDefault(), g => g.Name)
+            .Add("createdOnUtc", g => g.CreatedOnUtc)
+            .Add("updatedOnUtc", g => g.UpdatedOnUtc, g => g.Name);
+    }
 
     public async Task<(IReadOnlyList<PermissionGroup> Items, int Total)> ListAsync(
         Guid? tenantId, string? search, bool? isActive, bool? usedByRoles, string? category,
@@ -60,7 +78,7 @@ internal sealed class PermissionGroupRepository : IPermissionGroupRepository
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var items = await Sorts.Apply(query, sort.SortBy, sort.Descending)
+        var items = await BuildSorts().Apply(query, sort.SortBy, sort.Descending)
             .Skip((page - 1) * limit)
             .Take(limit)
             .ToListAsync(cancellationToken);

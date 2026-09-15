@@ -227,12 +227,27 @@
       <q-separator />
       <q-card-section>
         <div class="row q-col-gutter-sm">
-          <app-date-field v-model="payload.contractStartDate" label="Contract Start Date" class="col-12 col-sm-6" />
-          <app-date-field v-model="payload.contractEndDate" label="Contract End Date" class="col-12 col-sm-6" />
+          <app-date-field
+            v-model="payload.contractStartDate" label="Contract Start Date" class="col-12 col-sm-6"
+            :max-date="payload.contractEndDate"
+          />
+          <!-- Each pair has to run forwards; said on the end date, and again by the server on Review. -->
+          <app-date-field
+            v-model="payload.contractEndDate" label="Contract End Date" class="col-12 col-sm-6"
+            :rules="contractEndRules" :error="!!errors.contractEndDate" :error-message="errors.contractEndDate"
+            :min-date="payload.contractStartDate"
+          />
           <app-text-field v-model="payload.originalTerm" label="Original Term" class="col-12 col-sm-6" />
           <app-text-field v-model="payload.renewalTerms" label="Renewal Terms" class="col-12 col-sm-6" />
-          <app-date-field v-model="payload.poStartDate" label="Purchase Order Start Date" class="col-12 col-sm-6" />
-          <app-date-field v-model="payload.poEndDate" label="Purchase Order End Date" class="col-12 col-sm-6" />
+          <app-date-field
+            v-model="payload.poStartDate" label="Purchase Order Start Date" class="col-12 col-sm-6"
+            :max-date="payload.poEndDate"
+          />
+          <app-date-field
+            v-model="payload.poEndDate" label="Purchase Order End Date" class="col-12 col-sm-6"
+            :rules="poEndRules" :error="!!errors.poEndDate" :error-message="errors.poEndDate"
+            :min-date="payload.poStartDate"
+          />
         </div>
       </q-card-section>
     </q-card>
@@ -390,6 +405,12 @@ const BILLING_COLS = {
 const isIndividual = computed(() => props.entityType === "individual");
 const isBusiness = computed(() => isBusinessEntityType(props.entityType));
 const isGovernment = computed(() => props.entityType === "government");
+
+// ISO dates compare as strings. A blank at either end is not an answer to check yet.
+const notBefore = (start, what) => (v) =>
+  !v || !start() || v >= start() || `${what} cannot be before its start date.`;
+const contractEndRules = [notBefore(() => payload.value.contractStartDate, "The Contract End Date")];
+const poEndRules = [notBefore(() => payload.value.poStartDate, "The Purchase Order End Date")];
 
 const referralDetailPlaceholder = computed(() => {
   const chosen = props.referralSources.find((o) => o.value === payload.value.referralSource);

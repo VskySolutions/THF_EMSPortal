@@ -38,6 +38,8 @@ public sealed class ConversationMessagesController : ControllerBase
     private readonly INotificationDispatcher _notifications;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRemsApprovalRepository _approvals;
+    private readonly IRemsRepository _rems;
+    private readonly IRemsEngagementRepository _engagements;
 
     public ConversationMessagesController(
         IConversationMessageRepository messages,
@@ -45,7 +47,9 @@ public sealed class ConversationMessagesController : ControllerBase
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
         IUnitOfWork unitOfWork,
-        IRemsApprovalRepository approvals)
+        IRemsApprovalRepository approvals,
+        IRemsRepository rems,
+        IRemsEngagementRepository engagements)
     {
         _messages = messages;
         _users = users;
@@ -53,6 +57,8 @@ public sealed class ConversationMessagesController : ControllerBase
         _notifications = notifications;
         _unitOfWork = unitOfWork;
         _approvals = approvals;
+        _rems = rems;
+        _engagements = engagements;
     }
 
     [HttpGet]
@@ -176,7 +182,9 @@ public sealed class ConversationMessagesController : ControllerBase
 
     /// <summary>
     /// Whether the caller may read or post on this record's conversation: the parent entity's read
-    /// permission, or — on a REMS request — having been routed an approval task on that request.
+    /// permission, or — on a REMS request — being on the request at all. The thread belongs to the
+    /// request, so everyone the request names reads the same one: the REMS admins, the initiator, the CSE,
+    /// the reviewing admin, the engagement's seats and commission recipients, and every approver.
     /// </summary>
     private async Task<bool> CanReadConversationAsync(
         EntityType entityType, Guid entityId, CancellationToken cancellationToken)
@@ -186,9 +194,31 @@ public sealed class ConversationMessagesController : ControllerBase
             return true;
         }
 
-        return entityType == EntityType.Rems
-            && User.GetUserId() is { } me
-            && await _approvals.IsApproverOnRequestAsync(entityId, me, cancellationToken);
+        if (entityType != EntityType.Rems || User.GetUserId() is not { } me)
+        {
+            return false;
+        }
+
+        var rems = await _rems.GetByIdAsync(entityId, cancellationToken);
+        if (rems is null)
+        {
+            return false;
+        }
+        if (RemsSetupAccess.IsRemsAdmin(User) || RemsSetupAccess.IsParticipant(rems, me))
+        {
+            return true;
+        }
+        if (await _approvals.IsApproverOnRequestAsync(entityId, me, cancellationToken))
+        {
+            return true;
+        }
+
+        var engagement = await _engagements.GetByRemsIdAsync(entityId, cancellationToken);
+        return engagement is not null
+            && (engagement.DepartmentDirectorId == me
+                || engagement.EngagementExecutiveId == me
+                || engagement.BillingManagerId == me
+                || engagement.CommissionSplits.Any(s => !s.Deleted && s.EmployeeId == me));
     }
 
     private async Task NotifyMentionsAsync(ConversationMessage message, IReadOnlyCollection<Guid> mentionIds, CancellationToken cancellationToken)

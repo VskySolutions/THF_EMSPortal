@@ -67,8 +67,8 @@
             </div>
           </div>
           <div class="row q-col-gutter-md">
-            <app-date-field v-model="form.startsOn" label="From" class="col-12 col-sm-6" />
-            <app-date-field v-model="form.endsOn" label="Until" class="col-12 col-sm-6" />
+            <app-date-field v-model="form.startsOn" label="From" class="col-12 col-sm-6" :max-date="form.endsOn" />
+            <app-date-field v-model="form.endsOn" label="Until" class="col-12 col-sm-6" :min-date="form.startsOn" />
           </div>
           <div class="text-caption text-grey-7">Leave the dates empty for an open-ended delegation.</div>
         </q-card-section>

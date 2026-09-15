@@ -198,10 +198,15 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
     // ---- Operations ----
 
     // What the deleted-records panel may be ordered by. Deleted By is an id the controller resolves to a
-    // name afterwards, so the panel does not offer it as a sort.
-    private static readonly SortMap<DeletedRecordRow> DeletedSorts = new SortMap<DeletedRecordRow>("deletedOnUtc")
-        .Add("identity", r => r.Identity)
-        .Add("deletedOnUtc", r => r.DeletedOnUtc, r => r.Identity);
+    // name afterwards; it orders by the ActorNames subquery, which is why the map is built per call.
+    private SortMap<DeletedRecordRow> BuildDeletedSorts()
+    {
+        var actors = ActorNames.Of(_dbContext);
+        return new SortMap<DeletedRecordRow>("deletedOnUtc")
+            .Add("identity", r => r.Identity)
+            .Add("deletedByName", r => actors.Where(a => a.Id == r.DeletedById).Select(a => a.Name).FirstOrDefault(), r => r.Identity)
+            .Add("deletedOnUtc", r => r.DeletedOnUtc, r => r.Identity);
+    }
 
     public async Task<(IReadOnlyList<DeletedRecordRow> Items, int Total)> ListDeletedAsync(
         EntityType entityType, Guid? tenantId, SortRequest sort, int page, int limit,
@@ -214,7 +219,7 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
 
         var query = handler.Deleted(Effective(tenantId));
         var total = await query.CountAsync(cancellationToken);
-        var items = await DeletedSorts.Apply(query, sort.SortBy, sort.Descending)
+        var items = await BuildDeletedSorts().Apply(query, sort.SortBy, sort.Descending)
             .Skip((page - 1) * limit).Take(limit).ToListAsync(cancellationToken);
         return (items, total);
     }

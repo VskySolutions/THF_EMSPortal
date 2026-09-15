@@ -67,6 +67,8 @@ public sealed class UserGroupsController : ControllerBase
         .Add("name", g => g.Name)
         .Add("description", g => g.Description)
         .Add("memberCount", g => g.MemberCount, g => g.Name)
+        .Add("createdBy", g => g.CreatedBy, g => g.Name)
+        .Add("updatedBy", g => g.UpdatedBy, g => g.Name)
         .Add("createdOnUtc", g => g.CreatedOnUtc)
         .Add("updatedOnUtc", g => g.UpdatedOnUtc);
 

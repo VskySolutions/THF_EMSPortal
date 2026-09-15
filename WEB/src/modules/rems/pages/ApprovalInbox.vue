@@ -13,7 +13,10 @@
       @back="$router.back()"
     />
 
-    <app-filter-drawer v-model="filterOpen" :chips="filterChips" @remove="removeFilter" @clear="clearFilters">
+    <!-- No chip row: the quick-filter bar under the table's title says how many filters are on and clears them. -->
+    <app-filter-drawer
+      v-model="filterOpen" :chips="filterChips" :show-chips="false" @remove="removeFilter" @clear="clearFilters"
+    >
       <app-column-filters v-model="filters" :columns="filterableColumns" />
     </app-filter-drawer>
 
@@ -39,6 +42,19 @@
       @refresh="load"
       @row-click="(_, row) => openTask(row)"
     >
+      <!-- Counted shortcuts over the two status filters: a click here IS the drawer's filter. -->
+      <template #quick-filters>
+        <quick-filter-bar :active-count="filterChips.length" @clear="clearFilters">
+          <quick-filter-group
+            v-model="filters.roundStatus" label="Approval Status" :options="roundQuick"
+            :counts="quickCounts?.roundStatus"
+          />
+          <quick-filter-group
+            v-model="filters.status" label="Your Decision" :options="decisionQuick" :counts="quickCounts?.status"
+          />
+        </quick-filter-bar>
+      </template>
+
       <!-- Flagged only where it says something. -->
       <template #body-cell-remsNumber="cell">
         <q-td :props="cell">
@@ -119,7 +135,7 @@
 <script setup>
 // The task-isolated REMS Approval Inbox (WO-117 Part B, AC-REMS-019): the REQUESTS routed to the caller,
 // one row each.
-import { ref, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { debounce } from "quasar";
 import { useRouter } from "vue-router";
 import { remsApi, getApiErrorMessage } from "services/api";
@@ -128,7 +144,7 @@ import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
-import { useRemsMeta } from "modules/rems/useRemsMeta";
+import { useRemsMeta, REMS_ROUND_PARTIALLY_APPROVED } from "modules/rems/useRemsMeta";
 
 import AppListHeader from "components/common/AppListHeader.vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
@@ -136,27 +152,49 @@ import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppDataTable from "components/common/AppDataTable.vue";
+import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
+import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 
 const router = useRouter();
 const notify = useNotify();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
-const { approvalStatusOption, approvalStatusFilterOptions, roundStatusOption } = useRemsMeta();
+const {
+  approvalStatusOption, approvalStatusFilterOptions, roundStatusOption, roundStatusFilterOptions
+} = useRemsMeta();
 
 // Where the whole ROUND stands, from the counts every row carries — the REMS.ApprovalRoundStatus value,
 // which is "Partially Approved" while some but not all approvers have signed.
 const roundMeta = (row) =>
   roundStatusOption(row?.roundStatus, row?.approvedCount || 0, row?.approverCount || 0);
 
-// The identity/date columns are covered by the quick search or cannot be narrowed server-side, so they
-// opt out of the filter drawer; the reader's own decision is the one worth filtering on.
-const columns = [
+// The CSE filter offers the CSEs on the caller's own inbox: an approver may hold no REMS permission, so
+// the tenant's CSE directory is not theirs to read.
+const cseFilterOptions = ref([]);
+// The Client filter likewise offers the clients on the caller's own inbox — any of them at once.
+const clientFilterOptions = ref([]);
+const toOptions = (rows) => (rows || []).map((u) => ({ label: u.name, value: u.id }));
+onMounted(async () => {
+  try {
+    const [cses, clients] = await Promise.all([remsApi.myApprovalCses(), remsApi.myApprovalClients()]);
+    cseFilterOptions.value = toOptions(cses);
+    clientFilterOptions.value = toOptions(clients);
+  } catch {
+    // A filter nobody can populate simply stays empty; the list itself is unaffected.
+  }
+});
+
+// The REMS number is covered by the quick search, so it gets no duplicate filter box; the client is a
+// dropdown of the clients on the inbox, and every date column filters as a From/To range. Approvals is a
+// count read off the round, which the Approval Status filter already stands for.
+// Computed: the CSE and client options arrive after the page does.
+const columns = computed(() => [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
-  { name: "client", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterable: false },
+  { name: "client", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   // On by default: an approver deciding on a round needs to know who to ask about it, and the CSE is that
   // person.
-  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", default: true, filterable: false },
+  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the
   // reader's own decision below is not.
   {
@@ -164,8 +202,9 @@ const columns = [
     label: "Approval Status",
     field: (r) => roundMeta(r).label,
     align: "left",
+    sortable: true,
     default: true,
-    filterable: false
+    filterOptions: roundStatusFilterOptions.value
   },
   // Whose signature, said in the heading.
   { name: "status", label: "Your Decision", field: "status", align: "left", sortable: true, default: true, filterOptions: approvalStatusFilterOptions.value },
@@ -175,33 +214,73 @@ const columns = [
     label: "Approvals",
     field: (r) => (r.approverCount || 0) - (r.approvedCount || 0),
     align: "left",
+    sortable: true,
     default: true,
     filterable: false
   },
-  { name: "sentOnUtc", label: "Sent", field: "sentOnUtc", align: "left", sortable: true, default: true, filterable: false },
+  { name: "sentOnUtc", label: "Sent", field: "sentOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
   // Off by default, but offered in the Columns menu so nothing the row returns is unreachable.
-  { name: "decidedOnUtc", label: "Decided", field: (r) => (r.decidedOnUtc ? fmt.formatDateTime(r.decidedOnUtc) : "—"), align: "left", sortable: true, default: false, filterable: false },
-  ...auditColumns(),
+  { name: "decidedOnUtc", label: "Decided", field: (r) => (r.decidedOnUtc ? fmt.formatDateTime(r.decidedOnUtc) : "—"), align: "left", sortable: true, default: false, filterType: "dateRange" },
+  ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
-];
+]);
 
 // Paged and filtered SERVER-side, like every other REMS list: loading an approver's whole history and
 // searching it in the browser stops scaling.
+// Everything the list is narrowed by, in the shape the API takes. Shared with the counts so the two can
+// never drift.
+const listFilters = () => {
+  // The pickers are date-only and read in the tenant's zone; each column is a UTC instant, so both ends
+  // become that day's real boundaries and "to" includes its own day.
+  const sent = rangeBounds("sentOnUtc", fmt.zonedDayBoundaryUtc);
+  const decided = rangeBounds("decidedOnUtc", fmt.zonedDayBoundaryUtc);
+  const created = rangeBounds("createdOnUtc", fmt.zonedDayBoundaryUtc);
+  const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
+  return {
+    search: search.value || undefined,
+    status: filters.status || undefined,
+    roundStatus: filters.roundStatus || undefined,
+    cseUserId: filters.cse || undefined,
+    clientPersonIds: filters.client?.length ? filters.client : undefined,
+    sentFrom: sent.from,
+    sentTo: sent.to,
+    decidedFrom: decided.from,
+    decidedTo: decided.to,
+    createdFrom: created.from,
+    createdTo: created.to,
+    updatedFrom: updated.from,
+    updatedTo: updated.to
+  };
+};
+
+// ---- The counted shortcuts ----
+const quickCounts = ref(null);
+const refreshQuickCounts = async () => {
+  try {
+    quickCounts.value = await remsApi.myApprovalQuickCounts(listFilters());
+  } catch {
+    // The buttons still work without their numbers; the list's own error toast is the one worth showing.
+  }
+};
+const pickOptions = (options, values) => values.map((v) => options.find((o) => o.value === v)).filter(Boolean);
+const roundQuick = computed(() => pickOptions(
+  roundStatusFilterOptions.value, ["Pending", REMS_ROUND_PARTIALLY_APPROVED, "Approved", "Rejected"]));
+const decisionQuick = computed(() => pickOptions(approvalStatusFilterOptions.value, ["Pending", "Approved"]));
+
 const { rows, loading, totalRecords, search, filterOpen, pagination, load, onRequest } = useListTable({
   pageKey: "rems-approvals",
-  fetcher: ({ page, limit, sortBy, descending }) =>
-    remsApi.myApprovalTasks({
-      page,
-      limit,
-      sortBy,
-      descending,
-      search: search.value || undefined,
-      status: filters.status || undefined
-    }).then((r) => ({ data: r?.data, total: r?.meta?.totalRecords })),
+  fetcher: ({ page, limit, sortBy, descending }) => {
+    // The counts ride along with every read of the list, so the buttons describe the list on screen.
+    refreshQuickCounts();
+    return remsApi.myApprovalTasks({ ...listFilters(), page, limit, sortBy, descending })
+      .then((r) => ({ data: r?.data, total: r?.meta?.totalRecords }));
+  },
   onError: (err) => notify.error(getApiErrorMessage(err))
 });
 
-const { filters, filterableColumns, filterChips, removeFilter, clearFilters } = useColumnFilters(columns, rows, { server: true });
+const {
+  filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
+} = useColumnFilters(columns, rows, { server: true });
 const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters], reload, { deep: true });
 

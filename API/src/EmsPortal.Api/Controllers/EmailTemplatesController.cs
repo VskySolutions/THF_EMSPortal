@@ -66,6 +66,8 @@ public sealed class EmailTemplatesController : ControllerBase
             .Add("displayName", t => t.DisplayName)
             .Add("subject", t => t.Subject, t => t.DisplayName)
             .Add("status", t => t.IsOverridden, t => t.DisplayName)
+            .Add("createdBy", t => t.CreatedBy, t => t.DisplayName)
+            .Add("updatedBy", t => t.UpdatedBy, t => t.DisplayName)
             .Add("createdOnUtc", t => t.CreatedOnUtc, t => t.DisplayName)
             .Add("updatedOnUtc", t => t.UpdatedOnUtc, t => t.DisplayName);
 

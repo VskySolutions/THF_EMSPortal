@@ -172,12 +172,12 @@ const CATEGORY_OPTIONS = [
 const columns = computed(() => [
   { name: "name", label: "Group Name", field: "name", align: "left", sortable: true, default: true, filterable: false },
   // Descriptions are rich text; the cell shows the text without its markup (see utils/richText).
-  { name: "description", label: "Description", field: (r) => stripHtml(r.description), align: "left", default: true, filterable: false },
+  { name: "description", label: "Description", field: (r) => stripHtml(r.description), align: "left", sortable: true, default: true, filterable: false },
   { name: "permissionCount", label: "Permission Count", field: "permissionCount", align: "left", sortable: true, default: true, filterable: false },
   // Neither is sortable: both are counted in their own batched query after the page of groups is read, so
   // there is no column for the database to order the whole set by.
-  { name: "rolesUsingCount", label: "Roles Using", field: "rolesUsingCount", align: "left", default: true, filterable: false },
-  { name: "members", label: "Members", field: "currentUsage", align: "left", default: true, filterable: false },
+  { name: "rolesUsingCount", label: "Roles Using", field: "rolesUsingCount", align: "left", sortable: true, default: true, filterable: false },
+  { name: "members", label: "Members", field: "currentUsage", align: "left", sortable: true, default: true, filterable: false },
   { name: "status", label: "Status", field: "isActive", align: "left", sortable: true, default: true, filterOptions: STATUS_OPTIONS },
   { name: "category", label: "Category", field: "category", align: "left", default: false, filterOptions: CATEGORY_OPTIONS },
   ...(canChooseTenant.value ? [{ name: "tenantName", label: "Tenant", field: "tenantName", align: "left", sortable: true, default: true, filterable: false }] : []),

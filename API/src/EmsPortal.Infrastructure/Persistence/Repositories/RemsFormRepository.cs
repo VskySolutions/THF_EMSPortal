@@ -41,72 +41,173 @@ internal sealed class RemsFormRepository : IRemsFormRepository
             .Include(f => f.Submissions)
             .FirstOrDefaultAsync(f => f.REMSId == remsId, cancellationToken);
 
-    public async Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(
-        RemsClientFormQuery query, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// The requests behind the EMS Review queue, under the query's filters. Drafts are excluded: a form
+    /// record exists from the moment the initiator saves a CSE and an entity type, well before the request
+    /// is anybody's but theirs, and this list is the admins' queue — a draft here would read "Waiting for
+    /// pickup" over a referral its author is still writing, and would 403 for every admin who opened it
+    /// (drafts are creator-only — see RemsRequestsController.CanSee). The two switches leave one filter
+    /// out, for the count that is about it.
+    /// </summary>
+    private IQueryable<REMS> ReviewRequests(RemsClientFormQuery query, bool withAssignment, bool withRequestStatus)
     {
-        // Every SUBMITTED request that has a form. Inner-join REMS (tenant + not-deleted) to its form so
-        // both ambient query filters apply; project the submitted state and the request's assigned
-        // Admin/CSE.
-        // Order on the SOURCE columns before projecting — EF cannot translate an OrderBy over the
-        // projected record. SubmittedOnUtc DESC puts submitted forms first, not-yet-submitted (null) last.
-        //
-        // Drafts are excluded. A form record exists from the moment the initiator saves a CSE and an entity
-        // type, which is well before the request is anybody's but theirs, and this list is the admins'
-        // queue: a draft here would read "Waiting for pickup" over a referral its author is still writing,
-        // and would 403 for every admin who tried to open it (drafts are creator-only — see
-        // RemsRequestsController.CanSee).
         const string draft = RemsRequestStatuses.Draft;
-        var rows =
-            from r in _dbContext.Rems
-            join f in _dbContext.RemsForms on r.Id equals f.REMSId
-            where r.Status!.Value != draft
-            select new { Rems = r, Form = f };
+        var rems = _dbContext.Rems.Where(r => r.Status!.Value != draft);
 
-        // The list's two quick filters. "All" is every row an admin's queue holds, waiting-for-pickup ones
-        // included, so it needs no clause of its own.
-        if (query.Assignment == RemsClientFormAssignment.Mine)
+        // "All" is every row an admin's queue holds, waiting-for-pickup ones included, so it needs no
+        // clause of its own.
+        if (withAssignment && query.Assignment == RemsClientFormAssignment.Mine)
         {
             var me = query.CallerUserId;
-            rows = rows.Where(x => x.Rems.AdminAssignedToId == me);
+            rems = rems.Where(r => r.AdminAssignedToId == me);
         }
-
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var t = query.Search.Trim();
             // Against the client's name as the list SHOWS it — "Smith John Jr." — and against each half
             // of it on its own, because a reader types whichever they have.
-            rows = rows.Where(x =>
-                x.Rems.REMSNumber.Contains(t)
-                || x.Rems.ClientPerson!.ClientDisplayName.Contains(t)
-                || x.Rems.ClientPerson!.FirstName.Contains(t)
-                || x.Rems.ClientPerson!.LastName.Contains(t));
+            rems = rems.Where(r =>
+                r.REMSNumber.Contains(t)
+                || r.ClientPerson!.ClientDisplayName.Contains(t)
+                || r.ClientPerson!.FirstName.Contains(t)
+                || r.ClientPerson!.LastName.Contains(t));
         }
-        if (query.Submitted is { } submitted)
+        if (withRequestStatus && !string.IsNullOrWhiteSpace(query.RequestStatus))
         {
-            // "Submitted" is the same expression the projection reports, so the filter and the column agree.
-            rows = submitted
-                ? rows.Where(x => x.Form.Status == RemsFormStatus.Submitted || x.Form.SubmittedOnUtc != null)
-                : rows.Where(x => x.Form.Status != RemsFormStatus.Submitted && x.Form.SubmittedOnUtc == null);
+            rems = RemsRequestFilters.WhereStatus(rems, query.RequestStatus);
         }
-        if (!string.IsNullOrWhiteSpace(query.RequestStatus))
+        if (query.AssignedAdminUserId is { } adminId)
         {
-            var s = query.RequestStatus.Trim();
-            rows = rows.Where(x => x.Rems.Status!.Value == s);
+            rems = rems.Where(r => r.AdminAssignedToId == adminId);
         }
+        if (query.CseUserId is { } cseId)
+        {
+            rems = rems.Where(r => r.CSEId == cseId);
+        }
+        if (query.ClientPersonIds is { Count: > 0 } clientIds)
+        {
+            rems = rems.Where(r => r.ClientPersonId != null && clientIds.Contains(r.ClientPersonId.Value));
+        }
+        // The audit dates are the REQUEST's, which is what the row's Created On / Updated On show.
+        if (query.CreatedFromUtc is { } createdFrom)
+        {
+            rems = rems.Where(r => r.CreatedOnUtc >= createdFrom);
+        }
+        if (query.CreatedToUtc is { } createdTo)
+        {
+            rems = rems.Where(r => r.CreatedOnUtc <= createdTo);
+        }
+        if (query.UpdatedFromUtc is { } updatedFrom)
+        {
+            rems = rems.Where(r => r.UpdatedOnUtc >= updatedFrom);
+        }
+        if (query.UpdatedToUtc is { } updatedTo)
+        {
+            rems = rems.Where(r => r.UpdatedOnUtc <= updatedTo);
+        }
+
+        return rems;
+    }
+
+    /// <summary>
+    /// The forms, narrowed to submitted or not yet — the same expression the list's Submitted column
+    /// reports, so the filter and the column agree — and to the Received On range, which is the form's date.
+    /// </summary>
+    private IQueryable<REMSForm> ReviewForms(RemsClientFormQuery query)
+    {
+        var forms = _dbContext.RemsForms.AsQueryable();
+        if (query.SubmittedFromUtc is { } from)
+        {
+            forms = forms.Where(f => f.SubmittedOnUtc >= from);
+        }
+        if (query.SubmittedToUtc is { } to)
+        {
+            forms = forms.Where(f => f.SubmittedOnUtc <= to);
+        }
+        if (query.Submitted is { } wanted)
+        {
+            forms = wanted
+                ? forms.Where(f => f.Status == RemsFormStatus.Submitted || f.SubmittedOnUtc != null)
+                : forms.Where(f => f.Status != RemsFormStatus.Submitted && f.SubmittedOnUtc == null);
+        }
+
+        return forms;
+    }
+
+    public async Task<RemsClientFormQuickCounts> CountClientFormQuickFiltersAsync(
+        RemsClientFormQuery query, CancellationToken cancellationToken = default)
+    {
+        // Each group under every filter but its own, so a button's number is the rows clicking it produces.
+        Task<int> CountFormsAsync(IQueryable<REMS> rems)
+            => ReviewForms(query).CountAsync(f => rems.Any(r => r.Id == f.REMSId), cancellationToken);
+
+        var me = query.CallerUserId;
+        var forAssignment = ReviewRequests(query, withAssignment: false, withRequestStatus: true);
+        var assignment = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["all"] = await CountFormsAsync(forAssignment),
+            ["mine"] = await CountFormsAsync(forAssignment.Where(r => r.AdminAssignedToId == me)),
+        };
+
+        var forStatus = ReviewRequests(query, withAssignment: true, withRequestStatus: false);
+        var status = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var code in new[]
+        {
+            RemsRequestStatuses.WaitingForPickup, RemsRequestStatuses.AdminReview, RemsRequestStatuses.AwaitingAdminConfirmation,
+        })
+        {
+            status[code] = await CountFormsAsync(RemsRequestFilters.WhereStatus(forStatus, code));
+        }
+
+        return new RemsClientFormQuickCounts(assignment, status);
+    }
+
+    public async Task<IReadOnlyList<RemsClientChoice>> ListClientFormClientsAsync(CancellationToken cancellationToken = default)
+    {
+        // Every request the queue can show, under no filter or slice: whoever the list could narrow to.
+        const string draft = RemsRequestStatuses.Draft;
+        var forms = _dbContext.RemsForms.AsQueryable();
+        var clients = await _dbContext.Rems
+            .Where(r => r.Status!.Value != draft && r.ClientPersonId != null && forms.Any(f => f.REMSId == r.Id))
+            .Select(r => new { Id = r.ClientPersonId!.Value, Name = r.ClientPerson!.ClientDisplayName })
+            .Distinct()
+            .OrderBy(c => c.Name)
+            .ToListAsync(cancellationToken);
+        return clients.Select(c => new RemsClientChoice(c.Id, c.Name)).ToList();
+    }
+
+    public async Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(
+        RemsClientFormQuery query, CancellationToken cancellationToken = default)
+    {
+        // Inner-join the request (tenant + not-deleted) to its form so both ambient query filters apply,
+        // and project the submitted state and the request's assigned Admin/CSE. Order on the SOURCE
+        // columns before projecting — EF cannot translate an OrderBy over the projected record.
+        var rows =
+            from r in ReviewRequests(query, withAssignment: true, withRequestStatus: true)
+            join f in ReviewForms(query) on r.Id equals f.REMSId
+            select new { Rems = r, Form = f };
 
         // Counted AFTER the filters so the pager reflects the filtered set, not the whole list.
         var total = await rows.CountAsync(cancellationToken);
         // Ordered here, over the joined rows, because EF cannot order a projected record — and over the
         // WHOLE filtered set, because that is what decides which rows page 1 holds. The default is the
         // REQUEST's last touch, matching the audit columns this row carries and the other REMS lists.
-        // The Assigned Admin and CSE columns are absent: both are ids this list resolves to names
-        // afterwards, so neither is a column to order on.
+        // Assigned Admin, CSE, Created By and Updated By are ids this list resolves to names afterwards;
+        // each orders by the ActorNames subquery, so the order agrees with the name shown.
+        var actors = ActorNames.Of(_dbContext);
         var sorts = SortMap.For(rows, "updatedOnUtc")
             .Add("remsNumber", x => x.Rems.REMSNumber)
             .Add("clientName", x => x.Rems.ClientPerson!.ClientDisplayName, x => x.Rems.REMSNumber)
             .Add("submitted", x => x.Form.Status == RemsFormStatus.Submitted || x.Form.SubmittedOnUtc != null, x => x.Rems.UpdatedOnUtc)
             .Add("requestStatus", x => x.Rems.Status!.Value, x => x.Rems.UpdatedOnUtc)
             .Add("submittedOnUtc", x => x.Form.SubmittedOnUtc, x => x.Rems.REMSNumber)
+            .Add(
+                "assignedAdmin",
+                x => actors.Where(a => a.Id == x.Rems.AdminAssignedToId).Select(a => a.Name).FirstOrDefault(),
+                x => x.Rems.REMSNumber)
+            .Add("cse", x => actors.Where(a => a.Id == x.Rems.CSEId).Select(a => a.Name).FirstOrDefault(), x => x.Rems.REMSNumber)
+            .Add("createdBy", x => actors.Where(a => a.Id == x.Rems.CreatedById).Select(a => a.Name).FirstOrDefault(), x => x.Rems.REMSNumber)
+            .Add("updatedBy", x => actors.Where(a => a.Id == x.Rems.UpdatedById).Select(a => a.Name).FirstOrDefault(), x => x.Rems.REMSNumber)
             .Add("createdOnUtc", x => x.Rems.CreatedOnUtc)
             .Add("updatedOnUtc", x => x.Rems.UpdatedOnUtc, x => x.Rems.REMSNumber);
 

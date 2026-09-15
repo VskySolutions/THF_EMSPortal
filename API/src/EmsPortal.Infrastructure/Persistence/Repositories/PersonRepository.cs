@@ -43,20 +43,26 @@ internal sealed class PersonRepository : IPersonRepository
     public Task<bool> PersonCodeExistsAsync(string personCode, CancellationToken cancellationToken = default)
         => _dbContext.Persons.AnyAsync(p => p.PersonCode == personCode, cancellationToken);
 
-    // What the People list may be ordered by. Created By / Updated By are not here: they are ids the
-    // controller resolves to names after the query, so there is no column to order on.
-    private static readonly SortMap<Person> Sorts = new SortMap<Person>("updatedOnUtc")
-        .Add("tenantName", p => p.Tenant!.Name, p => p.UpdatedOnUtc)
-        .Add("personCode", p => p.PersonCode)
-        .Add("fullName", p => p.FirstName, p => p.LastName)
-        .Add("primaryEmail", p => p.PrimaryEmail)
-        .Add("mobileNumber", p => p.MobileNumber)
-        // "Account" is whether the person has been promoted to a login — a null UserId or not.
-        .Add("isUser", p => p.UserId == null, p => p.UpdatedOnUtc)
-        .Add("isActive", p => p.IsActive, p => p.UpdatedOnUtc)
-        .Add("sourceEntityType", p => p.SourceEntityType, p => p.UpdatedOnUtc)
-        .Add("createdOnUtc", p => p.CreatedOnUtc)
-        .Add("updatedOnUtc", p => p.UpdatedOnUtc);
+    // What the People list may be ordered by. Created By / Updated By are ids the controller resolves to
+    // names after the query; they order by the ActorNames subquery, which is why the map is built per call.
+    private SortMap<Person> BuildSorts()
+    {
+        var actors = ActorNames.Of(_dbContext);
+        return new SortMap<Person>("updatedOnUtc")
+            .Add("tenantName", p => p.Tenant!.Name, p => p.UpdatedOnUtc)
+            .Add("personCode", p => p.PersonCode)
+            .Add("fullName", p => p.FirstName, p => p.LastName)
+            .Add("primaryEmail", p => p.PrimaryEmail)
+            .Add("mobileNumber", p => p.MobileNumber)
+            // "Account" is whether the person has been promoted to a login — a null UserId or not.
+            .Add("isUser", p => p.UserId == null, p => p.UpdatedOnUtc)
+            .Add("isActive", p => p.IsActive, p => p.UpdatedOnUtc)
+            .Add("sourceEntityType", p => p.SourceEntityType, p => p.UpdatedOnUtc)
+            .Add("createdBy", p => actors.Where(a => a.Id == p.CreatedById).Select(a => a.Name).FirstOrDefault(), p => p.UpdatedOnUtc)
+            .Add("updatedBy", p => actors.Where(a => a.Id == p.UpdatedById).Select(a => a.Name).FirstOrDefault(), p => p.UpdatedOnUtc)
+            .Add("createdOnUtc", p => p.CreatedOnUtc)
+            .Add("updatedOnUtc", p => p.UpdatedOnUtc);
+    }
 
     public async Task<(IReadOnlyList<Person> Items, int Total)> ListAsync(
         string? search, Guid? tenantId, bool? isUser, bool? isActive, SortRequest sort, int page, int limit,
@@ -107,7 +113,7 @@ internal sealed class PersonRepository : IPersonRepository
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var items = await Sorts.Apply(query, sort.SortBy, sort.Descending)
+        var items = await BuildSorts().Apply(query, sort.SortBy, sort.Descending)
             .Skip((page - 1) * limit)
             .Take(limit)
             .ToListAsync(cancellationToken);

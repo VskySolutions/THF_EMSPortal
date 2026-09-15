@@ -13,7 +13,10 @@
       @back="$router.back()"
     />
 
-    <app-filter-drawer v-model="filterOpen" :chips="allChips" @remove="onRemoveFilter" @clear="onClearFilters">
+    <!-- No chip row: the quick-filter bar under the table's title says how many filters are on and clears them. -->
+    <app-filter-drawer
+      v-model="filterOpen" :chips="allChips" :show-chips="false" @remove="onRemoveFilter" @clear="onClearFilters"
+    >
       <app-column-filters v-model="filters" :columns="filterableColumns" />
       <!-- A server filter with no column of its own: the statuses live INSIDE the nested cell, one per
            related client, so there is no column for the drawer to hang a picker off. -->
@@ -48,6 +51,20 @@
       @request="onRequest"
       @refresh="load"
     >
+      <!-- Counted shortcuts over the two filters: a click here IS the drawer's filter. -->
+      <template #quick-filters>
+        <quick-filter-bar :active-count="allChips.length" @clear="onClearFilters">
+          <quick-filter-group
+            v-model="extras.relatedStatus" label="Related Client Status" :options="relatedEntityStatusOptions"
+            :counts="quickCounts?.relatedStatus"
+          />
+          <quick-filter-group
+            v-model="filters.entityType" label="Entity Type" :options="entityTypeOptions"
+            :counts="quickCounts?.entityType"
+          />
+        </quick-filter-bar>
+      </template>
+
       <!-- The number opens the parent request, which is where the client's own answers are. -->
       <template #body-cell-remsNumber="cell">
         <q-td :props="cell">
@@ -171,7 +188,7 @@
 
 <script setup>
 // Related Entities — the shared board of the clients a client brought with them.
-import { ref, reactive, computed, watch } from "vue";
+import { ref, reactive, computed, watch, onMounted } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -190,6 +207,8 @@ import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppSelect from "components/common/AppSelect.vue";
 import AppDataTable from "components/common/AppDataTable.vue";
+import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
+import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
@@ -200,7 +219,7 @@ const notify = useNotify();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const {
-  entityTypeLabel, entityTypeOption, entityTypeOptions, requestStatusOption,
+  entityTypeLabel, entityTypeOption, entityTypeOptions, requestStatusOption, statusFilterOptions,
   relatedEntityStatusOption, relatedEntityStatusOptions
 } = useRemsMeta();
 
@@ -208,19 +227,30 @@ const {
 // `requestStatus`, because the request's stage is context on a row that is about its related clients.
 const statusRow = (row) => ({ status: row?.requestStatus, assignedAdmin: row?.assignedAdmin });
 
-// REMS number, client and related-client names are all covered by the quick search, so none of them gets
-// a duplicate filter box; the date and count columns the server cannot narrow on opt out entirely.
+// The Client filter offers the clients on the list — any of them at once.
+const clientFilterOptions = ref([]);
+onMounted(async () => {
+  try {
+    clientFilterOptions.value = ((await remsApi.relatedEntityClients()) || []).map((c) => ({ label: c.name, value: c.id }));
+  } catch {
+    // A filter nobody can populate simply stays empty; the list itself is unaffected.
+  }
+});
+
+// The REMS number and the related clients' names are covered by the quick search, so neither gets a filter
+// box; the client is a dropdown of the clients on the list, every date column filters as a From/To range,
+// and Related Clients is a count with no filter worth offering.
 const columns = computed(() => [
   { name: "remsNumber", label: "REMS ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
-  { name: "clientName", label: "Client Name", field: "clientName", align: "left", sortable: true, default: true, filterable: false },
+  { name: "clientName", label: "Client Name", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: true, filterOptions: entityTypeOptions.value },
-  { name: "submittedOnUtc", label: "Submitted On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterable: false },
+  { name: "submittedOnUtc", label: "Submitted On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
   // Deliberately not sortable: it is a table, not a value. Related Clients below is the count of it, which
   // is what a reader would have wanted to sort on anyway.
   { name: "relatedClients", label: "Parent & Related Clients", field: "relatedClients", align: "left", default: true, sortable: false, filterable: false },
   { name: "relatedCount", label: "Related Clients", field: "relatedCount", align: "left", sortable: true, default: false, filterable: false },
-  { name: "requestStatus", label: "Request Status", field: "requestStatus", align: "left", default: false, filterable: false },
-  ...auditColumns(),
+  { name: "requestStatus", label: "Request Status", field: "requestStatus", align: "left", sortable: true, default: false, filterOptions: statusFilterOptions.value },
+  ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
 
@@ -228,23 +258,54 @@ const columns = computed(() => [
 // chips, the reset and the watcher below each have a single thing to read.
 const extras = reactive({ relatedStatus: "" });
 
+// Everything the list is narrowed by, in the shape the API takes. Shared with the counts so the two can
+// never drift.
+const listFilters = () => {
+  // The pickers are date-only and read in the tenant's zone; each column is a UTC instant, so both ends
+  // become that day's real boundaries and "to" includes its own day.
+  const submitted = rangeBounds("submittedOnUtc", fmt.zonedDayBoundaryUtc);
+  const created = rangeBounds("createdOnUtc", fmt.zonedDayBoundaryUtc);
+  const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
+  return {
+    search: search.value || undefined,
+    entityType: filters.entityType || undefined,
+    relatedStatus: extras.relatedStatus || undefined,
+    clientPersonIds: filters.clientName?.length ? filters.clientName : undefined,
+    requestStatus: filters.requestStatus || undefined,
+    submittedFrom: submitted.from,
+    submittedTo: submitted.to,
+    createdFrom: created.from,
+    createdTo: created.to,
+    updatedFrom: updated.from,
+    updatedTo: updated.to
+  };
+};
+
+// ---- The counted shortcuts ----
+const quickCounts = ref(null);
+const refreshQuickCounts = async () => {
+  try {
+    quickCounts.value = await remsApi.relatedEntityQuickCounts(listFilters());
+  } catch {
+    // The buttons still work without their numbers; the list's own error toast is the one worth showing.
+  }
+};
+
 const { rows, loading, totalRecords, search, filterOpen, pagination, load, onRequest } = useListTable({
   pageKey: "rems-related-entities",
-  fetcher: ({ page, limit, sortBy, descending }) =>
-    remsApi.relatedEntities({
-      page,
-      limit,
-      sortBy,
-      descending,
-      search: search.value || undefined,
-      entityType: filters.entityType || undefined,
-      relatedStatus: extras.relatedStatus || undefined
-    }).then((r) => ({ data: r?.data, total: r?.meta?.totalRecords })),
+  fetcher: ({ page, limit, sortBy, descending }) => {
+    // The counts ride along with every read of the list, so the buttons describe the list on screen.
+    refreshQuickCounts();
+    return remsApi.relatedEntities({ ...listFilters(), page, limit, sortBy, descending })
+      .then((r) => ({ data: r?.data, total: r?.meta?.totalRecords }));
+  },
   onError: (err) => notify.error(getApiErrorMessage(err))
 });
 
 // Server-side, like every other REMS list: the pager counts the whole filtered set, not the loaded page.
-const { filters, filterableColumns, filterChips, removeFilter, clearFilters } = useColumnFilters(columns, rows, { server: true });
+const {
+  filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
+} = useColumnFilters(columns, rows, { server: true });
 
 // The column chips plus one for the standalone filter, so everything narrowing the list is visible in the
 // same place and removable the same way.

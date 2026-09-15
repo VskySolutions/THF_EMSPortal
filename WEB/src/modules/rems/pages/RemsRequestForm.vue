@@ -1104,13 +1104,16 @@ const refreshEngagement = async () => {
 };
 
 // ---- What the page writes ----
-// Only the client half is enforced, because it is what the API requires to accept a request at all.
+// The client half, which is what the API requires to accept a request at all.
 const clientProblem = () => {
-  // Point at the box that is actually blank: for an individual that is First/Last Name, not the search.
-  if (!clientForm.clientName?.trim()) {
-    return isIndividualEntityType(setupForm.entityType)
-      ? "Give the client's first and last name."
-      : "Search for the client, or type the new client's name.";
+  // Point at the box that is actually blank: for an individual that is First/Last Name, not the search —
+  // and each of the two, because a surname on its own composes into a name that would otherwise pass.
+  if (isIndividualEntityType(setupForm.entityType)) {
+    if (!clientForm.clientFirstName?.trim() || !clientForm.clientLastName?.trim()) {
+      return "Give the client's first and last name.";
+    }
+  } else if (!clientForm.clientName?.trim()) {
+    return "Search for the client, or type the new client's name.";
   }
   if (!clientForm.type) return "Choose how this referral relates to THF's records.";
   // The email, specifically.
@@ -1118,6 +1121,22 @@ const clientProblem = () => {
     return "Give the client's email address — the intake form is emailed to them.";
   }
   return "";
+};
+
+// The rest of the first tab, written by endpoints of its own once the request exists. Every field here is
+// marked required on the form, so filing the draft asks for all of them rather than only the ones the
+// create endpoint happens to check.
+const setupProblem = () => {
+  if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
+  if (!setupForm.industry) return "Choose the industry this client is in.";
+  if (!setupForm.cseUserId) return "Choose a CSE — the client relationship needs an owner.";
+  return "";
+};
+
+// Top to bottom, as the tab reads: the entity type comes before the client it decides the shape of.
+const createProblem = () => {
+  if (!setupForm.entityType) return setupProblem();
+  return clientProblem() || setupProblem();
 };
 
 // No `description`: "Message from Partner" is not on the form, and leaving the field out of the payload is
@@ -1306,7 +1325,7 @@ const setMode = async (mode) => {
 // committed by hand.
 const createDraft = async () => {
   attempted.value = true;
-  const problem = clientProblem();
+  const problem = createProblem();
   if (problem) {
     notify.warning(problem);
     return;

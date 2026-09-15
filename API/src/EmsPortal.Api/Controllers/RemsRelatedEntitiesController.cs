@@ -73,6 +73,16 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? entityType = null,
         [FromQuery] string? relatedStatus = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        // The request's status, in the terms the column shows.
+        [FromQuery] string? requestStatus = null,
+        [FromQuery] DateTime? submittedFrom = null,
+        [FromQuery] DateTime? submittedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
@@ -82,7 +92,9 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
 
         var (items, total) = await _rems.ListRelatedEntitiesAsync(
             new RemsRelatedEntityQuery(
-                search, entityType, relatedStatus, new SortRequest(sortBy, descending), page, limit),
+                search, entityType, relatedStatus, new SortRequest(sortBy, descending), page, limit,
+                clientPersonIds, requestStatus, submittedFrom, submittedTo, createdFrom, createdTo,
+                updatedFrom, updatedTo),
             cancellationToken);
 
         var remsIds = items.Select(i => i.RemsId).ToList();
@@ -112,8 +124,10 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         var me = User.GetUserId();
         var isRemsAdmin = RemsSetupAccess.IsRemsAdmin(User);
         var mayUpdate = User.HasPermission(Permissions.RemsRequestsUpdate);
+        // Not once the request is with the approvers, or approved: the form would open read-only.
         bool CanEdit(RemsRelatedEntityItem i) =>
-            mayUpdate && (isRemsAdmin || (me is { } uid && (i.CreatedById == uid || i.OnBehalfOfUserId == uid)));
+            mayUpdate && !RemsRequestStatuses.IsFrozen(i.RequestStatus)
+            && (isRemsAdmin || (me is { } uid && (i.CreatedById == uid || i.OnBehalfOfUserId == uid)));
 
         var rows = items.Select(i =>
         {
@@ -131,6 +145,45 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         });
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS related entities retrieved.", page, limit, total));
+    }
+
+    /// <summary>The quick-filter counts for the list above, under the same search and filters.</summary>
+    /// <summary>The clients across the list, for its Client filter — whoever it could narrow to.</summary>
+    [HttpGet("clients")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Clients(CancellationToken cancellationToken)
+    {
+        var clients = await _rems.ListRelatedEntityClientsAsync(cancellationToken);
+        return Ok(ApiResponseFactory.Success(clients, "REMS related entity clients retrieved."));
+    }
+
+    [HttpGet("quick-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsRelatedEntityQuickCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> QuickCounts(
+        [FromQuery] string? search = null,
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? relatedStatus = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        // The request's status, in the terms the column shows.
+        [FromQuery] string? requestStatus = null,
+        [FromQuery] DateTime? submittedFrom = null,
+        [FromQuery] DateTime? submittedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var counts = await _rems.CountRelatedEntityQuickFiltersAsync(
+            new RemsRelatedEntityQuery(
+                search, entityType, relatedStatus, SortRequest.Default, Page: 1, Limit: 1,
+                clientPersonIds, requestStatus, submittedFrom, submittedTo, createdFrom, createdTo,
+                updatedFrom, updatedTo),
+            cancellationToken);
+        return Ok(ApiResponseFactory.Success(counts, "REMS related entity quick-filter counts retrieved."));
     }
 
     // -------------------- Setting a row's status --------------------

@@ -18,16 +18,14 @@
       @back="$router.back()"
     />
 
-    <app-filter-drawer v-model="filterOpen" :chips="allChips" @remove="onRemoveFilter" @clear="onClearFilters">
+    <!-- No chip row: the quick-filter bar under the table's title says how many filters are on and clears them. -->
+    <app-filter-drawer
+      v-model="filterOpen" :chips="allChips" :show-chips="false" @remove="onRemoveFilter" @clear="onClearFilters"
+    >
       <app-column-filters v-model="filters" :columns="filterableColumns" />
-      <!-- Server filters with no column of their own: contact matches email or mobile at once, which no
-           single column stands for, and a created range is two controls, not one. -->
+      <!-- A server filter with no column of its own: contact matches email or mobile at once, which no
+           single column stands for. -->
       <app-text-field v-model="extras.contact" label="Contact (email or mobile)" clearable :dense="false" />
-      <app-date-field v-model="extras.createdFrom" label="Created From" :dense="false" />
-      <app-date-field v-model="extras.createdTo" label="Created To" :dense="false" />
-      <div v-if="invalidRange" class="text-caption text-negative">
-        “Created From” is after “Created To” — no request can match both.
-      </div>
       <q-toggle
         v-if="canManageDeleted" v-model="showDeleted" label="Show deleted?" dense class="q-mt-md"
       />
@@ -48,15 +46,22 @@
       @request="onRequest"
       @refresh="load"
     >
-      <!-- The admins' second reading of this list, beside the column picker where EMS Review keeps the same
-           pair. -->
-      <template v-if="isRemsAdmin" #actions>
-        <q-btn-toggle
-          v-model="ownership"
-          no-caps unelevated dense
-          toggle-color="primary" color="grey-3" text-color="grey-8"
-          :options="OWNERSHIP_FILTERS"
-        />
+      <!-- The admins' second reading of this list first, on the row of counted shortcuts where EMS Review
+           keeps its own pair; then the shortcuts over the Status and EMS State filters, each of which IS
+           the drawer's filter. -->
+      <template #quick-filters>
+        <quick-filter-bar :active-count="allChips.length" @clear="onClearFilters">
+          <quick-filter-group
+            v-if="isRemsAdmin" v-model="ownership" label="View" :options="OWNERSHIP_FILTERS"
+            :counts="quickCounts?.ownership" :clearable="false"
+          />
+          <quick-filter-group
+            v-model="filters.status" label="Status" :options="statusQuick" :counts="quickCounts?.status"
+          />
+          <quick-filter-group
+            v-model="filters.emsFormState" label="EMS" :options="emsQuick" :counts="quickCounts?.emsFormState"
+          />
+        </quick-filter-bar>
       </template>
 
       <!-- The pin the reader put on this row, beside the number rather than only on the button that set it:
@@ -187,7 +192,7 @@ import { useDeletedRecords } from "composables/useDeletedRecords";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useRowPersonalisation, MAX_PINS_PER_TYPE } from "composables/uf/useRowPersonalisation";
-import { useRemsMeta } from "modules/rems/useRemsMeta";
+import { useRemsMeta, REMS_SEAT_ROLES, REMS_STATUS_WAITING_FOR_PICKUP } from "modules/rems/useRemsMeta";
 import { REMS_STATUS } from "modules/rems/remsStatus";
 
 import AppListHeader from "components/common/AppListHeader.vue";
@@ -197,8 +202,9 @@ import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
 import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppTextField from "components/common/AppTextField.vue";
-import AppDateField from "components/common/AppDateField.vue";
 import AppDataTable from "components/common/AppDataTable.vue";
+import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
+import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import DeletedRecordsPanel from "components/universal/DeletedRecordsPanel.vue";
 import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
@@ -216,7 +222,8 @@ const auditColumns = useAuditColumns();
 // AppOptionBadge renders. submissionStateLabel is the label-only form.
 const {
   typeLabel, typeHint, requestStatusOption, formStatusOption, submissionStateLabel, emsFormActivity,
-  entityTypeLabel, entityTypeOption, statusFilterOptions, typeOptions
+  entityTypeLabel, entityTypeOption, entityTypeOptions, statusFilterOptions, formStateFilterOptions,
+  submissionStateFilterOptions, typeOptions
 } = useRemsMeta();
 
 const canCreate = computed(() => has(Permissions.RemsRequestsCreate));
@@ -237,11 +244,23 @@ const ownership = ref("mine");
 // which is the same right as reading requests.
 const canSeeAdmins = computed(() => has(Permissions.RemsRequestsRead));
 const adminFilterOptions = ref([]);
+// The CSE filter offers the same people the request form's CSE picker does: whoever holds the role.
+const cseFilterOptions = ref([]);
+// The Client filter offers the clients on the list — any of them at once — to everyone, unlike the two
+// people lists above.
+const clientFilterOptions = ref([]);
+const toOptions = (rows) => (rows || []).map((a) => ({ label: a.name, value: a.id }));
 onMounted(async () => {
+  try {
+    clientFilterOptions.value = toOptions(await remsApi.requestClients({ scope: "partner" }));
+  } catch {
+    // A filter nobody can populate simply stays empty; the list itself is unaffected.
+  }
   if (!canSeeAdmins.value) return;
   try {
-    const admins = await remsApi.admins();
-    adminFilterOptions.value = (admins || []).map((a) => ({ label: a.name, value: a.id }));
+    const [admins, cses] = await Promise.all([remsApi.admins(), remsApi.admins(REMS_SEAT_ROLES.CSE)]);
+    adminFilterOptions.value = toOptions(admins);
+    cseFilterOptions.value = toOptions(cses);
   } catch {
     // A filter nobody can populate simply stays empty; the list itself is unaffected, and the table's
     // own error toast is the one worth showing.
@@ -252,8 +271,8 @@ onMounted(async () => {
 // trail behind it.
 const columns = computed(() => [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
-  { name: "type", label: "Type", field: "type", align: "left", default: true, filterOptions: typeOptions.value },
-  { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterable: false },
+  { name: "type", label: "Type", field: "type", align: "left", sortable: true, default: true, filterOptions: typeOptions.value },
+  { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "status", label: "Status", field: "status", align: "left", sortable: true, default: true, filterOptions: statusFilterOptions.value },
   // Only offered to callers who may read the admin list; without it the picker would be empty, which
   // reads as "nobody is assigned" rather than "you cannot see who is".
@@ -264,67 +283,101 @@ const columns = computed(() => [
     // being no admin stage in sight because it is still with its initiator or the client.
     field: (r) => r.assignedAdmin?.name || (r.status === REMS_STATUS.ADMIN_REVIEW ? "Waiting for pickup" : "—"),
     align: "left",
+    sortable: true,
     default: true,
     ...(canSeeAdmins.value ? { filterOptions: adminFilterOptions.value } : { filterable: false })
   },
   // On by default. The CSE is who to ask about a request, and every list that shows a request now says
   // so without the reader opening it.
-  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", default: true, filterable: false },
-  { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", default: true, filterable: false },
+  {
+    name: "cse",
+    label: "CSE",
+    field: (r) => r.cse?.name || "—",
+    align: "left",
+    sortable: true,
+    default: true,
+    ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
+  },
+  { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.
-  { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", default: false, filterable: false },
-  { name: "customerMobileNumber", label: "Client Phone Number", field: (r) => r.customerMobileNumber || "—", align: "left", default: false, filterable: false },
+  { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", sortable: true, default: false, filterable: false },
+  { name: "customerMobileNumber", label: "Client Phone Number", field: (r) => r.customerMobileNumber || "—", align: "left", sortable: true, default: false, filterable: false },
   // The cell draws the badge; the field is the LABEL so the column reads as its wording rather than as
   // the stored code (`not_for_profit`) wherever the field is what is read.
-  { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", default: false, filterable: false },
-  { name: "clientSubmissionState", label: "Client Submission", field: (r) => submissionStateLabel(r.clientSubmissionState), align: "left", default: false, filterable: false },
+  { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: false, filterOptions: entityTypeOptions.value },
+  { name: "clientSubmissionState", label: "Client Submission", field: (r) => submissionStateLabel(r.clientSubmissionState), align: "left", sortable: true, default: false, filterOptions: submissionStateFilterOptions.value },
   // All four from the shared set: Updated By / Updated On visible and last, the created pair a click
-  // away. None is filterable — the created range is the From/To pair in the drawer, not a text box.
-  ...auditColumns(),
+  // away. The two dates filter as From/To ranges; the two names do not.
+  ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
 
-// Server filters with no column to hang off. Kept in one reactive object so the chips, the reset and
-// the watcher below each have a single thing to read.
-const extras = reactive({ contact: "", createdFrom: "", createdTo: "" });
+// The one server filter with no column to hang off. Kept in a reactive object so the chips, the reset
+// and the watcher below each have a single thing to read.
+const extras = reactive({ contact: "" });
 
-const invalidRange = computed(() =>
-  !!extras.createdFrom && !!extras.createdTo && extras.createdFrom > extras.createdTo);
+// Everything the list is narrowed by, in the shape the API takes. Shared with the counts so the two can
+// never drift.
+const listFilters = () => {
+  // The pickers are date-only and read in the tenant's zone; the columns they filter are UTC instants, so
+  // both ends become that day's real boundaries and "to" includes its own day.
+  const created = rangeBounds("createdOnUtc", fmt.zonedDayBoundaryUtc);
+  const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
+  return {
+    scope: "partner",
+    // Only the admins choose.
+    ownership: isRemsAdmin.value ? ownership.value : "all",
+    clientName: search.value || undefined,
+    clientPersonIds: filters.clientName?.length ? filters.clientName : undefined,
+    status: filters.status || undefined,
+    type: filters.type || undefined,
+    assignedAdminUserId: filters.assignedAdmin || undefined,
+    cseUserId: filters.cse || undefined,
+    emsFormState: filters.emsFormState || undefined,
+    entityType: filters.entityType || undefined,
+    clientSubmissionState: filters.clientSubmissionState || undefined,
+    contact: extras.contact || undefined,
+    createdFrom: created.from,
+    createdTo: created.to,
+    updatedFrom: updated.from,
+    updatedTo: updated.to
+  };
+};
+
+// ---- The counted shortcuts ----
+const quickCounts = ref(null);
+const refreshQuickCounts = async () => {
+  try {
+    quickCounts.value = await remsApi.quickCounts(listFilters());
+  } catch {
+    // The buttons still work without their numbers; the list's own error toast is the one worth showing.
+  }
+};
+const pickOptions = (options, values) => values.map((v) => options.find((o) => o.value === v)).filter(Boolean);
+const statusQuick = computed(() => pickOptions(
+  statusFilterOptions.value, [REMS_STATUS.DRAFT, REMS_STATUS.AWAITING_CUSTOMER, REMS_STATUS_WAITING_FOR_PICKUP]));
+const emsQuick = computed(() => pickOptions(formStateFilterOptions.value, ["Sent", "Submitted"]));
 
 const { rows, loading, totalRecords, search, filterOpen, pagination, load, onRequest } = useListTable({
   pageKey: "rems-partner",
-  fetcher: ({ page, limit, sortBy, descending }) =>
-    remsApi.list({
-      sortBy,
-      descending,
-      scope: "partner",
-      // Only the admins choose.
-      ownership: isRemsAdmin.value ? ownership.value : "all",
-      page,
-      limit,
-      clientName: search.value || undefined,
-      status: filters.status || undefined,
-      type: filters.type || undefined,
-      assignedAdminUserId: filters.assignedAdmin || undefined,
-      contact: extras.contact || undefined,
-      // The pickers are date-only and read in the tenant's zone; the column they filter is a UTC
-      // instant. Both ends are converted to that day's real boundaries, so "to" includes its own day.
-      createdFrom: fmt.zonedDayBoundaryUtc(extras.createdFrom, "start"),
-      createdTo: fmt.zonedDayBoundaryUtc(extras.createdTo, "end")
-    }).then((r) => ({ data: r?.data, total: r?.meta?.totalRecords })),
+  fetcher: ({ page, limit, sortBy, descending }) => {
+    // The counts ride along with every read of the list — a filter, a search, a refresh — so the buttons
+    // never describe a list other than the one on screen.
+    refreshQuickCounts();
+    return remsApi.list({ ...listFilters(), sortBy, descending, page, limit })
+      .then((r) => ({ data: r?.data, total: r?.meta?.totalRecords }));
+  },
   onError: (err) => notify.error(getApiErrorMessage(err))
 });
 
-const { filters, filterableColumns, filterChips, removeFilter, clearFilters } = useColumnFilters(columns, rows, { server: true });
+const {
+  filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
+} = useColumnFilters(columns, rows, { server: true });
 
 // The column chips plus one per standalone filter, so everything narrowing the list is visible in the
 // same place and removable the same way.
-const extraChips = [
-  { key: "contact", label: "Contact" },
-  { key: "createdFrom", label: "Created From" },
-  { key: "createdTo", label: "Created To" }
-];
+const extraChips = [{ key: "contact", label: "Contact" }];
 const allChips = computed(() => [
   ...filterChips.value,
   ...extraChips.filter((c) => extras[c.key]).map((c) => ({ key: c.key, label: `${c.label}: ${extras[c.key]}` }))

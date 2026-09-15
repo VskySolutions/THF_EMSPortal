@@ -1,6 +1,7 @@
 using EmsPortal.Application.Abstractions.Email;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.Security;
+using EmsPortal.Application.Email;
 using EmsPortal.Domain.Enums;
 using EmsPortal.Shared.Configuration;
 using Microsoft.Extensions.Logging;
@@ -87,20 +88,8 @@ internal sealed class EmailNotificationService : IEmailNotificationService
             }
 
             // Common values every template can use; caller-supplied values take precedence.
-            var merged = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["LoginUrl"] = _appOptions.BaseUrl,
-                ["AppBaseUrl"] = _appOptions.BaseUrl,
-            };
             var tenant = await _tenants.GetByIdAsync(tenantId, cancellationToken);
-            if (tenant is not null)
-            {
-                merged["TenantName"] = tenant.Name;
-            }
-            foreach (var kv in model)
-            {
-                merged[kv.Key] = kv.Value;
-            }
+            var merged = CommonEmailPlaceholders.Merge(model, _appOptions.BaseUrl, tenant?.Name);
 
             var rendered = await _templates.RenderEffectiveAsync(tenantId, key, merged, cancellationToken);
             if (rendered is null)
@@ -121,11 +110,13 @@ internal sealed class EmailNotificationService : IEmailNotificationService
                 account.FromName,
                 account.FromEmail);
 
-            // An admin who edited the email before sending gets exactly what they wrote. The template is
-            // still resolved and rendered above — it is what they were shown, and its absence is still a
-            // reason not to send at all — but their edits win over it.
-            var subject = string.IsNullOrWhiteSpace(subjectOverride) ? rendered.Subject : subjectOverride.Trim();
-            var body = string.IsNullOrWhiteSpace(bodyOverride) ? rendered.Body : bodyOverride;
+            // An admin who edited the email before sending gets exactly what they wrote, with the same
+            // placeholders filled in — a token left standing in their text goes out as its value, not as
+            // {{TenantName}}. The template is still resolved and rendered above — it is what they were
+            // shown, and its absence is still a reason not to send at all — but their edits win over it.
+            var composed = _templates.Render(subjectOverride?.Trim() ?? string.Empty, bodyOverride ?? string.Empty, merged);
+            var subject = string.IsNullOrWhiteSpace(subjectOverride) ? rendered.Subject : composed.Subject;
+            var body = string.IsNullOrWhiteSpace(bodyOverride) ? rendered.Body : composed.Body;
             var message = new SmtpMessage(toEmail.Trim(), subject, body, IsHtml: true, MessageId: messageId);
             var result = await _sender.SendAsync(credentials, message, cancellationToken);
             if (!result.Success)

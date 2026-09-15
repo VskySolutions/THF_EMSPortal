@@ -138,7 +138,7 @@ const columns = computed(() => [
   { name: "roles", label: "Role", field: (r) => (r.roles || []).join(", "), align: "left", sortable: false, default: true },
   { name: "groups", label: "Groups", field: (r) => (r.groups || []).map((g) => g.name).join(", "), align: "left", sortable: false, default: true },
   // Department placement in the active tenant.
-  { name: "department", label: "Department", field: "department", align: "left", default: true, filterable: false },
+  { name: "department", label: "Department", field: "department", align: "left", sortable: true, default: true, filterable: false },
   { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, default: true, filterOptions: [{ label: "Active", value: true }, { label: "Inactive", value: false }] },
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
