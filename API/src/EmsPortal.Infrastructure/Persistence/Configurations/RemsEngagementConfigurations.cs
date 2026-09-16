@@ -93,11 +93,10 @@ internal sealed class RemsEngagementGovernmentDetailConfiguration : IEntityTypeC
     {
         builder.ToTable("REMSEngagementGovernmentDetail", t =>
         {
-            // GCS's two money columns. Neither can be negative — a purchase order is worth what it is
-            // worth, and an hour is billed at a rate, not a credit.
+            // The purchase order is worth what it is worth — never a negative amount.
             t.HasCheckConstraint(
-                "CK_REMSEngagementGovernmentDetail_PoAmounts",
-                "([PurchaseOrderAmount] IS NULL OR [PurchaseOrderAmount] >= 0) AND ([BillRatePerHour] IS NULL OR [BillRatePerHour] >= 0)");
+                "CK_REMSEngagementGovernmentDetail_PurchaseOrderAmount",
+                "[PurchaseOrderAmount] IS NULL OR [PurchaseOrderAmount] >= 0");
         });
         builder.HasKey(d => d.Id);
 
@@ -105,10 +104,7 @@ internal sealed class RemsEngagementGovernmentDetailConfiguration : IEntityTypeC
         builder.Property(d => d.RenewalTerms).HasMaxLength(500);
         builder.Property(d => d.ContractNumber).HasMaxLength(64);
         builder.Property(d => d.PurchaseOrderNumber).HasMaxLength(64);
-        builder.HasOne(d => d.PersonnelLevel).WithMany().HasForeignKey(d => d.PersonnelLevelId).OnDelete(DeleteBehavior.Restrict);
-        builder.Navigation(d => d.PersonnelLevel).AutoInclude();
         builder.Property(d => d.PurchaseOrderAmount).HasPrecision(18, 2);
-        builder.Property(d => d.BillRatePerHour).HasPrecision(18, 2);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(d => d.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(d => d.TenantId);
@@ -117,6 +113,31 @@ internal sealed class RemsEngagementGovernmentDetailConfiguration : IEntityTypeC
         builder.HasOne(d => d.PurchaseOrderMedia).WithMany().HasForeignKey(d => d.PurchaseOrderMediaId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(d => new { d.TenantId, d.REMSEngagementId }).IsUnique().HasFilter("[Deleted] = 0");
+    }
+}
+
+internal sealed class RemsEngagementPersonnelRateConfiguration : IEntityTypeConfiguration<REMSEngagementPersonnelRate>
+{
+    public void Configure(EntityTypeBuilder<REMSEngagementPersonnelRate> builder)
+    {
+        // An hour is billed at a rate, not a credit.
+        builder.ToTable("REMSEngagementPersonnelRate", t => t.HasCheckConstraint(
+            "CK_REMSEngagementPersonnelRate_BillRatePerHour",
+            "[BillRatePerHour] >= 0"));
+        builder.HasKey(r => r.Id);
+
+        builder.Property(r => r.BillRatePerHour).HasPrecision(18, 2).IsRequired();
+
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(r => r.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => r.TenantId);
+
+        builder.HasOne(r => r.GovernmentDetail).WithMany(d => d.PersonnelRates).HasForeignKey(r => r.REMSEngagementGovernmentDetailId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(r => r.PersonnelLevel).WithMany().HasForeignKey(r => r.PersonnelLevelId).OnDelete(DeleteBehavior.Restrict);
+        // A rate is read by the level it is for, so the level always travels with it.
+        builder.Navigation(r => r.PersonnelLevel).AutoInclude();
+
+        // One rate per (engagement, level).
+        builder.HasIndex(r => new { r.TenantId, r.REMSEngagementGovernmentDetailId, r.PersonnelLevelId }).IsUnique().HasFilter("[Deleted] = 0");
     }
 }
 

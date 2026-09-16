@@ -74,7 +74,7 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
                 // The uploaded purchase order travels with the detail, for the same reason the CAF does:
                 // the workspace names the document on screen, and a media id is not a name.
                 .Include(d => d.PurchaseOrderMedia)
-                .Include(d => d.PersonnelLevel)
+                .Include(d => d.PersonnelRates).ThenInclude(r => r.PersonnelLevel)
                 .Where(d => engagementIds.Contains(d.REMSEngagementId))
                 .ToListAsync(cancellationToken);
 
@@ -98,7 +98,7 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
 
     public Task<REMSEngagementGovernmentDetail?> GetGovernmentDetailAsync(Guid engagementId, CancellationToken cancellationToken = default)
         => _dbContext.RemsEngagementGovernmentDetails
-            .Include(d => d.PersonnelLevel)
+            .Include(d => d.PersonnelRates).ThenInclude(r => r.PersonnelLevel)
             .FirstOrDefaultAsync(d => d.REMSEngagementId == engagementId, cancellationToken);
 
     public Task<REMSEngagementTaxDetail?> GetTaxDetailAsync(Guid engagementId, CancellationToken cancellationToken = default)
@@ -119,6 +119,11 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
         => await _dbContext.RemsEngagementTaxForms.AddAsync(taxForm, cancellationToken);
 
     public void RemoveTaxForm(REMSEngagementTaxForm taxForm) => _dbContext.RemsEngagementTaxForms.Remove(taxForm);
+
+    public async Task AddPersonnelRateAsync(REMSEngagementPersonnelRate rate, CancellationToken cancellationToken = default)
+        => await _dbContext.RemsEngagementPersonnelRates.AddAsync(rate, cancellationToken);
+
+    public void RemovePersonnelRate(REMSEngagementPersonnelRate rate) => _dbContext.RemsEngagementPersonnelRates.Remove(rate);
 
     public async Task AddMarketingMethodAsync(REMSEngagementMarketingMethod method, CancellationToken cancellationToken = default)
         => await _dbContext.RemsEngagementMarketingMethods.AddAsync(method, cancellationToken);

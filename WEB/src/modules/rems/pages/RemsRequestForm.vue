@@ -1004,8 +1004,14 @@ const setupRows = computed(() => {
         { label: "PO Beginning Date", value: dateOnly(e.government?.purchaseOrderStartDate) },
         { label: "PO Ending Date", value: dateOnly(e.government?.purchaseOrderEndDate) },
         { label: "Purchase Order", value: e.government?.purchaseOrderMediaId ? "On file" : "Not yet provided" },
-        { label: "Personnel Level", value: labelOf(personnelLevelOptions.value, e.government?.personnelLevel) },
-        { label: "Bill Rate / Hour", value: currency(e.government?.billRatePerHour) }
+        // The rate card, one "level: rate" per entry. Read by the label the API resolved off the same list
+        // the picker uses, so a level since retired from it still has a name.
+        {
+          label: "Bill Rate by Personnel Level",
+          value: (e.government?.personnelRates || []).map((r) =>
+            `${r.personnelLevelLabel || labelOf(personnelLevelOptions.value, r.personnelLevel)}: ${currency(r.billRatePerHour)}/hr`),
+          wide: true
+        }
       ]
       : []),
     ...(isTaxDepartment(e.department)

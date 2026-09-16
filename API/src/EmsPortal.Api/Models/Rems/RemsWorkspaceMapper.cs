@@ -44,6 +44,22 @@ internal static class RemsWorkspaceMapper
                 // mailing row; filled on a billing one, where the intake form asks for both halves.
                 address.Suffix, address.FirstName, address.LastName, address.Email, address.PhoneNumber);
 
+    /// <summary>
+    /// A GCS engagement's rate card, in the personnel-level list's own order. With
+    /// <paramref name="withRates"/> false the levels are named and the money withheld — the approver's
+    /// packet for a role that may not see the fee.
+    /// </summary>
+    public static IReadOnlyList<RemsPersonnelRateView> PersonnelRates(REMSEngagementGovernmentDetail government, bool withRates = true)
+        => government.PersonnelRates
+            .Where(r => !r.Deleted)
+            .OrderBy(r => r.PersonnelLevel?.SortOrder ?? int.MaxValue)
+            .ThenBy(r => r.PersonnelLevel?.Label)
+            .Select(r => new RemsPersonnelRateView(
+                r.PersonnelLevel?.Value ?? string.Empty,
+                r.PersonnelLevel?.Label ?? string.Empty,
+                withRates ? r.BillRatePerHour : null))
+            .ToList();
+
     public static RemsEngagementView Engagement(
         REMSEngagement engagement,
         REMSEngagementAuditDetail? audit,
@@ -70,7 +86,7 @@ internal static class RemsWorkspaceMapper
                 government.PurchaseOrderStartDate, government.PurchaseOrderEndDate,
                 government.PurchaseOrderNumber, government.PurchaseOrderAmount,
                 government.PurchaseOrderMediaId, government.PurchaseOrderMedia?.OriginalFileName,
-                government.PersonnelLevel?.Value, government.BillRatePerHour);
+                PersonnelRates(government));
         var taxView = tax is null
             ? null
             : new RemsTaxDetailView(

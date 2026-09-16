@@ -113,13 +113,25 @@ public sealed class UpdateRemsGovernmentDetailRequestValidator : AbstractValidat
         RuleFor(x => x.OriginalTerm).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.OriginalTerm));
         RuleFor(x => x.RenewalTerms).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.RenewalTerms));
         RuleFor(x => x.PurchaseOrderNumber).MaximumLength(64).When(x => !string.IsNullOrWhiteSpace(x.PurchaseOrderNumber));
-        RuleFor(x => x.PersonnelLevel).MaximumLength(64).When(x => !string.IsNullOrWhiteSpace(x.PersonnelLevel));
         RuleFor(x => x.PurchaseOrderAmount)
             .GreaterThanOrEqualTo(0).WithMessage("purchaseOrderAmount must be zero or greater.")
             .When(x => x.PurchaseOrderAmount.HasValue);
-        RuleFor(x => x.BillRatePerHour)
-            .GreaterThanOrEqualTo(0).WithMessage("billRatePerHour must be zero or greater.")
-            .When(x => x.BillRatePerHour.HasValue);
+        // The rate card: each level once, and a rate is never a credit.
+        RuleFor(x => x.PersonnelRates)
+            .Must(rates => rates
+                .Select(r => (r.PersonnelLevel ?? string.Empty).Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count() == rates.Count)
+            .WithMessage("personnelRates must name each personnel level once.");
+        RuleForEach(x => x.PersonnelRates).ChildRules(rate =>
+        {
+            rate.RuleFor(r => r.PersonnelLevel)
+                .NotEmpty().WithMessage("personnelRates[].personnelLevel is required.")
+                .MaximumLength(64);
+            rate.RuleFor(r => r.BillRatePerHour)
+                .GreaterThanOrEqualTo(0).WithMessage("personnelRates[].billRatePerHour must be zero or greater.")
+                .When(r => r.BillRatePerHour.HasValue);
+        });
     }
 }
 

@@ -53,6 +53,11 @@ public interface IRemsEngagementRepository
 
     void RemoveTaxForm(REMSEngagementTaxForm taxForm);
 
+    /// <summary>One line of a GCS engagement's rate card (the government detail loads them with their levels).</summary>
+    Task AddPersonnelRateAsync(REMSEngagementPersonnelRate rate, CancellationToken cancellationToken = default);
+
+    void RemovePersonnelRate(REMSEngagementPersonnelRate rate);
+
     Task AddMarketingMethodAsync(REMSEngagementMarketingMethod method, CancellationToken cancellationToken = default);
 
     void RemoveMarketingMethod(REMSEngagementMarketingMethod method);

@@ -177,8 +177,8 @@
         </q-card-section>
       </q-card>
 
-      <!-- Conditional: GCS → the purchase order the engagement is set up against, and the level and rate
-           it is staffed at. -->
+      <!-- Conditional: GCS → the purchase order the engagement is set up against, and the rate it bills
+           at each level it is staffed at. -->
       <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
           <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
@@ -206,43 +206,75 @@
               v-model="gov.purchaseOrderEndDate" label="PO Ending Date" class="col-12 col-sm-6"
               :readonly="!editable" :rules="poEndRules" :min-date="gov.purchaseOrderStartDate"
             />
-            <app-select
-              v-model="gov.personnelLevel" :options="personnelLevelOptions" label="Personnel Level"
-              class="col-12 col-sm-6" :readonly="!editable"
-              info="From the REMS Personnel Level option list (Administration → Option Sets)."
-            />
-            <app-text-field
-              v-model="gov.billRatePerHour" label="Bill Rate / Hour" type="number"
-              class="col-12 col-sm-6" :readonly="!editable" :rules="billRateRules"
-            >
-              <template #prepend><span class="text-grey-7">$</span></template>
-            </app-text-field>
-          </div>
+            <!-- The rate card and the order it bills against, side by side. The card lists every level on
+                 the REMS Personnel Level list with the hourly rate this engagement bills it at; a level left
+                 blank is one the engagement is not staffed at. -->
+            <div class="col-12 col-sm-6">
+              <div class="section-subhead gcs-block__title">
+                Bill Rate by Personnel Level
+                <q-icon name="o_info" size="14px" color="grey-6" class="q-ml-xs">
+                  <q-tooltip anchor="top middle" self="bottom middle" max-width="280px">
+                    The levels are the REMS Personnel Level option list (Administration → Option Sets).
+                    Enter a rate against each level this engagement is staffed at and leave the others blank.
+                  </q-tooltip>
+                </q-icon>
+              </div>
+              <div v-if="!rateRows.length" class="text-caption text-grey-6">
+                The REMS Personnel Level list is empty — add levels under Administration → Option Sets.
+              </div>
+              <q-markup-table v-else flat bordered dense separator="horizontal" class="rems-rates">
+                <thead>
+                  <tr>
+                    <th class="text-left">Personnel Level</th>
+                    <th class="text-left rems-rates__rate">Bill Rate / Hour</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in rateRows" :key="row.value">
+                    <td>
+                      {{ row.label }}
+                      <!-- A level since taken off the list, still shown because a rate is stored against it. -->
+                      <span v-if="row.retired" class="text-caption text-grey-6 q-ml-xs">(no longer on the list)</span>
+                    </td>
+                    <td class="rems-rates__rate">
+                      <app-text-field
+                        v-model="gov.personnelRates[row.value]" label="" type="number" :readonly="!editable"
+                        :rules="billRateRules"
+                      >
+                        <template #prepend><span class="text-grey-7">$</span></template>
+                      </app-text-field>
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+            </div>
 
-          <!-- The purchase order itself. -->
-          <!-- Same order as the CAF card above: what is on file, the picker, then the document at the
-               bottom — which is where the picker previews an unsaved. -->
-          <div class="q-mt-md">
-            <q-banner v-if="hasPurchaseOrderFile && poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
-              <template #avatar><q-icon name="o_swap_horiz" color="teal-9" /></template>
-              Saving replaces the purchase order on file with the one you have just chosen.
-            </q-banner>
-            <q-banner v-else-if="poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
-              <template #avatar><q-icon name="o_upload_file" color="teal-9" /></template>
-              The purchase order is attached when you save this request.
-            </q-banner>
-            <app-single-file-upload
-              v-if="editable"
-              v-model="poFile" :accept="PURCHASE_ORDER_ACCEPT" :max-size-mb="MAX_UPLOAD_MB"
-              :label="hasPurchaseOrderFile ? 'Replace purchase order' : 'Upload purchase order'"
-              :hint="`PDF, image, Word or Excel, up to ${MAX_UPLOAD_MB} MB`"
-            />
-            <!-- The ✕ takes it back off the engagement, as it does on the CAF above: uploading again
-                 replaces the order. -->
-            <app-stored-file-item
-              v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder" :removable="editable"
-              :disable="removingPurchaseOrder" class="q-mt-sm" @remove="removePurchaseOrder"
-            />
+            <!-- The purchase order itself, in the same order as the CAF card above: what is on file, the
+                 picker, then the document at the bottom — which is where the picker previews an unsaved
+                 one. The column's heading is the picker's label, so the two halves start level. -->
+            <div class="col-12 col-sm-6">
+              <div class="section-subhead gcs-block__title">{{ purchaseOrderTitle }}</div>
+              <q-banner v-if="hasPurchaseOrderFile && poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
+                <template #avatar><q-icon name="o_swap_horiz" color="teal-9" /></template>
+                Saving replaces the purchase order on file with the one you have just chosen.
+              </q-banner>
+              <q-banner v-else-if="poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
+                <template #avatar><q-icon name="o_upload_file" color="teal-9" /></template>
+                The purchase order is attached when you save this request.
+              </q-banner>
+              <app-single-file-upload
+                v-if="editable"
+                v-model="poFile" :accept="PURCHASE_ORDER_ACCEPT" :max-size-mb="MAX_UPLOAD_MB"
+                :hint="`PDF, image, Word or Excel, up to ${MAX_UPLOAD_MB} MB`"
+              />
+              <div v-else-if="!hasPurchaseOrderFile" class="text-caption text-grey-6">No purchase order on file.</div>
+              <!-- The ✕ takes it back off the engagement, as it does on the CAF above: uploading again
+                   replaces the order. -->
+              <app-stored-file-item
+                v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder" :removable="editable"
+                :disable="removingPurchaseOrder" :class="{ 'q-mt-sm': editable }" @remove="removePurchaseOrder"
+              />
+            </div>
           </div>
         </q-card-section>
       </q-card>
@@ -316,7 +348,7 @@ const props = defineProps({
   taxFormOptions: { type: Array, default: () => [] },
   taxFormUnavailable: { type: Boolean, default: false },
   billingPeriodOptions: { type: Array, default: () => [] },
-  // How a GCS engagement is staffed (REMS.PersonnelLevel).
+  // The levels a GCS engagement can be staffed at (REMS.PersonnelLevel) — the rows of its rate card.
   personnelLevelOptions: { type: Array, default: () => [] },
   // Tenant department → director map: [{ department, director: { userId, name } }]. A department's
   // director is its department head, set on the user's detail page.
@@ -390,8 +422,9 @@ const buildGov = (g) => ({
   purchaseOrderEndDate: g?.purchaseOrderEndDate || null,
   purchaseOrderNumber: g?.purchaseOrderNumber || "",
   purchaseOrderAmount: g?.purchaseOrderAmount ?? "",
-  personnelLevel: g?.personnelLevel || null,
-  billRatePerHour: g?.billRatePerHour ?? ""
+  // The rate card as level code → rate, which is what the boxes in the table bind to. A blank is a level
+  // the engagement is not staffed at.
+  personnelRates: Object.fromEntries((g?.personnelRates || []).map((r) => [r.personnelLevel, r.billRatePerHour ?? ""]))
 });
 const gov = ref(buildGov(props.engagement.government));
 
@@ -457,7 +490,7 @@ const showGovernment = computed(() => isGovernmentAudit(department.value, props.
 
 // ---- What it is worth, per department ----
 // Assurance prices the engagement; GCS prices neither, because a GCS engagement is worth its purchase order
-// times its bill rate.
+// at its bill rates.
 const showEngagementFee = computed(() => isAssuranceDepartment(department.value));
 const showFeeEstimate = computed(() =>
   !isAssuranceDepartment(department.value) && !isGcsDepartment(department.value));
@@ -565,6 +598,23 @@ const storedPurchaseOrder = computed(() => ({
   mediaId: govDetail.value?.purchaseOrderMediaId,
   fileName: govDetail.value?.purchaseOrderFileName || "Purchase Order"
 }));
+// The heading over the picker doubles as its label; the verb says whether an order is already on file.
+const purchaseOrderTitle = computed(() => {
+  if (!props.editable) return "Purchase Order";
+  return hasPurchaseOrderFile.value ? "Replace Purchase Order" : "Upload Purchase Order";
+});
+
+// The rows of the rate card: the tenant's list in its own order, then any level this engagement was priced
+// at that has since been retired from that list — dropping such a row would hide a rate that is still
+// stored, and still sent back on save.
+const rateRows = computed(() => {
+  const listed = props.personnelLevelOptions.map((o) => ({ value: o.value, label: o.label, retired: false }));
+  const known = new Set(listed.map((r) => r.value));
+  const retired = (govDetail.value?.personnelRates || [])
+    .filter((r) => !known.has(r.personnelLevel))
+    .map((r) => ({ value: r.personnelLevel, label: r.personnelLevelLabel || r.personnelLevel, retired: true }));
+  return [...listed, ...retired];
+});
 
 // Taking it back off, the same way the CAF is: confirmed and written immediately rather than queued with
 // the rest of the form, because it is a document the approvers read.
@@ -706,7 +756,11 @@ const saveSetup = async (engagementId, remsId = null) => {
     view = await remsApi.updateGovernment(engagementId, {
       ...gov.value,
       purchaseOrderAmount: toNum(gov.value.purchaseOrderAmount),
-      billRatePerHour: toNum(gov.value.billRatePerHour)
+      // The rate card as rows, and only the levels given a rate: a blank is "not staffed at this level",
+      // which is the absence of a row rather than a row with nothing in it.
+      personnelRates: rateRows.value
+        .map((row) => ({ personnelLevel: row.value, billRatePerHour: toNum(gov.value.personnelRates[row.value]) }))
+        .filter((r) => r.billRatePerHour !== null)
     });
   }
   if (showAssurance.value) {
@@ -764,7 +818,7 @@ const validateFormats = () => {
     (!showEngagementFee.value || positive(core.value.engagementFee)) &&
     inRange(core.value.realizationPercentage, 0, 100) &&
     (!showAssurance.value || positive(audit.value.adminFeesAmount)) &&
-    (!showGcs.value || (positive(gov.value.purchaseOrderAmount) && positive(gov.value.billRatePerHour))) &&
+    (!showGcs.value || (positive(gov.value.purchaseOrderAmount) && Object.values(gov.value.personnelRates).every(positive))) &&
     (!showBilling.value || (core.value.billingProcessDescription ?? "").length <= BILLING_DESCRIPTION_MAX);
 };
 
@@ -789,6 +843,41 @@ defineExpose({ saveSetup });
 
 <style scoped>
 /* .rems-inner is the shared record vocabulary — see css/rems.scss. */
+/* The GCS card's two halves start level: the shared subhead, less the top margin the row's gutter already
+   provides. */
+.gcs-block__title {
+  margin-top: 0;
+}
+/* The rate card, cut close. A rate is a short number, so its column is as wide as a money box and no
+   wider, and the box is 32px rather than the 40px a form field stands at — six of those made a short
+   list a tall one. */
+.rems-rates th,
+.rems-rates td {
+  padding: 4px 10px;
+  vertical-align: middle;
+}
+.rems-rates th:first-child,
+.rems-rates td:first-child {
+  padding-left: 12px;
+}
+.rems-rates th:last-child,
+.rems-rates td:last-child {
+  padding-right: 12px;
+}
+.rems-rates__rate {
+  width: 150px;
+}
+.rems-rates :deep(.q-field--dense .q-field__control),
+.rems-rates :deep(.q-field--dense .q-field__marginal) {
+  height: 32px;
+  min-height: 32px;
+}
+.rems-rates :deep(.q-field--dense .q-field__native) {
+  min-height: 32px;
+  line-height: 24px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
 .rems-copied {
   display: grid;
   /* auto-fit rather than a fixed pair: four dates in two columns on a phone leaves each of them about

@@ -752,6 +752,26 @@ public sealed class RemsEngagementController : ControllerBase
             return EngagementLocked();
         }
 
+        // The rate card's levels are codes off the REMS.PersonnelLevel list, resolved before anything is
+        // written: a code the list does not carry is refused, not dropped on the floor.
+        var desiredRates = new Dictionary<Guid, decimal>();
+        foreach (var rate in request.PersonnelRates)
+        {
+            // A level without a rate is a level the engagement is not staffed at.
+            if (rate.BillRatePerHour is not { } billRate)
+            {
+                continue;
+            }
+            var levelId = await _codes.RemsIdAsync(RemsOptionSetKeys.PersonnelLevel, Normalize(rate.PersonnelLevel), cancellationToken);
+            if (levelId is null)
+            {
+                return BadRequest(ApiResponseFactory.Error(
+                    ApiErrorCodes.ValidationFailed, "Validation failed.",
+                    $"personnelRates: '{rate.PersonnelLevel}' is not a value in the REMS Personnel Level list."));
+            }
+            desiredRates[levelId.Value] = billRate;
+        }
+
         var detail = await _engagements.GetGovernmentDetailAsync(id, cancellationToken);
         if (detail is null)
         {
@@ -770,9 +790,32 @@ public sealed class RemsEngagementController : ControllerBase
         // GCS. Every field on this record is written from the request, blanks included.
         detail.PurchaseOrderNumber = Normalize(request.PurchaseOrderNumber);
         detail.PurchaseOrderAmount = request.PurchaseOrderAmount;
-        detail.PersonnelLevelId = await _codes.RemsIdAsync(
-            RemsOptionSetKeys.PersonnelLevel, Normalize(request.PersonnelLevel), cancellationToken);
-        detail.BillRatePerHour = request.BillRatePerHour;
+
+        // Reconcile the rate card by level: a level the request no longer prices comes off, one it newly
+        // prices goes on, and the rest just take the rate they were sent.
+        var existingRates = detail.PersonnelRates.Where(r => !r.Deleted).ToList();
+        foreach (var rate in existingRates.Where(r => !desiredRates.ContainsKey(r.PersonnelLevelId)))
+        {
+            _engagements.RemovePersonnelRate(rate);
+        }
+        foreach (var (levelId, billRate) in desiredRates)
+        {
+            var rate = existingRates.FirstOrDefault(r => r.PersonnelLevelId == levelId);
+            if (rate is null)
+            {
+                await _engagements.AddPersonnelRateAsync(new REMSEngagementPersonnelRate
+                {
+                    Id = Guid.NewGuid(),
+                    REMSEngagementGovernmentDetailId = detail.Id,
+                    PersonnelLevelId = levelId,
+                    BillRatePerHour = billRate,
+                }, cancellationToken);
+            }
+            else
+            {
+                rate.BillRatePerHour = billRate;
+            }
+        }
 
         await LogEngagementUpdatedAsync(engagement, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

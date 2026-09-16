@@ -359,8 +359,8 @@ public static class DefaultOptionSets
         // cas, and the approval prerequisites behind all of them (RemsEngagementCodes). So the seeded six
         // cannot be deleted or re-coded. A department a firm adds is its own, and asks nothing conditional.
         }, LockSeededValues: true),
-        // How a GCS engagement is staffed, which with the bill rate beside it is how the work is priced.
-        // One level per engagement — a single rate for the whole piece of work, not a rate card.
+        // How a GCS engagement is staffed. The setup lists every level here with a bill rate beside it —
+        // the engagement's rate card — and a level left blank is one the engagement is not staffed at.
         new Definition(EntityType.Rems, "REMS.PersonnelLevel", "REMS Personnel Level", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("principal", "Principal", 1),
