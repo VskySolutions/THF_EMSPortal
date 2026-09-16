@@ -11,7 +11,15 @@
       @update:search="search = $event"
       @filters="filterOpen = true"
       @back="$router.back()"
-    />
+    >
+      <template #note>
+        The requests routed to you to review — one row each.
+        <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
+        every approver has signed.
+        <strong>Your Decision</strong> is your own signature on it.
+        You only ever see your own tasks; a decision is final once made.
+      </template>
+    </app-list-header>
 
     <!-- No chip row: the quick-filter bar under the table's title says how many filters are on and clears them. -->
     <app-filter-drawer
@@ -19,14 +27,6 @@
     >
       <app-column-filters v-model="filters" :columns="filterableColumns" />
     </app-filter-drawer>
-
-    <div class="text-body2 text-grey-8 q-mb-md">
-      The requests routed to you to review — one row each.
-      <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
-      every approver has signed.
-      <strong>Your Decision</strong> is your own signature on it.
-      You only ever see your own tasks; a decision is final once made.
-    </div>
 
     <app-data-table
       page-key="rems-approvals"
@@ -135,13 +135,14 @@
 <script setup>
 // The task-isolated REMS Approval Inbox (WO-117 Part B, AC-REMS-019): the REQUESTS routed to the caller,
 // one row each.
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { useRouter } from "vue-router";
 import { remsApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
+import { useFilterMemory } from "composables/useFilterMemory";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useRemsMeta, REMS_ROUND_PARTIALLY_APPROVED } from "modules/rems/useRemsMeta";
@@ -281,6 +282,9 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+useFilterMemory("rems-approvals", {
+  roundStatus: toRef(filters, "roundStatus"), status: toRef(filters, "status")
+});
 const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters], reload, { deep: true });
 

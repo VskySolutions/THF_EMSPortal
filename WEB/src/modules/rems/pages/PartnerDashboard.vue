@@ -179,7 +179,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { useRouter } from "vue-router";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
@@ -188,6 +188,7 @@ import { usePermissions, Permissions } from "composables/usePermissions";
 import { useNotify } from "composables/useNotify";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
+import { useFilterMemory } from "composables/useFilterMemory";
 import { useDeletedRecords } from "composables/useDeletedRecords";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
@@ -374,6 +375,9 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+useFilterMemory("rems-partner", {
+  ownership, status: toRef(filters, "status"), emsFormState: toRef(filters, "emsFormState")
+});
 
 // The column chips plus one per standalone filter, so everything narrowing the list is visible in the
 // same place and removable the same way.

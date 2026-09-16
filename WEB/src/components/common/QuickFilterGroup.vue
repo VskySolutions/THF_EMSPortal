@@ -18,6 +18,12 @@
         <span class="qf-group__btn">
           {{ opt.label }}
           <q-badge v-if="countOf(opt) !== null" :label="countOf(opt)" rounded class="qf-group__count" />
+          <!-- The way out, on the chosen button only. The button already clears itself when clicked again,
+               so the cross is a cue rather than a second control. -->
+          <q-icon
+            v-if="clearable && isOn(opt)" name="o_close" size="18px" class="qf-group__clear" aria-hidden="true"
+            @click.stop="$emit('update:modelValue', null)"
+          />
         </span>
       </template>
     </q-btn-toggle>
@@ -47,6 +53,7 @@ const countOf = (opt) => {
   const n = props.counts?.[opt.value];
   return Number.isFinite(n) ? n : null;
 };
+const isOn = (opt) => props.modelValue != null && opt.value === props.modelValue;
 </script>
 
 <style scoped>
@@ -99,5 +106,17 @@ const countOf = (opt) => {
   color: inherit !important;
   font-size: 11px;
   padding: 1px 6px;
+}
+/* On the chosen button the tally flips: white on the primary fill, lettered in the primary colour. */
+.qf-group__toggle :deep(.q-btn.bg-primary) .qf-group__count {
+  background: #fff !important;
+  color: var(--q-primary) !important;
+}
+.qf-group__clear {
+  opacity: 0.8;
+  cursor: pointer;
+}
+.qf-group__clear:hover {
+  opacity: 1;
 }
 </style>

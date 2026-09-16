@@ -11,7 +11,14 @@
       @update:search="search = $event"
       @filters="filterOpen = true"
       @back="$router.back()"
-    />
+    >
+      <template #note>
+        Submitted client forms that named somebody <strong>alongside</strong> the client — a spouse, a child
+        or another individual on an individual's return, and the other businesses every other entity type
+        declared. <strong>Parent &amp; Related Clients</strong> is the resulting linking; the status on each
+        row is kept <strong>by hand</strong>, by whoever is chasing it. Nothing in the workflow moves it.
+      </template>
+    </app-list-header>
 
     <!-- No chip row: the quick-filter bar under the table's title says how many filters are on and clears them. -->
     <app-filter-drawer
@@ -28,13 +35,6 @@
         :dense="false"
       />
     </app-filter-drawer>
-
-    <div class="text-body2 text-grey-8 q-mb-md">
-      Submitted client forms that named somebody <strong>alongside</strong> the client — a spouse, a child
-      or another individual on an individual's return, and the other businesses every other entity type
-      declared. <strong>Parent &amp; Related Clients</strong> is the resulting linking; the status on each
-      row is kept <strong>by hand</strong>, by whoever is chasing it. Nothing in the workflow moves it.
-    </div>
 
     <app-data-table
       page-key="rems-related-entities"
@@ -188,12 +188,13 @@
 
 <script setup>
 // Related Entities — the shared board of the clients a client brought with them.
-import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
+import { useFilterMemory } from "composables/useFilterMemory";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { usePermissions, Permissions } from "composables/usePermissions";
@@ -306,6 +307,9 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+useFilterMemory("rems-related-entities", {
+  relatedStatus: toRef(extras, "relatedStatus"), entityType: toRef(filters, "entityType")
+});
 
 // The column chips plus one for the standalone filter, so everything narrowing the list is visible in the
 // same place and removable the same way.

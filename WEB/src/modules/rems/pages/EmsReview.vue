@@ -184,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -193,6 +193,7 @@ import { usePermissions, Permissions } from "composables/usePermissions";
 import { useRowPersonalisation, MAX_PINS_PER_TYPE } from "composables/uf/useRowPersonalisation";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
+import { useFilterMemory } from "composables/useFilterMemory";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useRemsMeta, REMS_SEAT_ROLES, REMS_STATUS_WAITING_FOR_PICKUP } from "modules/rems/useRemsMeta";
@@ -340,6 +341,7 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+useFilterMemory("rems-ems-review", { assignment, requestStatus: toRef(filters, "requestStatus") });
 const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters, assignment], reload, { deep: true });
 
