@@ -71,6 +71,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<UserDepartment> UserDepartments => Set<UserDepartment>();
 
     public DbSet<SmtpAccount> SmtpAccounts => Set<SmtpAccount>();
+    public DbSet<MaconomyConnection> MaconomyConnections => Set<MaconomyConnection>();
 
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
 
@@ -151,6 +152,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<UserDepartment>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         // SMTP accounts are tenant-scoped; a tenant only ever sees its own mail accounts.
         modelBuilder.Entity<SmtpAccount>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<MaconomyConnection>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Universal Features (Phase 14): every UF table is tenant-scoped + soft-deletable, so it
         // carries the combined ambient-tenant + soft-delete filter. FieldModifiedLog is the lone
@@ -316,6 +318,9 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                     break;
                 case SmtpAccount smtpAccount when smtpAccount.TenantId == Guid.Empty:
                     smtpAccount.TenantId = _tenantContext.TenantId;
+                    break;
+                case MaconomyConnection maconomyConnection when maconomyConnection.TenantId == Guid.Empty:
+                    maconomyConnection.TenantId = _tenantContext.TenantId;
                     break;
 
                 // ---- Universal Features (Phase 14) ----

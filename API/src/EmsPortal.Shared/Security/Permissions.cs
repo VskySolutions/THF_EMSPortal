@@ -37,6 +37,10 @@ public static class Permissions
     /// <summary>Create, edit, delete, set-active, and test-send SMTP email accounts. Reads require only <see cref="UsersRead"/>.</summary>
     public const string EmailManage = "email.manage";
 
+    // Integrations
+    /// <summary>Set up, test and remove the tenant's Maconomy connection. The customer lookup it powers needs no permission beyond signing in.</summary>
+    public const string IntegrationsMaconomyManage = "integrations.maconomy.manage";
+
     // Universal Features (Phase 14)
     /// <summary>Manage tenant-wide Universal Feature settings: tags, shared saved views, tenant sticky
     /// notes, and Modified Log field configuration.</summary>
@@ -110,6 +114,7 @@ public static class Permissions
         RolesRead, RolesWrite, RolesAssign,
         GroupsManage,
         EmailManage,
+        IntegrationsMaconomyManage,
         SettingsManage, RecordsAdminDelete,
         OptionSetsRead, OptionSetsManage,
         RemsRequestsRead, RemsRequestsCreate, RemsRequestsUpdate, RemsRequestsDelete, RemsRequestsAssign,
@@ -137,6 +142,8 @@ public static class Permissions
         GroupsManage,
         // Tenant Admins manage their tenant's SMTP email accounts.
         EmailManage,
+        // Tenant Admins connect their tenant to Maconomy.
+        IntegrationsMaconomyManage,
         // Tenant Admins manage tenant-wide UF settings and the deleted-records lifecycle.
         SettingsManage, RecordsAdminDelete,
         // Tenant Admins manage their tenant's option lists.

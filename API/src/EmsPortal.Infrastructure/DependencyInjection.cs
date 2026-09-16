@@ -1,4 +1,5 @@
 using EmsPortal.Application.Abstractions.Auditing;
+using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.Security;
 using EmsPortal.Application.Abstractions.Tenancy;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Infrastructure;
 
@@ -37,9 +39,11 @@ public static class DependencyInjection
         // STATIC-APPROVAL-POLICY
         services.Configure<RemsApprovalPolicyOptions>(configuration.GetSection(ConfigurationSections.RemsApprovalPolicy));
         services.Configure<MicrosoftSsoOptions>(configuration.GetSection(ConfigurationSections.MicrosoftSso));
+        services.Configure<MaconomyOptions>(configuration.GetSection(ConfigurationSections.Maconomy));
 
         services.AddSecurity();
         services.AddEmail();
+        services.AddMaconomy();
 
         // Field-level change-history capture (Universal Features — Modified Log).
         services.AddSingleton<Persistence.ModifiedLog.IFieldValueFormatter, Persistence.ModifiedLog.FieldValueFormatter>();
@@ -84,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionGroupRepository, PermissionGroupRepository>();
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<ISmtpAccountRepository, SmtpAccountRepository>();
+        services.AddScoped<IMaconomyConnectionRepository, MaconomyConnectionRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
         services.AddScoped<IOptionSetRepository, OptionSetRepository>();
 
@@ -137,6 +142,20 @@ public static class DependencyInjection
         // Transactional emails are queued and delivered on a Hangfire worker so requests never block on SMTP.
         services.AddScoped<Application.Abstractions.Email.IEmailDispatcher, Jobs.EmailDispatcher>();
         services.AddScoped<Jobs.EmailSendJob>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Maconomy gateway: one named HttpClient for the process, its timeout from
+    /// configuration, and the client that speaks Maconomy's REST dialect over it. The connection a
+    /// tenant uses is data, so nothing here is configured per tenant.
+    /// </summary>
+    private static IServiceCollection AddMaconomy(this IServiceCollection services)
+    {
+        services.AddHttpClient(Integrations.Maconomy.MaconomyGateway.HttpClientName)
+            .ConfigureHttpClient((sp, client) => client.Timeout = TimeSpan.FromSeconds(
+                Math.Max(1, sp.GetRequiredService<IOptions<MaconomyOptions>>().Value.TimeoutSeconds)));
+        services.AddSingleton<IMaconomyGateway, Integrations.Maconomy.MaconomyGateway>();
         return services;
     }
 

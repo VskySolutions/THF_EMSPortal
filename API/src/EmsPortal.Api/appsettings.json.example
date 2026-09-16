@@ -39,6 +39,13 @@
   "ApiKeys": {
     "Keys": []
   },
+  "Maconomy": {
+    "MaxLimit": 100,
+    "TimeoutSeconds": 15,
+    "TokenLifetimeMinutes": 15,
+    "TokenRefreshMarginSeconds": 60,
+    "SearchCacheSeconds": 30
+  },
   "Rems": {
     "ApprovalPolicy": {
       "StaticRouting": true,

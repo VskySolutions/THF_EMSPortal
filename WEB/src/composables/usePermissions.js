@@ -18,6 +18,7 @@ export const Permissions = Object.freeze({
   RolesAssign: "roles.assign",
   GroupsManage: "groups.manage",
   EmailManage: "email.manage",
+  IntegrationsMaconomyManage: "integrations.maconomy.manage",
   // Universal Features (Phase 14/15).
   SettingsManage: "settings.manage",
   RecordsAdminDelete: "records.adminDelete",

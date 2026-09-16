@@ -19,6 +19,10 @@ export const ApiErrorCodes = Object.freeze({
   TenantInactive: "TENANT_INACTIVE",
   TenantNotFound: "TENANT_NOT_FOUND",
   TenantArchived: "TENANT_ARCHIVED",
+  // Maconomy integration
+  MaconomyNotConfigured: "MACONOMY_NOT_CONFIGURED",
+  MaconomyAuthFailed: "MACONOMY_AUTH_FAILED",
+  MaconomyUnavailable: "MACONOMY_UNAVAILABLE",
   InternalError: "INTERNAL_ERROR"
 });
 
@@ -232,6 +236,28 @@ export const smtpAccountApi = {
   // body: { recipientEmail } → { success, sentAtUtc?, serverResponse?, errorCategory?, errorDetail? }
   test: (id, recipientEmail, tenantId) =>
     api.post(`/api/admin/smtp-accounts/${id}/test`, { recipientEmail }, { params: { tenantId } }).then(unwrap)
+};
+
+// The tenant's Maconomy connection and the customer lookup it powers. `tenantId` is the Super Admin's
+// scope override; everyone else is pinned to their own tenant server-side.
+export const maconomyApi = {
+  // → the connection with its secrets masked, or null when none is configured yet.
+  getConnection: (tenantId) =>
+    api.get("/api/integrations/maconomy/connection", { params: { tenantId } }).then(unwrap),
+  // payload: { baseUrl, instanceCode, userName, password?, containerId?, defaultLimit, isEnabled };
+  // omit the password to keep the stored one.
+  saveConnection: (payload, tenantId) =>
+    api.put("/api/integrations/maconomy/connection", payload, { params: { tenantId } }).then(unwrap),
+  deleteConnection: (tenantId) =>
+    api.delete("/api/integrations/maconomy/connection", { params: { tenantId } }).then(envelope),
+  // Logs in afresh and stores the token → { connected, issuedOnUtc, expiresOnUtc }.
+  login: (tenantId) =>
+    api.post("/api/integrations/maconomy/connection/login", null, { params: { tenantId } }).then(unwrap),
+  forgetToken: (tenantId) =>
+    api.delete("/api/integrations/maconomy/connection/token", { params: { tenantId } }).then(envelope),
+  // → [{ text: "10023 - Acme Corp", value: "10023" }]; empty below two characters.
+  searchCustomers: (search, limit, tenantId) =>
+    api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap)
 };
 
 // Transactional email templates (WO email templates).

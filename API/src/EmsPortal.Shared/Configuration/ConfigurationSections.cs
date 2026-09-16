@@ -33,4 +33,7 @@ public static class ConfigurationSections
 
     // STATIC-APPROVAL-POLICY
     public const string RemsApprovalPolicy = "Rems:ApprovalPolicy";
+
+    /// <summary>Platform-wide caps for the Maconomy integration; the connections themselves are per tenant, in the database.</summary>
+    public const string Maconomy = "Maconomy";
 }
