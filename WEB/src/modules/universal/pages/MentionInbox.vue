@@ -79,10 +79,10 @@ const readOptions = [
 ];
 
 const columns = [
-  { name: "entity", label: "Record", field: "entityType", align: "left", default: true },
-  { name: "preview", label: "Mention", field: "preview", align: "left", default: true },
+  { name: "entity", label: "Record", field: "entityType", align: "left", sortable: true, default: true },
+  { name: "preview", label: "Mention", field: "preview", align: "left", sortable: true, default: true },
   { name: "createdOnUtc", label: "Date", field: "createdOnUtc", align: "left", sortable: true, default: true },
-  { name: "status", label: "Status", field: "isRead", align: "left", default: true }
+  { name: "status", label: "Status", field: "isRead", align: "left", sortable: true, default: true }
 ];
 
 const { rows, loading, totalRecords, pagination, load, onRequest } = useListTable({

@@ -17,7 +17,17 @@ public sealed record RemsApproverList(
     Guid EngagementId,
     string EngagementStatus,
     IReadOnlyList<RemsApproverSuggestion> Approvers,
-    IReadOnlyList<Guid> SelectedApproverIds);
+    IReadOnlyList<Guid> SelectedApproverIds,
+    // STATIC-APPROVAL-POLICY: whether the fixed rules apply, who the seats reserve, and why it cannot go yet.
+    bool StaticRouting = false,
+    IReadOnlyList<Guid>? ReservedApproverIds = null,
+    string? BlockedReason = null);
+
+/// <summary>STATIC-APPROVAL-POLICY. The fixed rules as they resolve in this tenant.</summary>
+public sealed record RemsApprovalPolicyView(
+    bool StaticRouting,
+    IReadOnlyList<RemsUserRef> Shareholders,
+    IReadOnlyList<RemsUserRef> TaxExceptionCses);
 
 /// <summary>A user selectable as an extra approver: any active user in the tenant (there is no Approver role).</summary>
 public sealed record RemsApproverOption(

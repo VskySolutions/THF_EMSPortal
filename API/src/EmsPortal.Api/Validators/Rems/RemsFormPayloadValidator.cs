@@ -149,6 +149,16 @@ public sealed class RemsFormPayloadValidator
         // ---- Billing contacts ----
         // Neither `roles.billingContact` nor `additionalBillingContacts` is validated any more.
 
+        // ---- Contract details ----
+        // Each pair of dates has to run forwards. Checked whenever both ends were given, whatever the
+        // entity type: the answers survive a change of type, and a backwards pair is wrong under any.
+        RequireOrdered(
+            failures, "contractEndDate", payload.ContractStartDate, payload.ContractEndDate,
+            "The Contract End Date cannot be before the Contract Start Date.");
+        RequireOrdered(
+            failures, "poEndDate", payload.PoStartDate, payload.PoEndDate,
+            "The Purchase Order End Date cannot be before the Purchase Order Start Date.");
+
         // ---- Additional entities ----
         // Each row is another of the client's businesses for the firm to set up separately.
         if (entityType != Individual)
@@ -306,6 +316,16 @@ public sealed class RemsFormPayloadValidator
     private static void RequireField(List<ValidationFailure> failures, string property, string? value, string message)
     {
         if (string.IsNullOrWhiteSpace(value))
+        {
+            failures.Add(new ValidationFailure(property, message));
+        }
+    }
+
+    /// <summary>The end of a date pair may not precede its start; either end blank is nothing to check.</summary>
+    private static void RequireOrdered(
+        List<ValidationFailure> failures, string property, DateOnly? start, DateOnly? end, string message)
+    {
+        if (start is { } from && end is { } to && to < from)
         {
             failures.Add(new ValidationFailure(property, message));
         }

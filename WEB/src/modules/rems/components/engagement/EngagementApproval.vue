@@ -2,9 +2,18 @@
   <div>
     <div class="row items-center q-mb-md">
       <div class="text-body2 text-grey-8 col">
-        Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
-        the setup, and every commission recipient — all automatically, and none of them removable — plus
-        anyone you add below. Sending for approval locks the list.
+        <!-- STATIC-APPROVAL-POLICY: the fixed rules read differently from the platform list. -->
+        <template v-if="staticRouting">
+          Who this engagement routes to, all at the same time: every commission recipient, the CSE, the
+          Department Director, everyone holding the Shareholder role, plus anyone you add below. The
+          Department Director and the Shareholders are skipped by the tax rules. Sending for approval locks
+          the list.
+        </template>
+        <template v-else>
+          Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
+          the setup, and every commission recipient — all automatically, and none of them removable — plus
+          anyone you add below. Sending for approval locks the list.
+        </template>
       </div>
       <app-option-badge :option="statusMeta" class="q-pa-sm text-body2" />
     </div>
@@ -133,6 +142,13 @@ const approvers = ref([]);
 const loading = ref(false);
 const errorMsg = ref("");
 
+// ---- STATIC-APPROVAL-POLICY ----
+// Whether the fixed rules apply, who the seats reserve (kept out of the picker), and why the server says
+// the round cannot go out yet.
+const staticRouting = ref(false);
+const reservedIds = ref([]);
+const serverBlockedReason = ref("");
+
 // ---- Whether the round can actually go out ----
 // The commission splits divide ONE commission, so a set of them that comes to 90% leaves a tenth of it
 // allocated to nobody — and every recipient is a required approver.
@@ -140,12 +156,15 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const commissionTotal = computed(() => round2(
   (props.engagement.commissionSplits || []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
 const commissionProblem = computed(() => {
+  // Commission is optional; only a split somebody started has to come to 100%.
+  if (!(props.engagement.commissionSplits || []).length) return "";
   if (commissionTotal.value === 100) return "";
   return `Commission totals ${commissionTotal.value}% — the recipients on the Commission tab must add up ` +
     "to 100% before this engagement can be sent for approval.";
 });
 
 const blockedReason = computed(() => {
+  if (serverBlockedReason.value) return serverBlockedReason.value;
   if (!approvers.value.length) {
     return "There is nobody to route this to yet — name a CSE, pick a department with a director, or add " +
       "approvers above.";
@@ -166,6 +185,9 @@ const picked = ref([]);
 const adopt = (list) => {
   approvers.value = list?.approvers || [];
   picked.value = [...(list?.selectedApproverIds || [])];
+  staticRouting.value = !!list?.staticRouting;
+  reservedIds.value = list?.reservedApproverIds || [];
+  serverBlockedReason.value = list?.blockedReason || "";
 };
 
 const load = async () => {
@@ -186,10 +208,13 @@ const loadOptions = async () => {
   try {
     const rows = await remsApi.approverOptions(props.engagement.id);
     // "Full Name — Role", falling back to the email and then to the name alone.
-    approverOptions.value = (rows || []).map((r) => {
-      const qualifier = (r.roles || []).join(", ") || r.email;
-      return { label: qualifier ? `${r.name} — ${qualifier}` : r.name, value: r.userId };
-    });
+    approverOptions.value = (rows || [])
+      // STATIC-APPROVAL-POLICY: the seats already approve.
+      .filter((r) => !reservedIds.value.includes(r.userId))
+      .map((r) => {
+        const qualifier = (r.roles || []).join(", ") || r.email;
+        return { label: qualifier ? `${r.name} — ${qualifier}` : r.name, value: r.userId };
+      });
   } catch (err) {
     notify.error(getApiErrorMessage(err));
   } finally {
@@ -212,7 +237,8 @@ const savePicks = async () => {
   }
 };
 
-const reload = async () => { await Promise.all([load(), loadOptions()]); };
+// The list first: the picker's options are filtered by the seats the list reports.
+const reload = async () => { await load(); await loadOptions(); };
 
 onMounted(reload);
 watch(() => props.engagement.id, reload);

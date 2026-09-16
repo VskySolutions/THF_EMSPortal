@@ -2,9 +2,17 @@
   <q-card flat bordered class="app-list-header q-mb-md">
     <!-- Crumbs on the left, the tools for the list on the right. -->
     <div class="app-list-header__bar q-px-md q-py-sm">
-      <app-breadcrumbs
-        v-if="breadcrumbs.length" :items="breadcrumbs" no-margin class="app-list-header__crumbs"
-      />
+      <div class="app-list-header__title">
+        <app-breadcrumbs
+          v-if="breadcrumbs.length" :items="breadcrumbs" no-margin class="app-list-header__crumbs"
+        />
+        <!-- What the page is for, on a tooltip beside the title rather than a paragraph under the bar. -->
+        <app-info-tip
+          v-if="$slots.note" size="18px" color="primary" max-width="460px" anchor="bottom left" self="top left"
+        >
+          <slot name="note" />
+        </app-info-tip>
+      </div>
 
       <div class="app-list-header__tools">
         <q-input
@@ -37,6 +45,7 @@
 
 <script setup>
 import AppBreadcrumbs from "components/common/AppBreadcrumbs.vue";
+import AppInfoTip from "components/common/AppInfoTip.vue";
 
 defineProps({
   breadcrumbs: { type: Array, default: () => [] },
@@ -67,9 +76,14 @@ defineEmits(["update:search", "filters", "add", "back"]);
   gap: 8px 12px;
 }
 /* min-width:0 so a long trail of crumbs shrinks rather than pushing the tools onto their own line while
-   there is still room beside them. */
-.app-list-header__crumbs {
+   there is still room beside them. The crumbs do not grow, so the note's icon sits by the page title. */
+.app-list-header__title {
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
+  min-width: 0;
+}
+.app-list-header__crumbs {
   min-width: 0;
 }
 .app-list-header__tools {

@@ -22,9 +22,15 @@ public static class ConfigurationSections
     /// <summary>Authentication (JWT / API key) configuration.</summary>
     public const string Authentication = "Authentication";
 
+    /// <summary>"Login with Microsoft" (Entra ID app registration keys), normally supplied via the API's .env file.</summary>
+    public const string MicrosoftSso = "Authentication:Microsoft";
+
     /// <summary>Registered machine-to-machine API keys.</summary>
     public const string ApiKeys = "ApiKeys";
 
     /// <summary>REMS provider email-event webhook (shared secret) configuration (WO-121).</summary>
     public const string RemsEmailWebhook = "Rems:EmailWebhook";
+
+    // STATIC-APPROVAL-POLICY
+    public const string RemsApprovalPolicy = "Rems:ApprovalPolicy";
 }

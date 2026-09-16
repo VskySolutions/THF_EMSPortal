@@ -74,7 +74,12 @@ export const authApi = {
   // never branch the UI on its response, that would leak which accounts are real.
   forgotPassword: (email) => anonApi.post("/api/auth/forgot-password", { email }).then(envelope),
   resetPassword: (token, newPassword) =>
-    anonApi.post("/api/auth/reset-password", { token, newPassword }).then(envelope)
+    anonApi.post("/api/auth/reset-password", { token, newPassword }).then(envelope),
+  // "Login with Microsoft" runs through the API, which holds the Entra keys: the browser is sent to the first URL
+  // and, once back, trades the one-time code the API returned it with for a normal token pair.
+  microsoftLoginUrl: (state) =>
+    `${(process.env.API_BASE_URL || "").replace(/\/+$/, "")}/api/auth/microsoft/login?state=${encodeURIComponent(state)}`,
+  exchangeMicrosoftCode: (code) => anonApi.post("/api/auth/microsoft/exchange", { code }).then(envelope)
 };
 
 export const tenantApi = {
@@ -433,10 +438,16 @@ export const dashboardApi = {
 };
 
 // REMS (Phase 15, WO-111/115).
+// A list's params, with array values as repeated keys (`clientPersonIds=a&clientPersonIds=b`), which is
+// what the API binds.
+const remsListParams = (params) => ({ params, paramsSerializer: { indexes: null } });
+
 export const remsApi = {
   // params: { scope?, poolScope?, ownership?, clientName?, contact?, status?, type?, assignedAdminUserId?,
   // createdFrom?, createdTo?, page?, limit? } scope: "partner" | "pool"; poolScope.
-  list: (params) => api.get("/api/rems/requests", { params }).then(envelope),
+  list: (params) => api.get("/api/rems/requests", remsListParams(params)).then(envelope),
+  // The My Requests quick-filter counts, under the same filters as the list.
+  quickCounts: (params) => api.get("/api/rems/requests/quick-counts", remsListParams(params)).then(unwrap),
   get: (id) => api.get(`/api/rems/requests/${id}`).then(unwrap),
   // payload: { existingClientReferenceId?, clientName, type, description?, customerEmail?,
   // customerMobileNumber?, mediaId? } No reviewing admin is named.
@@ -490,6 +501,8 @@ export const remsApi = {
     api.get("/api/rems/clients/lookup", { params: { q, entityType } }).then(unwrap),
   // Users in the active tenant, by role: [{ id, name, email }].
   admins: (role) => api.get("/api/rems/admins", { params: role ? { role } : undefined }).then(unwrap),
+  // The clients across the requests the caller may see under a scope, for the Client filter: [{ id, name }].
+  requestClients: (params) => api.get("/api/rems/requests/clients", { params }).then(unwrap),
 
   // ---- EMS form build / send (WO-112, WO-116) ----
   // payload: { cseUserId, entityType } — both required (AC-REMS-007.7). Returns the build screen.
@@ -510,7 +523,11 @@ export const remsApi = {
   // ---- EMS Review + submitted-form review (WO-114, WO-116) ----
   // The admins' shared queue (paginated envelope), NOT one admin's own list — every request whose
   // initiator has sent it to their client, whoever holds it.
-  clientForms: (params) => api.get("/api/rems/client-forms", { params }).then(envelope),
+  clientForms: (params) => api.get("/api/rems/client-forms", remsListParams(params)).then(envelope),
+  // The EMS Review quick-filter counts, under the same filters as the list.
+  clientFormQuickCounts: (params) => api.get("/api/rems/client-forms/quick-counts", remsListParams(params)).then(unwrap),
+  // The clients across the queue, for its Client filter: [{ id, name }].
+  clientFormClients: () => api.get("/api/rems/client-forms/clients").then(unwrap),
   // The submitted-form snapshot: { submissionId, remsId, remsNumber, entityType, lockedEmail,
   // clientNameSuffix, submittedOnUtc, payload, editedBy, editedOnUtc.
   submission: (remsId) => api.get(`/api/rems/requests/${remsId}/submission`).then(unwrap),
@@ -555,6 +572,9 @@ export const remsApi = {
   // The full approver list: { engagementId, engagementStatus, approvers:[{ user:{id,name}, role }],
   // selectedApproverIds }. approvers = the automatic ones (the firm's shareholders.
   approvers: (id) => api.get(`/api/rems/engagements/${id}/approvers`).then(unwrap),
+  // STATIC-APPROVAL-POLICY: the fixed route as it resolves in this tenant —
+  // { staticRouting, shareholders:[{id,name}], taxExceptionCses:[{id,name}] }.
+  approvalPolicy: () => api.get("/api/rems/approval-policy").then(unwrap),
   // Users selectable as EXTRA approvers — every active user in the tenant, with the roles they hold there
   // for the picker label → [{ userId, name, email, roles: [] }].
   approverOptions: (id) => api.get(`/api/rems/engagements/${id}/approver-options`).then(unwrap),
@@ -569,7 +589,11 @@ export const remsApi = {
   // ---- Related Entities ----
   // Every submitted request whose client declared somebody ALONGSIDE themselves — the other people on an
   // individual's return ("Spouse & More Individuals") and the other businesses every other entity type.
-  relatedEntities: (params) => api.get("/api/rems/related-entities", { params }).then(envelope),
+  relatedEntities: (params) => api.get("/api/rems/related-entities", remsListParams(params)).then(envelope),
+  // The Related Entities quick-filter counts, under the same search and filters as the list.
+  relatedEntityQuickCounts: (params) => api.get("/api/rems/related-entities/quick-counts", remsListParams(params)).then(unwrap),
+  // The clients across the list, for its Client filter: [{ id, name }].
+  relatedEntityClients: () => api.get("/api/rems/related-entities/clients").then(unwrap),
   // Move one related client along — the ONLY write on that list, and the only thing that changes a
   // status.
   setRelatedEntityStatus: (kind, id, status) =>
@@ -577,7 +601,13 @@ export const remsApi = {
 
   // ---- Approval inbox (WO-117 Part B / WO-114) — the caller's OWN approval tasks only ----
   // The caller's own approval tasks (pending + historical), newest round first.
-  myApprovalTasks: (params) => api.get("/api/rems/approval-tasks", { params }).then(envelope),
+  myApprovalTasks: (params) => api.get("/api/rems/approval-tasks", remsListParams(params)).then(envelope),
+  // The CSEs across the caller's own inbox, for its CSE filter.
+  myApprovalCses: () => api.get("/api/rems/approval-tasks/cses").then(unwrap),
+  // The clients across the caller's own inbox, for its Client filter.
+  myApprovalClients: () => api.get("/api/rems/approval-tasks/clients").then(unwrap),
+  // The inbox's quick-filter counts, under the same search and filters as the list.
+  myApprovalQuickCounts: (params) => api.get("/api/rems/approval-tasks/quick-counts", remsListParams(params)).then(unwrap),
   // The caller's own approval task with the full review packet (404 for anyone else's task) — the same
   // material as the staff engagement workspace, since that is what is being signed off.
   approvalTask: (taskId) => api.get(`/api/rems/approval-tasks/${taskId}`).then(unwrap),

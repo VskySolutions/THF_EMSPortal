@@ -17,6 +17,11 @@ public sealed class RefreshRequestValidator : AbstractValidator<RefreshRequest>
     public RefreshRequestValidator() => RuleFor(x => x.RefreshToken).NotEmpty();
 }
 
+public sealed class MicrosoftSsoExchangeRequestValidator : AbstractValidator<MicrosoftSsoExchangeRequest>
+{
+    public MicrosoftSsoExchangeRequestValidator() => RuleFor(x => x.Code).NotEmpty().MaximumLength(128);
+}
+
 public sealed class SwitchTenantRequestValidator : AbstractValidator<SwitchTenantRequest>
 {
     public SwitchTenantRequestValidator() => RuleFor(x => x.TenantId).NotEmpty();

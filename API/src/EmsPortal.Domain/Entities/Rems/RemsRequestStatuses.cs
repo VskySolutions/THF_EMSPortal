@@ -67,6 +67,13 @@ public static class RemsRequestStatuses
     public const string Approved = "approved";
 
     /// <summary>
+    /// Not a stored status: what every list calls a request that is with the admins and that no admin has
+    /// picked up. The filters take it beside the real codes, so the status column can be narrowed to what
+    /// it shows — see <c>RemsRequestFilters</c>.
+    /// </summary>
+    public const string WaitingForPickup = "waiting_for_pickup";
+
+    /// <summary>
     /// The stages where the request sits with its INITIATOR — the person who raised it fills the client
     /// details and the engagement setup, sends the intake link, and does any rework the Admin or the
     /// approvers ask for. <see cref="AwaitingCustomer"/> counts: the ball is with the client, but the setup
@@ -88,4 +95,11 @@ public static class RemsRequestStatuses
     /// </summary>
     public static bool IsRework(string? status)
         => status is ReturnedToInitiator or ChangesRequested;
+
+    /// <summary>
+    /// The stages where nothing on the request may change: a round is open with the approvers, or they
+    /// have approved it. The request page goes read-only here, and the lists offer View alone.
+    /// </summary>
+    public static bool IsFrozen(string? status)
+        => status is PendingApproval or Approved;
 }

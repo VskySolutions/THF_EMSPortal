@@ -157,7 +157,7 @@
           <div class="row q-col-gutter-md">
             <app-text-field
               v-model="gov.contractNumber" label="Contract Number" required class="col-12 col-sm-6"
-              :readonly="!editable"
+              :readonly="!editable" :rules="contractNumberRules" placeholder="e.g. GC-2026-0417"
             />
             <div class="col-12 col-sm-6 column justify-center">
               <q-checkbox
@@ -197,13 +197,14 @@
             >
               <template #prepend><span class="text-grey-7">$</span></template>
             </app-text-field>
+            <!-- The pair has to run forwards, and whichever end was typed last is the one that says so. -->
             <app-date-field
               v-model="gov.purchaseOrderStartDate" label="PO Beginning Date" class="col-12 col-sm-6"
-              :readonly="!editable"
+              :readonly="!editable" :rules="poStartRules" :max-date="gov.purchaseOrderEndDate"
             />
             <app-date-field
               v-model="gov.purchaseOrderEndDate" label="PO Ending Date" class="col-12 col-sm-6"
-              :readonly="!editable"
+              :readonly="!editable" :rules="poEndRules" :min-date="gov.purchaseOrderStartDate"
             />
             <app-select
               v-model="gov.personnelLevel" :options="personnelLevelOptions" label="Personnel Level"
@@ -610,6 +611,40 @@ const purchaseOrderNumberRules = [
   (v) => !v || /^[A-Za-z0-9][A-Za-z0-9 ./-]*$/.test(v) ||
     "Use letters, numbers and the separators - . / only."
 ];
+// A contract's own reference, like the PO number — but no ".": "46755.555" is a decimal, not a contract,
+// and neither is "0". The server holds the same line.
+const CONTRACT_NUMBER_MAX = 64;
+const contractNumberProblem = (v) => {
+  const value = (v ?? "").trim();
+  if (!value) return "";
+  if (value.length > CONTRACT_NUMBER_MAX) return `Keep the contract number to ${CONTRACT_NUMBER_MAX} characters or fewer.`;
+  if (!/^[A-Za-z0-9][A-Za-z0-9 /-]*$/.test(value)) return "Use letters, numbers and the separators - / only.";
+  if (!/[1-9A-Za-z]/.test(value)) return "A contract number cannot be all zeros.";
+  return "";
+};
+const contractNumberRules = [(v) => contractNumberProblem(v) || true];
+
+// The PO dates have to run forwards. A blank at either end is nothing to check yet.
+const datesOrdered = (start, end) => !start || !end || end >= start;
+const poStartRules = [
+  (v) => datesOrdered(v, gov.value.purchaseOrderEndDate) || "Cannot be after the PO Ending Date"
+];
+const poEndRules = [
+  (v) => datesOrdered(gov.value.purchaseOrderStartDate, v) || "Cannot be before the PO Beginning Date"
+];
+
+// The checks with a message of their own: a wrong contract number or a backwards purchase order is one
+// thing to fix, not a paragraph to read.
+const setupProblem = () => {
+  if (showGovernment.value) {
+    const bad = contractNumberProblem(gov.value.contractNumber);
+    if (bad) return bad;
+  }
+  if (showGcs.value && !datesOrdered(gov.value.purchaseOrderStartDate, gov.value.purchaseOrderEndDate)) {
+    return "The PO Ending Date cannot be before the PO Beginning Date.";
+  }
+  return "";
+};
 // A description of how the client is billed, not a treatise. Mirrors the column and the API validator.
 const BILLING_DESCRIPTION_MAX = 1000;
 const billingDescriptionRules = [
@@ -634,6 +669,8 @@ const toNum = (v) => (v === "" || v === null || v === undefined ? null : Number(
 // The whole section in one write: the core first (it is what decides whether the conditional cards apply at
 // all), then each card that is on screen, then the signed CAF if one is waiting.
 const saveSetup = async (engagementId, remsId = null) => {
+  const problem = setupProblem();
+  if (problem) throw new Error(problem);
   if (!validateFormats()) {
     throw new Error(
       "Check the engagement setup: the fee cannot be negative, realization is 0–100%, and the billing " +

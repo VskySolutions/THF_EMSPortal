@@ -11,6 +11,7 @@
       :disable="disable"
       :readonly="readonly"
       :hint="hint"
+      :clearable="clearable"
       :autocomplete="autocomplete"
       :aria-label="ariaLabel"
       outlined
@@ -37,6 +38,8 @@
             <q-date
               v-model="isoModel"
               mask="YYYY-MM-DD"
+              :options="dateOptions"
+              :default-year-month="defaultYearMonth"
               today-btn
               minimal
               color="primary"
@@ -76,8 +79,15 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
   hint: { type: String, default: "" },
   dense: { type: Boolean, default: true },
+  // The ✕ on the field itself, so a date comes off without opening the calendar — on by default, like the
+  // selects. Quasar hides it while the field is read-only or disabled, and while it is empty.
+  clearable: { type: Boolean, default: true },
   // Browser autofill is disabled by default across the app; pass "on" to opt back in.
-  autocomplete: { type: String, default: "off" }
+  autocomplete: { type: String, default: "off" },
+  // A Start/End pair: each side is handed the other, so the calendar offers only days the pair can hold.
+  // ISO calendar dates like the model; either may be empty.
+  minDate: { type: String, default: "" },
+  maxDate: { type: String, default: "" }
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -137,6 +147,20 @@ const isoModel = computed({
 
 // Picking a day is the whole interaction — the panel closes on it rather than waiting to be dismissed.
 const onPicked = () => popupRef.value?.hide();
+
+// q-date hands the options function "YYYY/MM/DD"; the bounds are ISO, so the slashes are swapped first.
+const dateOptions = (date) => {
+  const d = date.replace(/\//g, "-");
+  return !(props.minDate && d < props.minDate) && !(props.maxDate && d > props.maxDate);
+};
+
+// An empty field opens on the month its bound sits in rather than on today's: that is where the days it
+// may take are.
+const defaultYearMonth = computed(() => {
+  if (props.modelValue) return undefined;
+  const anchor = props.minDate || props.maxDate;
+  return anchor ? anchor.slice(0, 7).replace("-", "/") : undefined;
+});
 
 const clear = () => {
   emit("update:modelValue", "");

@@ -1,6 +1,6 @@
 <template>
   <q-icon :name="icon" :size="size" :color="color" class="app-info-tip">
-    <q-tooltip anchor="top middle" self="bottom middle" :max-width="maxWidth" class="text-body2">
+    <q-tooltip :anchor="anchor" :self="self" :max-width="maxWidth" class="text-body2">
       <slot>{{ text }}</slot>
     </q-tooltip>
   </q-icon>
@@ -16,7 +16,10 @@ defineProps({
   // A shade bigger than the 14px on a field label — this one sits beside a section title.
   size: { type: String, default: "16px" },
   color: { type: String, default: "grey-6" },
-  maxWidth: { type: String, default: "320px" }
+  maxWidth: { type: String, default: "320px" },
+  // Above the icon by default; a note beside a heading at the top of the page opens below instead.
+  anchor: { type: String, default: "top middle" },
+  self: { type: String, default: "bottom middle" }
 });
 </script>
 

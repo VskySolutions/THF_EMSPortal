@@ -3,8 +3,8 @@
     <!-- One line, and only what the screen cannot show for itself: the rule, and the consequence of being
          on this list. -->
     <div class="text-body2 text-grey-8 q-mb-sm">
-      The split must total 100% before the request goes to the client. Each recipient approves the
-      engagement.
+      Optional. If anyone is named, the split must total 100% before the request goes to the client.
+      Each recipient approves the engagement.
     </div>
 
     <!-- Add recipient (searchable CSE-group picker; excludes those already added). -->
@@ -68,6 +68,9 @@ const props = defineProps({
   engagement: { type: Object, required: true },
   // Selectable recipients — the holders of the "CSE" role, as [{ label, value }].
   recipientOptions: { type: Array, default: () => [] },
+  // STATIC-APPROVAL-POLICY: the CSE, Department Director and Shareholders on this request, who
+  // approve at their own stage and so may not also be paid commission.
+  excludedRecipientIds: { type: Array, default: () => [] },
   editable: { type: Boolean, default: true }
 });
 // The page saves this section for the user, so every change to the splits is announced.
@@ -92,7 +95,8 @@ watch(splits, () => { if (!syncing) emit("change"); }, { deep: true });
 
 const pick = ref(null);
 const availableRecipients = computed(() =>
-  props.recipientOptions.filter((s) => !splits.value.some((x) => x.employeeId === s.value)));
+  props.recipientOptions.filter((s) =>
+    !splits.value.some((x) => x.employeeId === s.value) && !props.excludedRecipientIds.includes(s.value)));
 
 // An empty picker means the group has no members; name it so the fix is obvious rather than the dropdown
 // just being blank (mirrors the setup form's executive / billing-manager hints).
@@ -111,27 +115,41 @@ const addRecipient = (value) => {
 
 const removeAt = (i) => { splits.value.splice(i, 1); };
 
-const percentRules = [
-  (v) => (v !== "" && v !== null && Number(v) > 0 && Number(v) <= 100) || "Enter 0–100"
-];
+// A share is a percentage of one commission: above 0 and at most 100.
+const validPercent = (v) => {
+  const n = Number(v);
+  return v !== "" && v !== null && v !== undefined && Number.isFinite(n) && n > 0 && n <= 100;
+};
+const percentRules = [(v) => validPercent(v) || "Enter 0–100"];
 
 // Rounded to 2dp before comparing: three 33.33/33.34 splits sum to 100.00000000000001 in binary floating
 // point, which would otherwise report a perfectly valid 100% allocation as over the limit.
 const round2 = (n) => Math.round(n * 100) / 100;
+// Only the valid shares count. A "-5.5" the box is already refusing must not become "105.5% unallocated"
+// underneath it.
 const totalPercent = computed(() =>
-  round2(splits.value.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
+  round2(splits.value.reduce((sum, s) => sum + (validPercent(s.percentage) ? Number(s.percentage) : 0), 0)));
+const invalidCount = computed(() =>
+  splits.value.filter((s) => s.percentage !== "" && s.percentage !== null && !validPercent(s.percentage)).length);
 const totalOver = computed(() => totalPercent.value > 100);
 
 // The whole of the feedback: how far off the split is, and which way. The number is already on screen, so
 // the note says only what the number does not — how much is missing, or how much too much.
 const totalNote = computed(() => {
+  if (!splits.value.length) return "";
+  if (invalidCount.value) {
+    return invalidCount.value === 1
+      ? "one share is outside 0–100 and is not counted"
+      : `${invalidCount.value} shares are outside 0–100 and are not counted`;
+  }
   if (totalOver.value) return `${round2(totalPercent.value - 100)}% over`;
   if (totalPercent.value < 100) return `${round2(100 - totalPercent.value)}% unallocated`;
   return "";
 });
 const totalTone = computed(() => {
-  if (totalOver.value) return "bad";
-  return totalPercent.value === 100 ? "ok" : "warn";
+  if (totalOver.value || invalidCount.value) return "bad";
+  // No recipients is a complete answer, not an unallocated one.
+  return !splits.value.length || totalPercent.value === 100 ? "ok" : "warn";
 });
 const totalIcon = computed(() => ({
   ok: "o_check_circle", warn: "o_pending", bad: "o_error"
@@ -144,11 +162,7 @@ const saveCommission = async (engagementId) => {
   if (!splits.value.length && !had) return null;
 
   // Every recipient must carry a valid percentage (> 0 and ≤ 100).
-  const invalid = splits.value.some((s) => {
-    const n = Number(s.percentage);
-    return s.percentage === "" || s.percentage === null || !(n > 0 && n <= 100);
-  });
-  if (invalid) {
+  if (splits.value.some((s) => !validPercent(s.percentage))) {
     throw new Error("Every commission recipient needs a percentage between 0 and 100.");
   }
   // The splits divide one commission, so they can never add up to more than the whole of it. The API

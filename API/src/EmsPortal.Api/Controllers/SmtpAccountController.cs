@@ -84,6 +84,8 @@ public sealed class SmtpAccountController : ControllerBase
             .Add("fromEmail", a => a.FromEmail, a => a.AccountName)
             .Add("encryptionType", a => a.EncryptionType, a => a.AccountName)
             .Add("status", a => a.IsActive, a => a.AccountName)
+            .Add("createdBy", a => a.CreatedByName, a => a.AccountName)
+            .Add("updatedBy", a => a.UpdatedByName, a => a.AccountName)
             .Add("createdOnUtc", a => a.CreatedOnUtc)
             .Add("updatedOnUtc", a => a.UpdatedOnUtc);
 

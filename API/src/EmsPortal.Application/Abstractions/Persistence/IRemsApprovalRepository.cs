@@ -15,7 +15,33 @@ public sealed record RemsApprovalTaskQuery(
     RemsApprovalTaskStatus? Status,
     SortRequest Sort,
     int Page,
-    int Limit);
+    int Limit,
+    /// <summary>
+    /// Where the whole ROUND stands, as the inbox badge says it: a <see cref="RemsApprovalRoundStatus"/>
+    /// name, or <c>partially_approved</c> for a pending round some approvers have already signed.
+    /// </summary>
+    string? RoundStatus = null,
+    /// <summary>The CSE named on the request.</summary>
+    Guid? CseUserId = null,
+    /// <summary>The clients the request is for — any of them. The Client column's dropdown.</summary>
+    IReadOnlyList<Guid>? ClientPersonIds = null,
+    DateTime? SentFromUtc = null,
+    DateTime? SentToUtc = null,
+    DateTime? DecidedFromUtc = null,
+    DateTime? DecidedToUtc = null,
+    DateTime? CreatedFromUtc = null,
+    DateTime? CreatedToUtc = null,
+    DateTime? UpdatedFromUtc = null,
+    DateTime? UpdatedToUtc = null);
+
+/// <summary>
+/// How many rows each quick-filter button on the Approvals inbox would list: the Approval Status group by
+/// round standing (<c>partially_approved</c> included) and the Your Decision group by task status. Each
+/// group is counted under every filter but its own, so a button's number is the rows clicking it produces.
+/// </summary>
+public sealed record RemsApprovalTaskQuickCounts(
+    IReadOnlyDictionary<string, int> RoundStatus,
+    IReadOnlyDictionary<string, int> Status);
 
 /// <summary>
 /// Data access for the REMS approval chain (WO-110): immutable rounds, per-approver tasks and their
@@ -43,6 +69,16 @@ public interface IRemsApprovalRepository
 
     /// <summary>A page of the caller's approvals inbox — ONE task per request.</summary>
     Task<(IReadOnlyList<REMSApprovalTask> Items, int Total)> ListTasksByApproverAsync(
+        RemsApprovalTaskQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>The CSEs across the caller's inbox — the same one-task-per-request set it lists — for its CSE filter.</summary>
+    Task<IReadOnlyList<Guid>> ListCseIdsByApproverAsync(Guid approverId, CancellationToken cancellationToken = default);
+
+    /// <summary>The clients across the caller's inbox, for its Client filter — read off their tasks, like the CSEs.</summary>
+    Task<IReadOnlyList<RemsClientChoice>> ListClientsByApproverAsync(Guid approverId, CancellationToken cancellationToken = default);
+
+    /// <summary>The Approvals quick-filter counts — see <see cref="RemsApprovalTaskQuickCounts"/>.</summary>
+    Task<RemsApprovalTaskQuickCounts> CountInboxQuickFiltersAsync(
         RemsApprovalTaskQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>

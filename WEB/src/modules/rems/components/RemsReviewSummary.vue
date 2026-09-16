@@ -75,8 +75,9 @@
           <div v-for="(person, i) in g.people" :key="i" class="review-person">
             <div class="rems-label">{{ person.role }}</div>
             <div class="rems-value"><app-name-with-suffix :name="person.name" :suffix="person.suffix" /></div>
+            <!-- The phone only where one was given: the billing block never asks for it. -->
             <div class="text-caption text-grey-7">
-              {{ person.email || "no email" }}<template v-if="person.phone !== null"> · {{ person.phone || "no phone" }}</template>
+              {{ person.email || "no email" }}<template v-if="person.phone"> · {{ person.phone }}</template>
             </div>
           </div>
         </div>

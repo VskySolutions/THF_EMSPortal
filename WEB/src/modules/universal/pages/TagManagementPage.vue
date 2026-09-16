@@ -86,7 +86,7 @@ const { rows, loading, totalRecords, pagination, load, onRequest } = useListTabl
 
 const columns = [
   { name: "name", label: "Name", field: "name", align: "left", sortable: true, default: true },
-  { name: "colour", label: "Colour", field: "colour", align: "left", default: true },
+  { name: "colour", label: "Colour", field: "colour", align: "left", sortable: true, default: true },
   { name: "category", label: "Category", field: "category", align: "left", sortable: true, default: true },
   { name: "usageCount", label: "Usage", field: "usageCount", align: "left", sortable: true, default: true },
   ...auditColumns(),

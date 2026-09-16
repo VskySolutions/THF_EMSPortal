@@ -155,12 +155,12 @@ const columns = computed(() => [
   { name: "personCode", label: "Code", field: "personCode", align: "left", sortable: true, filterable: false },
   { name: "fullName", label: "Name", field: "fullName", align: "left", sortable: true, default: true, filterable: false },
   { name: "primaryEmail", label: "Email", field: "primaryEmail", align: "left", sortable: true, default: true, filterable: false },
-  { name: "mobileNumber", label: "Phone", field: "mobileNumber", align: "left", filterable: false },
+  { name: "mobileNumber", label: "Phone", field: "mobileNumber", align: "left", sortable: true, filterable: false },
   { name: "isUser", label: "Account", field: "isUser", align: "left", sortable: true, default: true, filterOptions: [{ label: "User", value: true }, { label: "Not a user", value: false }] },
   { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, filterOptions: [{ label: "Active", value: true }, { label: "Inactive", value: false }] },
   // Where the record came from. Filtering is client-side over the loaded page (this list is not
   // server-filtered on it), so it stays a plain column rather than claiming a server filter it lacks.
-  { name: "sourceEntityType", label: "Source", field: (r) => sourceLabel(r.sourceEntityType), align: "left", default: true, filterable: false },
+  { name: "sourceEntityType", label: "Source", field: (r) => sourceLabel(r.sourceEntityType), align: "left", sortable: true, default: true, filterable: false },
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);

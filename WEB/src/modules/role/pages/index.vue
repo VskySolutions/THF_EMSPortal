@@ -125,7 +125,7 @@ const isSuperAdmin = computed(() => authStore.roles.includes("SuperAdmin"));
 const columns = [
   { name: "name", label: "Name", field: "name", align: "left", sortable: true, default: true },
   // Descriptions are rich text; the cell shows the text without its markup (see utils/richText).
-  { name: "description", label: "Description", field: (r) => stripHtml(r.description), align: "left", default: true },
+  { name: "description", label: "Description", field: (r) => stripHtml(r.description), align: "left", sortable: true, default: true },
   {
     name: "isSystem",
     label: "Type",

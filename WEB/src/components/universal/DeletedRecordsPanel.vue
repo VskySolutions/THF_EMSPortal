@@ -98,7 +98,7 @@ const pagination = ref({ page: 1, rowsPerPage: 20, sortBy: "deletedOnUtc", desce
 
 const columns = [
   { name: "identity", label: "Record", field: "identity", align: "left", sortable: true, default: true },
-  { name: "deletedByName", label: "Deleted By", field: "deletedByName", align: "left", default: true },
+  { name: "deletedByName", label: "Deleted By", field: "deletedByName", align: "left", sortable: true, default: true },
   { name: "deletedOnUtc", label: "Deleted On", field: "deletedOnUtc", align: "left", sortable: true, default: true },
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ];

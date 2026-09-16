@@ -315,6 +315,7 @@
                   v-else
                   ref="commissionRef"
                   :engagement="setupEngagement" :recipient-options="cseOptions" :editable="canEditSetup"
+                  :excluded-recipient-ids="reservedCommissionIds"
                   @change="markDirty('commission')"
                 />
               </q-tab-panel>
@@ -700,7 +701,8 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const commissionTotal = computed(() => round2(
   (engagement.value?.commissionSplits || []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0)));
 const commissionCount = computed(() => (engagement.value?.commissionSplits || []).length);
-const commissionAllocated = computed(() => commissionTotal.value === 100);
+// Commission is optional; a split somebody started has to come to 100%.
+const commissionAllocated = computed(() => !commissionCount.value || commissionTotal.value === 100);
 
 const readyToSend = computed(() =>
   !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.entityType &&
@@ -717,11 +719,6 @@ const sendBlockedReason = computed(() => {
     return "Choose an industry on the Client Information tab — the Entity Type beside it narrows the list.";
   }
   if (!commissionAllocated.value) {
-    // Naming nobody is its own sentence.
-    if (!commissionCount.value) {
-      return "No commission recipients yet — the Commission tab must name recipients adding up to 100% " +
-        "before this request can be sent to the client.";
-    }
     return `Commission totals ${commissionTotal.value}% — the recipients on the Commission tab must add ` +
       "up to 100% before this request can be sent to the client.";
   }
@@ -1042,15 +1039,30 @@ const toOptions = (rows) => (rows || []).map((r) => ({ label: r.name, value: r.i
 // The unscoped admin list is not fetched any more: it fed the "Assign to Admin" picker, and every picker
 // left here names the seat it fills.
 const loadPickers = async () => {
-  const [cse, execs, billing] = await Promise.all([
+  const [cse, execs, billing, policy] = await Promise.all([
     remsApi.admins(REMS_SEAT_ROLES.CSE).catch(() => []),
     remsApi.admins(REMS_SEAT_ROLES.ENGAGEMENT_EXECUTIVE).catch(() => []),
-    remsApi.admins(REMS_SEAT_ROLES.BILLING_MANAGER).catch(() => [])
+    remsApi.admins(REMS_SEAT_ROLES.BILLING_MANAGER).catch(() => []),
+    remsApi.approvalPolicy().catch(() => null)
   ]);
   cseOptions.value = toOptions(cse);
   executiveOptions.value = toOptions(execs);
   billingManagerOptions.value = toOptions(billing);
+  approvalPolicy.value = policy;
 };
+
+// ---- STATIC-APPROVAL-POLICY ----
+// The seats on this request approve at their own stage and may not also be paid commission, so the
+// Commission tab does not offer them.
+const approvalPolicy = ref(null);
+const reservedCommissionIds = computed(() => {
+  if (!approvalPolicy.value?.staticRouting) return [];
+  return [
+    setupForm.cseUserId,
+    setupEngagement.value?.departmentDirector?.id,
+    ...(approvalPolicy.value?.shareholders || []).map((s) => s.id)
+  ].filter(Boolean);
+});
 
 // The CSE, the Entity Type and the Industry as they were picked BEFORE the request existed.
 let pendingSetupPick = null;
@@ -1092,13 +1104,16 @@ const refreshEngagement = async () => {
 };
 
 // ---- What the page writes ----
-// Only the client half is enforced, because it is what the API requires to accept a request at all.
+// The client half, which is what the API requires to accept a request at all.
 const clientProblem = () => {
-  // Point at the box that is actually blank: for an individual that is First/Last Name, not the search.
-  if (!clientForm.clientName?.trim()) {
-    return isIndividualEntityType(setupForm.entityType)
-      ? "Give the client's first and last name."
-      : "Search for the client, or type the new client's name.";
+  // Point at the box that is actually blank: for an individual that is First/Last Name, not the search —
+  // and each of the two, because a surname on its own composes into a name that would otherwise pass.
+  if (isIndividualEntityType(setupForm.entityType)) {
+    if (!clientForm.clientFirstName?.trim() || !clientForm.clientLastName?.trim()) {
+      return "Give the client's first and last name.";
+    }
+  } else if (!clientForm.clientName?.trim()) {
+    return "Search for the client, or type the new client's name.";
   }
   if (!clientForm.type) return "Choose how this referral relates to THF's records.";
   // The email, specifically.
@@ -1106,6 +1121,22 @@ const clientProblem = () => {
     return "Give the client's email address — the intake form is emailed to them.";
   }
   return "";
+};
+
+// The rest of the first tab, written by endpoints of its own once the request exists. Every field here is
+// marked required on the form, so filing the draft asks for all of them rather than only the ones the
+// create endpoint happens to check.
+const setupProblem = () => {
+  if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
+  if (!setupForm.industry) return "Choose the industry this client is in.";
+  if (!setupForm.cseUserId) return "Choose a CSE — the client relationship needs an owner.";
+  return "";
+};
+
+// Top to bottom, as the tab reads: the entity type comes before the client it decides the shape of.
+const createProblem = () => {
+  if (!setupForm.entityType) return setupProblem();
+  return clientProblem() || setupProblem();
 };
 
 // No `description`: "Message from Partner" is not on the form, and leaving the field out of the payload is
@@ -1294,7 +1325,7 @@ const setMode = async (mode) => {
 // committed by hand.
 const createDraft = async () => {
   attempted.value = true;
-  const problem = clientProblem();
+  const problem = createProblem();
   if (problem) {
     notify.warning(problem);
     return;

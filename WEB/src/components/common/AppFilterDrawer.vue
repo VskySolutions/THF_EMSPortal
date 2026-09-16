@@ -1,7 +1,9 @@
 <template>
   <div>
-    <!-- Active filter chips (above the table; the Filters trigger lives in AppListHeader). -->
-    <div v-if="chips.length" class="row items-center q-gutter-sm q-mb-sm">
+    <!-- Active filter chips (above the table; the Filters trigger lives in AppListHeader). A list with
+         its own quick-filter bar turns them off: the bar already says how many filters are on and clears
+         them, and the chips repeated it in a second row. -->
+    <div v-if="showChips && chips.length" class="row items-center q-gutter-sm q-mb-sm">
       <q-chip
         v-for="chip in chips"
         :key="chip.key"
@@ -47,7 +49,9 @@ import { useDrawerResize, viewportWidth } from "composables/useDrawerResize";
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   // [{ key, label }] for each active filter; drives the chips.
-  chips: { type: Array, default: () => [] }
+  chips: { type: Array, default: () => [] },
+  // Whether to draw the chip row above the table at all.
+  showChips: { type: Boolean, default: true }
 });
 
 const emit = defineEmits(["update:modelValue", "remove", "clear"]);

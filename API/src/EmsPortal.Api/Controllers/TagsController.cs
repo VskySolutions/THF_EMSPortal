@@ -47,6 +47,8 @@ public sealed class TagsController : ControllerBase
         .Add("colour", t => t.Colour, t => t.Name)
         .Add("category", t => t.Category, t => t.Name)
         .Add("usageCount", t => t.UsageCount, t => t.Name)
+        .Add("createdBy", t => t.CreatedBy, t => t.Name)
+        .Add("updatedBy", t => t.UpdatedBy, t => t.Name)
         .Add("createdOnUtc", t => t.CreatedOnUtc)
         .Add("updatedOnUtc", t => t.UpdatedOnUtc);
 

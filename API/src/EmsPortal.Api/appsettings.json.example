@@ -29,10 +29,23 @@
     "ApiKeyHeaderName": "X-Api-Key",
     "ClockSkewSeconds": 30,
     "AccessTokenMinutes": 60,
-    "RefreshTokenDays": 30
+    "RefreshTokenDays": 30,
+    "Microsoft": {
+      "TenantId": "",
+      "ClientId": "",
+      "ClientSecret": ""
+    }
   },
   "ApiKeys": {
     "Keys": []
+  },
+  "Rems": {
+    "ApprovalPolicy": {
+      "StaticRouting": true,
+      "MandatoryShareholders": [ "Jeff Barbacci" ],
+      "TaxExceptionCses": [ "James Previte", "Stephen Hamic" ],
+      "TaxFeeCeilingWithoutShareholder": 10000
+    }
   },
   "Serilog": {
     "MinimumLevel": "Information",

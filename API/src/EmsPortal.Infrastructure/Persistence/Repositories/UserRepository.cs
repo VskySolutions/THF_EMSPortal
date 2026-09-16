@@ -81,21 +81,30 @@ internal sealed class UserRepository : IUserRepository
             });
     }
 
-    // What the Users list may be ordered by. Deliberately short: a column the caller can see is not
-    // necessarily a column the database holds. Roles, groups and the department are assembled AFTER the
-    // query (they are per-tenant collections, not columns), and Created By / Updated By are ids resolved
-    // to names afterwards — none of them can be an ORDER BY, so none of them is offered as one here or
-    // marked sortable on the page.
+    // What the Users list may be ordered by. Roles and Groups are per-tenant collections assembled after
+    // the query, not columns, so neither is here. The department is a placement row in the list's tenant,
+    // and Created By / Updated By are ids resolved to names afterwards: each orders by a subquery that
+    // reads the same value the cell shows, which is why the map is built per call.
     //
     // The name sorts on the two columns a person is FILED under, in that order, rather than on
     // DisplayName — which is what the Name cell shows and is free text.
-    private static readonly SortMap<User> Sorts = new SortMap<User>("updatedOnUtc")
-        .Add("fullName", u => u.Person!.FirstName, u => u.Person!.LastName)
-        .Add("email", u => u.Email)
-        .Add("phoneNumber", u => u.Person!.MobileNumber)
-        .Add("isActive", u => u.IsActive, u => u.UpdatedOnUtc)
-        .Add("createdOnUtc", u => u.CreatedOnUtc)
-        .Add("updatedOnUtc", u => u.UpdatedOnUtc);
+    private SortMap<User> SortsFor(Guid? tenantId)
+    {
+        var actors = ActorNames.Of(_dbContext);
+        // Query filters are off on the list query, so the placement's own scope is spelled out here.
+        var placements = _dbContext.UserDepartments
+            .Where(d => !d.Deleted && (tenantId == null || d.TenantId == tenantId));
+        return new SortMap<User>("updatedOnUtc")
+            .Add("fullName", u => u.Person!.FirstName, u => u.Person!.LastName)
+            .Add("email", u => u.Email)
+            .Add("phoneNumber", u => u.Person!.MobileNumber)
+            .Add("department", u => placements.Where(d => d.UserId == u.Id).Select(d => d.Department).FirstOrDefault(), u => u.UpdatedOnUtc)
+            .Add("isActive", u => u.IsActive, u => u.UpdatedOnUtc)
+            .Add("createdBy", u => actors.Where(a => a.Id == u.CreatedById).Select(a => a.Name).FirstOrDefault(), u => u.UpdatedOnUtc)
+            .Add("updatedBy", u => actors.Where(a => a.Id == u.UpdatedById).Select(a => a.Name).FirstOrDefault(), u => u.UpdatedOnUtc)
+            .Add("createdOnUtc", u => u.CreatedOnUtc)
+            .Add("updatedOnUtc", u => u.UpdatedOnUtc);
+    }
 
     public async Task<(IReadOnlyList<User> Items, int Total)> ListAsync(
         Guid? tenantId, string? search, bool? isActive,
@@ -157,7 +166,7 @@ internal sealed class UserRepository : IUserRepository
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var items = await Sorts.Apply(query, sort.SortBy, sort.Descending)
+        var items = await SortsFor(tenantId).Apply(query, sort.SortBy, sort.Descending)
             .Skip((page - 1) * limit)
             .Take(limit)
             .ToListAsync(cancellationToken);

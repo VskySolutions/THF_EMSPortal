@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using EmsPortal.Api.Models.Rems;
 using FluentValidation;
 
@@ -87,9 +88,28 @@ public sealed class UpdateRemsAuditDetailRequestValidator : AbstractValidator<Up
 /// <summary>Validates a government-audit detail update (WO-114) and the GCS purchase order on the same row.</summary>
 public sealed class UpdateRemsGovernmentDetailRequestValidator : AbstractValidator<UpdateRemsGovernmentDetailRequest>
 {
+    // A contract's own reference: letters, digits and the separators one is written with. No "." — a
+    // decimal is a number, not a contract — and not all zeros, which is no reference at all.
+    private static readonly Regex ContractNumberPattern = new(@"^[A-Za-z0-9][A-Za-z0-9 /-]*$", RegexOptions.Compiled);
+
     public UpdateRemsGovernmentDetailRequestValidator()
     {
         RuleFor(x => x.ContractNumber).MaximumLength(64).When(x => !string.IsNullOrWhiteSpace(x.ContractNumber));
+        RuleFor(x => x.ContractNumber)
+            .Must(v => ContractNumberPattern.IsMatch(v!.Trim()))
+            .WithMessage("contractNumber may contain only letters, numbers, spaces and the separators - and /.")
+            .Must(v => v!.Any(c => char.IsLetter(c) || c is >= '1' and <= '9'))
+            .WithMessage("contractNumber cannot be all zeros.")
+            .When(x => !string.IsNullOrWhiteSpace(x.ContractNumber));
+        // Each pair of dates has to run forwards; either end blank is nothing to check.
+        RuleFor(x => x.ContractEndDate)
+            .Must((x, end) => end >= x.ContractStartDate)
+            .WithMessage("contractEndDate cannot be before contractStartDate.")
+            .When(x => x.ContractStartDate.HasValue && x.ContractEndDate.HasValue);
+        RuleFor(x => x.PurchaseOrderEndDate)
+            .Must((x, end) => end >= x.PurchaseOrderStartDate)
+            .WithMessage("purchaseOrderEndDate cannot be before purchaseOrderStartDate.")
+            .When(x => x.PurchaseOrderStartDate.HasValue && x.PurchaseOrderEndDate.HasValue);
         RuleFor(x => x.OriginalTerm).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.OriginalTerm));
         RuleFor(x => x.RenewalTerms).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.RenewalTerms));
         RuleFor(x => x.PurchaseOrderNumber).MaximumLength(64).When(x => !string.IsNullOrWhiteSpace(x.PurchaseOrderNumber));

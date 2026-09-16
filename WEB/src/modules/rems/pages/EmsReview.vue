@@ -13,7 +13,10 @@
       @back="$router.back()"
     />
 
-    <app-filter-drawer v-model="filterOpen" :chips="filterChips" @remove="removeFilter" @clear="clearFilters">
+    <!-- No chip row: the quick-filter bar under the table's title says how many filters are on and clears them. -->
+    <app-filter-drawer
+      v-model="filterOpen" :chips="filterChips" :show-chips="false" @remove="removeFilter" @clear="clearFilters"
+    >
       <app-column-filters v-model="filters" :columns="filterableColumns" />
     </app-filter-drawer>
 
@@ -32,14 +35,18 @@
       @request="onRequest"
       @refresh="load"
     >
-      <!-- The two ways to read this queue, beside the column picker in the table's own top bar. -->
-      <template #actions>
-        <q-btn-toggle
-          v-model="assignment"
-          no-caps unelevated dense
-          toggle-color="primary" color="grey-3" text-color="grey-8"
-          :options="ASSIGNMENT_FILTERS"
-        />
+      <!-- The two ways to read this queue, and the counted shortcuts over the Request Status filter. -->
+      <template #quick-filters>
+        <quick-filter-bar :active-count="filterChips.length" @clear="clearFilters">
+          <quick-filter-group
+            v-model="assignment" label="View" :options="ASSIGNMENT_FILTERS" :counts="quickCounts?.assignment"
+            :clearable="false"
+          />
+          <quick-filter-group
+            v-model="filters.requestStatus" label="Request Status" :options="statusQuick"
+            :counts="quickCounts?.requestStatus"
+          />
+        </quick-filter-bar>
       </template>
 
       <!-- The number opens the request, which is the one place that carries both the setup and the client's
@@ -177,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -186,9 +193,11 @@ import { usePermissions, Permissions } from "composables/usePermissions";
 import { useRowPersonalisation, MAX_PINS_PER_TYPE } from "composables/uf/useRowPersonalisation";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
+import { useFilterMemory } from "composables/useFilterMemory";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
-import { useRemsMeta } from "modules/rems/useRemsMeta";
+import { useRemsMeta, REMS_SEAT_ROLES, REMS_STATUS_WAITING_FOR_PICKUP } from "modules/rems/useRemsMeta";
+import { REMS_STATUS } from "modules/rems/remsStatus";
 
 import AppListHeader from "components/common/AppListHeader.vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
@@ -196,6 +205,8 @@ import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppDataTable from "components/common/AppDataTable.vue";
+import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
+import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
@@ -219,27 +230,52 @@ const submittedFilterOptions = computed(() => [
 
 const canReadEmailLog = computed(() => has(Permissions.RemsEmailLogRead));
 
+// The two people columns filter on the same lists the request form picks from: the admins, and whoever
+// holds the CSE role.
+const adminFilterOptions = ref([]);
+const cseFilterOptions = ref([]);
+// The Client filter offers the clients on the queue — any of them at once.
+const clientFilterOptions = ref([]);
+const toOptions = (rows) => (rows || []).map((a) => ({ label: a.name, value: a.id }));
+onMounted(async () => {
+  try {
+    const [admins, cses, clients] = await Promise.all([
+      remsApi.admins(), remsApi.admins(REMS_SEAT_ROLES.CSE), remsApi.clientFormClients()
+    ]);
+    adminFilterOptions.value = toOptions(admins);
+    cseFilterOptions.value = toOptions(cses);
+    clientFilterOptions.value = toOptions(clients);
+  } catch {
+    // A filter nobody can populate simply stays empty; the list itself is unaffected.
+  }
+});
+
 // The status helpers read a REQUEST shape (`status` + `assignedAdmin`); these rows call the same field
 // `requestStatus`, because the row is about the client's form and the request's status is context on it.
 const statusRow = (row) => ({ status: row?.requestStatus, assignedAdmin: row?.assignedAdmin });
 
 // Why the row's way into the request is shut, or null when it is open.
-const editBlocked = (row) => engagementOwnerDenial(row);
+// Frozen first: once a round is open, or approved, nobody works the request — not even its holder.
+const editBlocked = (row) => {
+  if (row?.requestStatus === REMS_STATUS.PENDING_APPROVAL) return "With the approvers — read-only until they decide";
+  if (row?.requestStatus === REMS_STATUS.APPROVED) return "Approved — permanently read-only";
+  return engagementOwnerDenial(row);
+};
 
-// REMS number and client are covered by the quick search, so they get no duplicate filter box of their
-// own; the name/date columns the server cannot narrow on opt out entirely.
+// The REMS number is covered by the quick search, so it gets no duplicate filter box; the client is a
+// dropdown of the clients on the queue, and every date column filters as a From/To range.
 const columns = computed(() => [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
-  { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterable: false },
+  { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "submitted", label: "EMS State", field: "submitted", align: "left", sortable: true, default: true, filterOptions: submittedFilterOptions.value },
   // On by default now. It is where a row says "Waiting for pickup", which is the one thing an admin
   // opening this list is looking for.
-  { name: "requestStatus", label: "Request Status", field: "requestStatus", align: "left", default: true, filterOptions: statusFilterOptions.value },
-  { name: "submittedOnUtc", label: "Received On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterable: false },
+  { name: "requestStatus", label: "Request Status", field: "requestStatus", align: "left", sortable: true, default: true, filterOptions: statusFilterOptions.value },
+  { name: "submittedOnUtc", label: "Received On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
-  { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", default: true, filterable: false },
-  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", default: true, filterable: false },
-  ...auditColumns(),
+  { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
+  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
+  ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
 
@@ -250,25 +286,62 @@ const ASSIGNMENT_FILTERS = [
 ];
 const assignment = ref("all");
 
+// Everything the list is narrowed by, in the shape the API takes. Shared with the counts so the two can
+// never drift.
+const listFilters = () => {
+  // The pickers are date-only and read in the tenant's zone; each column is a UTC instant, so both ends
+  // become that day's real boundaries and "to" includes its own day.
+  const received = rangeBounds("submittedOnUtc", fmt.zonedDayBoundaryUtc);
+  const created = rangeBounds("createdOnUtc", fmt.zonedDayBoundaryUtc);
+  const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
+  return {
+    search: search.value || undefined,
+    // A column filter's value is always a string; the API takes a bool.
+    submitted: filters.submitted ? filters.submitted === "true" : undefined,
+    requestStatus: filters.requestStatus || undefined,
+    assignedAdminUserId: filters.assignedAdmin || undefined,
+    cseUserId: filters.cse || undefined,
+    clientPersonIds: filters.clientName?.length ? filters.clientName : undefined,
+    submittedFrom: received.from,
+    submittedTo: received.to,
+    createdFrom: created.from,
+    createdTo: created.to,
+    updatedFrom: updated.from,
+    updatedTo: updated.to,
+    assignment: assignment.value
+  };
+};
+
+// ---- The counted shortcuts ----
+const quickCounts = ref(null);
+const refreshQuickCounts = async () => {
+  try {
+    quickCounts.value = await remsApi.clientFormQuickCounts(listFilters());
+  } catch {
+    // The buttons still work without their numbers; the list's own error toast is the one worth showing.
+  }
+};
+const statusQuick = computed(() =>
+  [REMS_STATUS_WAITING_FOR_PICKUP, REMS_STATUS.ADMIN_REVIEW, REMS_STATUS.AWAITING_ADMIN_CONFIRMATION]
+    .map((v) => statusFilterOptions.value.find((o) => o.value === v))
+    .filter(Boolean));
+
 const { rows, loading, totalRecords, search, filterOpen, pagination, load, onRequest } = useListTable({
   pageKey: "rems-ems-review",
-  fetcher: ({ page, limit, sortBy, descending }) =>
-    remsApi.clientForms({
-      page,
-      limit,
-      sortBy,
-      descending,
-      search: search.value || undefined,
-      // A column filter's value is always a string; the API takes a bool.
-      submitted: filters.submitted ? filters.submitted === "true" : undefined,
-      requestStatus: filters.requestStatus || undefined,
-      assignment: assignment.value
-    }).then((r) => ({ data: r?.data, total: r?.meta?.totalRecords })),
+  fetcher: ({ page, limit, sortBy, descending }) => {
+    // The counts ride along with every read of the list, so the buttons describe the list on screen.
+    refreshQuickCounts();
+    return remsApi.clientForms({ ...listFilters(), page, limit, sortBy, descending })
+      .then((r) => ({ data: r?.data, total: r?.meta?.totalRecords }));
+  },
   onError: (err) => notify.error(getApiErrorMessage(err))
 });
 
 // Server-side, like every other REMS list: the pager counts the whole filtered set, not the loaded page.
-const { filters, filterableColumns, filterChips, removeFilter, clearFilters } = useColumnFilters(columns, rows, { server: true });
+const {
+  filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
+} = useColumnFilters(columns, rows, { server: true });
+useFilterMemory("rems-ems-review", { assignment, requestStatus: toRef(filters, "requestStatus") });
 const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters, assignment], reload, { deep: true });
 

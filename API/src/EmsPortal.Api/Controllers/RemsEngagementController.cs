@@ -1,3 +1,4 @@
+using EmsPortal.Api.Approval;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
@@ -31,6 +32,8 @@ public sealed class RemsEngagementController : ControllerBase
 {
     private const string CodeEngagementLocked = "REMS_ENGAGEMENT_LOCKED";
     private const string CodeCopyInvalid = "REMS_COPY_INVALID";
+    // STATIC-APPROVAL-POLICY
+    private const string CodeCommissionReserved = "REMS_COMMISSION_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
     private const string TaxFormSetKey = "REMS.TaxForm";
@@ -50,6 +53,8 @@ public sealed class RemsEngagementController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
     private readonly IOptionCodeResolver _codes;
+    // STATIC-APPROVAL-POLICY
+    private readonly IRemsApprovalPolicy _policy;
 
     public RemsEngagementController(
         IRemsRepository rems,
@@ -65,8 +70,10 @@ public sealed class RemsEngagementController : ControllerBase
         IUserRepository users,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
-        IOptionCodeResolver codes)
+        IOptionCodeResolver codes,
+        IRemsApprovalPolicy policy)
     {
+        _policy = policy;
         _rems = rems;
         _delegations = delegations;
         _forms = forms;
@@ -99,6 +106,16 @@ public sealed class RemsEngagementController : ControllerBase
         [FromQuery] bool? submitted = null,
         [FromQuery] string? requestStatus = null,
         [FromQuery] string? assignment = null,
+        [FromQuery] Guid? assignedAdminUserId = null,
+        [FromQuery] Guid? cseUserId = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] DateTime? submittedFrom = null,
+        [FromQuery] DateTime? submittedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
@@ -116,7 +133,11 @@ public sealed class RemsEngagementController : ControllerBase
             : RemsClientFormAssignment.All;
 
         var (items, total) = await _forms.ListClientFormsAsync(
-            new RemsClientFormQuery(search, submitted, requestStatus, me, slice, new SortRequest(sortBy, descending), page, limit), cancellationToken);
+            new RemsClientFormQuery(
+                search, submitted, requestStatus, me, slice, new SortRequest(sortBy, descending), page, limit,
+                assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
+                createdFrom, createdTo, updatedFrom, updatedTo),
+            cancellationToken);
         var names = await _users.GetFullNamesAsync(
             items.SelectMany(i => new[] { i.AdminAssignedToId, i.CSEId, i.CreatedById, i.UpdatedById })
                 .Where(id => id.HasValue).Select(id => id!.Value),
@@ -141,6 +162,54 @@ public sealed class RemsEngagementController : ControllerBase
             NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
+    }
+
+    /// <summary>The quick-filter counts for the EMS Review list, under the same filters.</summary>
+    /// <summary>The clients across the queue, for its Client filter — whoever the list could narrow to.</summary>
+    [HttpGet("client-forms/clients")]
+    [RequirePermission(Permissions.RemsEngagementsManage)]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ClientFormClients(CancellationToken cancellationToken)
+    {
+        var clients = await _forms.ListClientFormClientsAsync(cancellationToken);
+        return Ok(ApiResponseFactory.Success(clients, "EMS Review clients retrieved."));
+    }
+
+    [HttpGet("client-forms/quick-counts")]
+    [RequirePermission(Permissions.RemsEngagementsManage)]
+    [ProducesResponseType<ApiResponse<RemsClientFormQuickCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ClientFormQuickCounts(
+        [FromQuery] string? search = null,
+        [FromQuery] bool? submitted = null,
+        [FromQuery] string? requestStatus = null,
+        [FromQuery] string? assignment = null,
+        [FromQuery] Guid? assignedAdminUserId = null,
+        [FromQuery] Guid? cseUserId = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] DateTime? submittedFrom = null,
+        [FromQuery] DateTime? submittedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var slice = string.Equals(assignment?.Trim(), "mine", StringComparison.OrdinalIgnoreCase)
+            ? RemsClientFormAssignment.Mine
+            : RemsClientFormAssignment.All;
+        var counts = await _forms.CountClientFormQuickFiltersAsync(
+            new RemsClientFormQuery(
+                search, submitted, requestStatus, me, slice, SortRequest.Default, Page: 1, Limit: 1,
+                assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
+                createdFrom, createdTo, updatedFrom, updatedTo),
+            cancellationToken);
+        return Ok(ApiResponseFactory.Success(counts, "EMS Review quick-filter counts retrieved."));
     }
 
     /// <summary>
@@ -1000,6 +1069,17 @@ public sealed class RemsEngagementController : ControllerBase
                 return BadRequest(ApiResponseFactory.Error(
                     ApiErrorCodes.ValidationFailed, "Validation failed.", $"Unknown employeeId {split.EmployeeId}."));
             }
+        }
+
+        // STATIC-APPROVAL-POLICY: the seats approve at their own stage and may not also be paid commission.
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        if (policy.StaticRouting
+            && request.Splits.Select(s => s.EmployeeId).Intersect(RemsStaticApprovalRoute.ReservedUserIds(engagement, policy)).Any())
+        {
+            return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
+                CodeCommissionReserved,
+                "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request.",
+                "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request."));
         }
 
         var existing = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();

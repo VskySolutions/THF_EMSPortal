@@ -79,7 +79,25 @@ public sealed record RemsRequestListOptions(
     RemsListOwnership Ownership,
     SortRequest Sort,
     int Page,
-    int Limit);
+    int Limit,
+    /// <summary>The CSE named on the request.</summary>
+    Guid? CseUserId = null,
+    /// <summary>
+    /// Where the client's intake form stands, in the words the list shows: <c>NotStarted</c>, or a form
+    /// status name (Sent, Submitted, Cancelled).
+    /// </summary>
+    string? EmsFormState = null,
+    /// <summary>The REMS.EntityType code the intake form was raised under.</summary>
+    string? EntityType = null,
+    /// <summary>The clients the request is for — any of them. The Client column's dropdown.</summary>
+    IReadOnlyList<Guid>? ClientPersonIds = null,
+    /// <summary>
+    /// Where the client's answers stand, in the words the Client Submission column shows: a
+    /// REMS.ClientSubmissionState code (AwaitingCustomer, Submitted).
+    /// </summary>
+    string? ClientSubmissionState = null,
+    DateTime? UpdatedFromUtc = null,
+    DateTime? UpdatedToUtc = null);
 
 /// <summary>
 /// How many pool requests fall into each Admin Pool view, under the caller's visibility and the filters
@@ -87,6 +105,30 @@ public sealed record RemsRequestListOptions(
 /// request assigned to someone else is in neither.
 /// </summary>
 public sealed record RemsPoolCounts(int Unassigned, int Mine, int All);
+
+/// <summary>One entry of a list's Client dropdown: the client's id and the name the list shows.</summary>
+public sealed record RemsClientChoice(Guid Id, string Name);
+
+/// <summary>
+/// How many requests each quick-filter button on My Requests would list, keyed by the button's value:
+/// the Status group by REMS.Status code (<c>waiting_for_pickup</c> included) and the EMS group by form
+/// state. Each group is counted under every filter but its own, so a button's number is the rows
+/// clicking it produces.
+/// </summary>
+public sealed record RemsRequestQuickCounts(
+    IReadOnlyDictionary<string, int> Status,
+    IReadOnlyDictionary<string, int> EmsFormState,
+    /// <summary>The Created By Me / All pair, keyed <c>mine</c> and <c>all</c>, under every filter.</summary>
+    IReadOnlyDictionary<string, int> Ownership);
+
+/// <summary>
+/// How many requests each quick-filter button on Related Entities would list: the Entity Type group by
+/// REMS.EntityType code and the Related Client Status group by REMS.RelatedEntityStatus code. Each group
+/// is counted under every filter but its own, so a button's number is the rows clicking it produces.
+/// </summary>
+public sealed record RemsRelatedEntityQuickCounts(
+    IReadOnlyDictionary<string, int> EntityType,
+    IReadOnlyDictionary<string, int> RelatedStatus);
 
 /// <summary>
 /// The EMS-form and client-submission state for a request, projected from the (at most one active)
@@ -148,7 +190,17 @@ public sealed record RemsRelatedEntityQuery(
     string? RelatedStatus,
     SortRequest Sort,
     int Page,
-    int Limit);
+    int Limit,
+    /// <summary>The clients the request is for — any of them. The Client column's dropdown.</summary>
+    IReadOnlyList<Guid>? ClientPersonIds = null,
+    /// <summary>The request's status, in the terms the column shows (see RemsRequestFilters).</summary>
+    string? RequestStatus = null,
+    DateTime? SubmittedFromUtc = null,
+    DateTime? SubmittedToUtc = null,
+    DateTime? CreatedFromUtc = null,
+    DateTime? CreatedToUtc = null,
+    DateTime? UpdatedFromUtc = null,
+    DateTime? UpdatedToUtc = null);
 
 /// <summary>
 /// One Related Entities row: the PARENT request, plus the count of related clients declared on it. The
@@ -263,6 +315,24 @@ public interface IRemsRepository
     Task<RemsPoolCounts> CountPoolScopesAsync(
         RemsRequestListOptions options, CancellationToken cancellationToken = default);
 
+    /// <summary>The My Requests quick-filter counts — see <see cref="RemsRequestQuickCounts"/>.</summary>
+    Task<RemsRequestQuickCounts> CountQuickFiltersAsync(
+        RemsRequestListOptions options, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The clients across the requests the caller may see under the options' scope, for the Client
+    /// column's dropdown. The field filters are ignored: the dropdown offers every client the list can show.
+    /// </summary>
+    Task<IReadOnlyList<RemsClientChoice>> ListRequestClientsAsync(
+        RemsRequestListOptions options, CancellationToken cancellationToken = default);
+
+    /// <summary>The Related Entities quick-filter counts — see <see cref="RemsRelatedEntityQuickCounts"/>.</summary>
+    Task<RemsRelatedEntityQuickCounts> CountRelatedEntityQuickFiltersAsync(
+        RemsRelatedEntityQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>The clients across the Related Entities list, for its Client filter — whoever it could narrow to.</summary>
+    Task<IReadOnlyList<RemsClientChoice>> ListRelatedEntityClientsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>
     /// EMS-form / client-submission state for the given requests (one active form per request), for the
     /// dashboard rows. Requests with no form are simply absent from the result.
@@ -362,4 +432,11 @@ public interface IRemsRepository
     /// </summary>
     Task<bool> IsClientPersonSharedAsync(Guid personId, Guid excludingRemsId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The client picker's candidates: the people some request in the tenant names as its client
+    /// (<see cref="REMS.ClientPersonId"/>), narrowed to requests whose intake form was raised under
+    /// <paramref name="entityTypeCode"/> when one is given, and matched on name, email or phone.
+    /// </summary>
+    Task<IReadOnlyList<Person>> LookupClientsAsync(
+        string term, string? entityTypeCode, int limit, CancellationToken cancellationToken = default);
 }

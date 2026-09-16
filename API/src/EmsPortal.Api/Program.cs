@@ -15,8 +15,14 @@ using EmsPortal.Infrastructure;
 using EmsPortal.Infrastructure.Hangfire;
 using EmsPortal.Infrastructure.Logging;
 using EmsPortal.Infrastructure.Persistence;
+using EmsPortal.Shared.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+
+// Secrets such as the Microsoft sign-in keys live in a .env file: beside the project under Visual Studio /
+// `dotnet run`, beside EmsPortal.Api.dll on a server. Its lines become environment variables before
+// configuration is built, so `Authentication__Microsoft__ClientId=…` sets Authentication:Microsoft:ClientId.
+var dotEnvPath = DotEnv.Load(Directory.GetCurrentDirectory(), AppContext.BaseDirectory);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,6 +65,8 @@ builder.Services.AddScoped<EmsPortal.Api.Storage.IUploadRecordKeyResolver, EmsPo
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<EmsPortal.Api.Dashboard.IDashboardCacheService, EmsPortal.Api.Dashboard.DashboardCacheService>();
 builder.Services.AddScoped<EmsPortal.Api.Dashboard.IDashboardQueryService, EmsPortal.Api.Dashboard.DashboardQueryService>();
+// STATIC-APPROVAL-POLICY
+builder.Services.AddScoped<EmsPortal.Api.Approval.IRemsApprovalPolicy, EmsPortal.Api.Approval.RemsApprovalPolicy>();
 
 // CORS for the browser SPA (WEB/). Allowed origins come from configuration
 // (Cors:AllowedOrigins); falls back to the local Quasar dev server ports.
@@ -71,6 +79,11 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()));
 
 var app = builder.Build();
+
+if (dotEnvPath is not null)
+{
+    app.Logger.LogInformation("Loaded environment overrides from {DotEnvPath}", dotEnvPath);
+}
 
 // The Integration API owns the application schema and applies EF Core migrations
 // on startup. The Background Worker and MCP Server must not run migrations.

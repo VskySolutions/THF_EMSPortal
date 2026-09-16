@@ -27,8 +27,8 @@
     <app-filter-drawer v-model="filterOpen" :chips="allChips" @remove="onRemoveFilter" @clear="onClearFilters">
       <app-column-filters v-model="filters" :columns="filterableColumns" />
       <!-- A received range has no column of its own: it is two controls, not one. -->
-      <app-date-field v-model="extras.createdFrom" label="Received From" :dense="false" />
-      <app-date-field v-model="extras.createdTo" label="Received To" :dense="false" />
+      <app-date-field v-model="extras.createdFrom" label="Received From" :dense="false" :max-date="extras.createdTo" />
+      <app-date-field v-model="extras.createdTo" label="Received To" :dense="false" :min-date="extras.createdFrom" />
       <div v-if="invalidRange" class="text-caption text-negative">
         “Received From” is after “Received To” — no notification can match both.
       </div>
@@ -142,12 +142,13 @@ const columns = computed(() => [
     label: "Type",
     field: "type",
     align: "left",
+    sortable: true,
     default: true,
     filterOptions: allTypes.map((t) => ({ label: t.label, value: t.value }))
   },
-  { name: "notification", label: "Notification", field: "title", align: "left", default: true, filterable: false },
+  { name: "notification", label: "Notification", field: "title", align: "left", sortable: true, default: true, filterable: false },
   { name: "createdOnUtc", label: "Received", field: "createdOnUtc", align: "left", sortable: true, default: true, filterable: false },
-  { name: "status", label: "Status", field: "isRead", align: "left", default: true, filterOptions: READ_OPTIONS },
+  { name: "status", label: "Status", field: "isRead", align: "left", sortable: true, default: true, filterOptions: READ_OPTIONS },
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
 

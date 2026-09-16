@@ -59,6 +59,10 @@
           <q-tooltip>Refresh</q-tooltip>
         </q-btn>
       </div>
+      <!-- A list's own counted shortcuts, on a row of their own under the bar (see QuickFilterBar). -->
+      <div v-if="$slots['quick-filters']" class="full-width q-mt-sm">
+        <slot name="quick-filters" />
+      </div>
       <div v-if="selectable && innerSelected.length" class="row full-width items-center q-mt-sm">
         <q-chip dense color="primary" text-color="white">{{ innerSelected.length }} selected</q-chip>
         <slot name="bulk-actions" :selected="innerSelected" />
@@ -298,6 +302,12 @@ const forwardedSlots = computed(() =>
 <style scoped>
 .app-data-table {
   border-radius: 12px;
+}
+/* The top bar sits 5px in from the table's sides, so the title and the quick-filter bar under it line
+   up with the grid's own edge rather than floating a gutter inside it. */
+.app-data-table :deep(.q-table__top) {
+  padding-left: 5px;
+  padding-right: 5px;
 }
 .app-data-table :deep(thead tr th) {
   position: sticky;

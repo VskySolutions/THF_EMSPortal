@@ -91,8 +91,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local environment files
-.env.local*
+# Local environment files (secrets: the API reads API/src/EmsPortal.Api/.env at startup). The tracked
+# .env.example is the template.
+.env
+.env.*
+!.env.example
 
 # Uploaded media (runtime/local + test artifacts). media-uploads/ is the single upload root for every
 # module; uf-attachments/ was a second bucket that Universal Feature attachments used before they were

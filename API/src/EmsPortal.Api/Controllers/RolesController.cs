@@ -134,6 +134,8 @@ public sealed class RolesController : ControllerBase
         .Add("isSystem", r => r.IsSystem, r => r.Name)
         .Add("scope", r => r.TenantName ?? "Platform", r => r.Name)
         .Add("permissionCount", r => r.PermissionCount, r => r.Name)
+        .Add("createdBy", r => r.CreatedBy, r => r.Name)
+        .Add("updatedBy", r => r.UpdatedBy, r => r.Name)
         .Add("createdOnUtc", r => r.CreatedOnUtc)
         .Add("updatedOnUtc", r => r.UpdatedOnUtc);
 

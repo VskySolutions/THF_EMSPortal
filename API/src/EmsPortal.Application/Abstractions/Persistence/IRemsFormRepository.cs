@@ -41,7 +41,28 @@ public sealed record RemsClientFormQuery(
     RemsClientFormAssignment Assignment,
     SortRequest Sort,
     int Page,
-    int Limit);
+    int Limit,
+    /// <summary>A specific holding admin — distinct from the Mine slice, which is whoever is asking.</summary>
+    Guid? AssignedAdminUserId = null,
+    /// <summary>The CSE named on the request.</summary>
+    Guid? CseUserId = null,
+    /// <summary>The clients the request is for — any of them. The Client column's dropdown.</summary>
+    IReadOnlyList<Guid>? ClientPersonIds = null,
+    DateTime? SubmittedFromUtc = null,
+    DateTime? SubmittedToUtc = null,
+    DateTime? CreatedFromUtc = null,
+    DateTime? CreatedToUtc = null,
+    DateTime? UpdatedFromUtc = null,
+    DateTime? UpdatedToUtc = null);
+
+/// <summary>
+/// How many requests each quick-filter button on EMS Review would list: the All / Assigned-to-me pair,
+/// and the Request Status group by REMS.Status code (<c>waiting_for_pickup</c> included). Each group is
+/// counted under every filter but its own, so a button's number is the rows clicking it produces.
+/// </summary>
+public sealed record RemsClientFormQuickCounts(
+    IReadOnlyDictionary<string, int> Assignment,
+    IReadOnlyDictionary<string, int> RequestStatus);
 
 /// <summary>
 /// One EMS-Inbox row (WO-112): a request that has a form, projected with the request context, the form
@@ -106,6 +127,13 @@ public interface IRemsFormRepository
     /// </summary>
     Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(
         RemsClientFormQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>The EMS Review quick-filter counts — see <see cref="RemsClientFormQuickCounts"/>.</summary>
+    Task<RemsClientFormQuickCounts> CountClientFormQuickFiltersAsync(
+        RemsClientFormQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>The clients across the EMS Review queue, for its Client filter — whoever it could narrow to.</summary>
+    Task<IReadOnlyList<RemsClientChoice>> ListClientFormClientsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>The form with its drafts, submissions and email events loaded.</summary>
     Task<REMSForm?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);

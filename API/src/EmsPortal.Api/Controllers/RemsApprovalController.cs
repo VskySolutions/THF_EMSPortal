@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EmsPortal.Api.Approval;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
@@ -40,6 +41,9 @@ public sealed class RemsApprovalController : ControllerBase
     private const string CodeRoundClosed = "REMS_ROUND_CLOSED";
     private const string CodeChecklistIncomplete = "REMS_CHECKLIST_INCOMPLETE";
     private const string CodeApproversLocked = "REMS_APPROVERS_LOCKED";
+    // STATIC-APPROVAL-POLICY
+    private const string CodeRouteBlocked = "REMS_ROUTE_BLOCKED";
+    private const string CodeApproverReserved = "REMS_APPROVER_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
     private const string TaxFormSetKey = "REMS.TaxForm";
@@ -57,6 +61,8 @@ public sealed class RemsApprovalController : ControllerBase
     private readonly IActivityEventWriter _activity;
     private readonly INotificationDispatcher _notifications;
     private readonly IOptionCodeResolver _codes;
+    // STATIC-APPROVAL-POLICY
+    private readonly IRemsApprovalPolicy _policy;
 
     public RemsApprovalController(
         IRemsRepository rems,
@@ -70,8 +76,10 @@ public sealed class RemsApprovalController : ControllerBase
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
-        IOptionCodeResolver codes)
+        IOptionCodeResolver codes,
+        IRemsApprovalPolicy policy)
     {
+        _policy = policy;
         _rems = rems;
         _delegations = delegations;
         _engagements = engagements;
@@ -103,9 +111,26 @@ public sealed class RemsApprovalController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
         }
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS approvers retrieved."));
+    }
+
+    /// <summary>STATIC-APPROVAL-POLICY. The fixed rules as they resolve in the caller's tenant.</summary>
+    [HttpGet("approval-policy")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsApprovalPolicyView>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApprovalPolicy(CancellationToken cancellationToken)
+    {
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        var ids = policy.TaxExceptionCses.Concat(policy.Shareholders).Select(u => u.Id).ToList();
+        var names = await _users.GetFullNamesAsync(ids, cancellationToken);
+
+        var view = new RemsApprovalPolicyView(
+            policy.StaticRouting,
+            policy.Shareholders.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList(),
+            policy.TaxExceptionCses.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList());
+        return Ok(ApiResponseFactory.Success(view, "REMS approval policy retrieved."));
     }
 
     /// <summary>
@@ -163,6 +188,14 @@ public sealed class RemsApprovalController : ControllerBase
                 return BadRequest(ApiResponseFactory.Error(
                     ApiErrorCodes.ValidationFailed, "Validation failed.", "One or more selected approvers are not active users of this tenant."));
             }
+
+            // STATIC-APPROVAL-POLICY: the seats already approve; picking one of them again is refused.
+            var policy = await _policy.ForTenantAsync(tenantId, cancellationToken);
+            if (policy.StaticRouting && requested.Intersect(RemsStaticApprovalRoute.ReservedUserIds(engagement, policy)).Any())
+            {
+                return ConflictResult(CodeApproverReserved,
+                    "The CSE, the Department Director and the Shareholders already approve and cannot be added again.");
+            }
         }
 
         // Reconcile to exactly the requested set.
@@ -183,8 +216,8 @@ public sealed class RemsApprovalController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS approvers updated."));
     }
 
@@ -221,7 +254,12 @@ public sealed class RemsApprovalController : ControllerBase
             return prereqError;
         }
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        if (route.BlockedReason is { } blocked)
+        {
+            return ConflictResult(CodeRouteBlocked, blocked);
+        }
+        var approvers = route.Approvers;
         if (approvers.Count == 0)
         {
             return ConflictResult(CodeNoApprovers, "There are no approvers for this engagement; name a CSE, a department director or a commission recipient first, or add approvers on the Approval tab.");
@@ -229,7 +267,7 @@ public sealed class RemsApprovalController : ControllerBase
 
         await CreateRoundAsync(engagement, approvers, me, isResubmission: false, cancellationToken);
 
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS engagement sent for approval."));
     }
 
@@ -264,7 +302,12 @@ public sealed class RemsApprovalController : ControllerBase
             return prereqError;
         }
 
-        var approvers = await BuildApproverListAsync(engagement, cancellationToken);
+        var route = await BuildRouteAsync(engagement, cancellationToken);
+        if (route.BlockedReason is { } blocked)
+        {
+            return ConflictResult(CodeRouteBlocked, blocked);
+        }
+        var approvers = route.Approvers;
         if (approvers.Count == 0)
         {
             return ConflictResult(CodeNoApprovers, "There are no approvers for this engagement.");
@@ -272,7 +315,7 @@ public sealed class RemsApprovalController : ControllerBase
 
         await CreateRoundAsync(engagement, approvers, me, isResubmission: true, cancellationToken);
 
-        var list = await ToApproverListAsync(engagement, approvers, cancellationToken);
+        var list = await ToApproverListAsync(engagement, route, cancellationToken);
         return Ok(ApiResponseFactory.Success(list, "REMS engagement resubmitted for approval."));
     }
 
@@ -396,6 +439,19 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? role = null,
         [FromQuery] string? status = null,
+        // The round's standing as the badge says it, and the CSE named on the request.
+        [FromQuery] string? roundStatus = null,
+        [FromQuery] Guid? cseUserId = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] DateTime? sentFrom = null,
+        [FromQuery] DateTime? sentTo = null,
+        [FromQuery] DateTime? decidedFrom = null,
+        [FromQuery] DateTime? decidedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
@@ -415,7 +471,11 @@ public sealed class RemsApprovalController : ControllerBase
             Enum.TryParse<RemsApprovalTaskStatus>(status, ignoreCase: true, out var s) ? s : null;
 
         var (tasks, total) = await _approvals.ListTasksByApproverAsync(
-            new RemsApprovalTaskQuery(me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit), cancellationToken);
+            new RemsApprovalTaskQuery(
+                me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit,
+                roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
+                createdFrom, createdTo, updatedFrom, updatedTo),
+            cancellationToken);
 
         // The audit actors AND each request's CSE, resolved in one read: the CSE is a column on this list
         // now, and a name lookup per row would be one round trip per task.
@@ -448,6 +508,84 @@ public sealed class RemsApprovalController : ControllerBase
                 NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc);
         });
         return Ok(ApiResponseFactory.Paginated(rows, "REMS approval tasks retrieved.", page, limit, total));
+    }
+
+    /// <summary>
+    /// The CSEs across the caller's own inbox, for its CSE filter. Read off the caller's tasks rather
+    /// than the tenant's CSE directory: an approver may hold no REMS permission, so the directory is not
+    /// theirs to read — and a filter offering people none of their requests name would be noise anyway.
+    /// </summary>
+    [HttpGet("approval-tasks/cses")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsUserRef>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskCses(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var ids = await _approvals.ListCseIdsByApproverAsync(me, cancellationToken);
+        var names = await _users.GetFullNamesAsync(ids, cancellationToken);
+        var cses = ids
+            .Select(id => RemsWorkspaceMapper.UserRef(id, names)!)
+            .OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return Ok(ApiResponseFactory.Success(cses, "Approval inbox CSEs retrieved."));
+    }
+
+    /// <summary>The clients across the caller's own inbox, for its Client filter — read off their tasks, like the CSEs.</summary>
+    [HttpGet("approval-tasks/clients")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskClients(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var clients = await _approvals.ListClientsByApproverAsync(me, cancellationToken);
+        return Ok(ApiResponseFactory.Success(clients, "Approval inbox clients retrieved."));
+    }
+
+    /// <summary>The quick-filter counts for the inbox, under the same search and filters.</summary>
+    [HttpGet("approval-tasks/quick-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsApprovalTaskQuickCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskQuickCounts(
+        [FromQuery] string? search = null,
+        [FromQuery] string? role = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? roundStatus = null,
+        [FromQuery] Guid? cseUserId = null,
+        // The Client column's dropdown — any of the chosen clients.
+        [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] DateTime? sentFrom = null,
+        [FromQuery] DateTime? sentTo = null,
+        [FromQuery] DateTime? decidedFrom = null,
+        [FromQuery] DateTime? decidedTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? updatedFrom = null,
+        [FromQuery] DateTime? updatedTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        RemsApproverRole? roleFilter = Enum.TryParse<RemsApproverRole>(role, ignoreCase: true, out var r) ? r : null;
+        RemsApprovalTaskStatus? statusFilter =
+            Enum.TryParse<RemsApprovalTaskStatus>(status, ignoreCase: true, out var s) ? s : null;
+        var counts = await _approvals.CountInboxQuickFiltersAsync(
+            new RemsApprovalTaskQuery(
+                me, search, roleFilter, statusFilter, SortRequest.Default, Page: 1, Limit: 1,
+                roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
+                createdFrom, createdTo, updatedFrom, updatedTo),
+            cancellationToken);
+        return Ok(ApiResponseFactory.Success(counts, "Approval inbox quick-filter counts retrieved."));
     }
 
     /// <summary>
@@ -768,24 +906,32 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     /// <summary>
-    /// The approver set to route to (AC-REMS-018): the automatic approvers, plus whoever was added on
-    /// the Approval tab.
+    /// The approver set to route to. STATIC-APPROVAL-POLICY: THF's fixed rules while the policy is on;
+    /// otherwise the platform's own — the automatic approvers (AC-REMS-018) plus whoever was added on the
+    /// Approval tab. Either way everyone is asked at the same time.
     /// </summary>
-    private async Task<IReadOnlyList<(Guid UserId, RemsApproverRole Role)>> BuildApproverListAsync(
-        REMSEngagement engagement, CancellationToken cancellationToken)
+    private async Task<RemsApprovalRoute> BuildRouteAsync(REMSEngagement engagement, CancellationToken cancellationToken)
     {
+        var picked = (await _engagements.ListApproversAsync(engagement.Id, cancellationToken)).Select(a => a.UserId).ToList();
+
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        if (policy.StaticRouting)
+        {
+            var fixedRoute = RemsStaticApprovalRoute.Build(engagement, picked, policy);
+            return fixedRoute with { Approvers = fixedRoute.Approvers.OrderBy(a => DisplayRank(a.Role)).ToList() };
+        }
+
         var shareholders = await ShareholderIdsAsync(cancellationToken);
-        var picked = await _engagements.ListApproversAsync(engagement.Id, cancellationToken);
 
         // Added approvers come ON TOP of the automatic ones — picking somebody never removes an approver
         // who holds their place by standing on the engagement.
-        var userIds = AutomaticApproverIds(engagement, shareholders).Concat(picked.Select(a => a.UserId));
-
-        return userIds
+        var approvers = AutomaticApproverIds(engagement, shareholders).Concat(picked)
             .Distinct()
             .Select(userId => (UserId: userId, Role: RoleFor(engagement, shareholders, userId)))
             .OrderBy(a => DisplayRank(a.Role))
             .ToList();
+
+        return new RemsApprovalRoute(approvers, null);
     }
 
     /// <summary>Where each role sits in the approver list, most senior first.</summary>
@@ -868,9 +1014,9 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     private async Task<RemsApproverList> ToApproverListAsync(
-        REMSEngagement engagement, IReadOnlyList<(Guid UserId, RemsApproverRole Role)> approvers,
-        CancellationToken cancellationToken)
+        REMSEngagement engagement, RemsApprovalRoute route, CancellationToken cancellationToken)
     {
+        var approvers = route.Approvers;
         var names = await _users.GetFullNamesAsync(approvers.Select(a => a.UserId), cancellationToken);
         var suggestions = approvers
             .Select(a => new RemsApproverSuggestion(
@@ -883,7 +1029,13 @@ public sealed class RemsApprovalController : ControllerBase
             .Select(a => a.UserId)
             .ToList();
 
-        return new RemsApproverList(engagement.Id, engagement.Status.ToString(), suggestions, selected);
+        // STATIC-APPROVAL-POLICY
+        var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
+        var reserved = policy.StaticRouting ? RemsStaticApprovalRoute.ReservedUserIds(engagement, policy) : Array.Empty<Guid>();
+
+        return new RemsApproverList(
+            engagement.Id, engagement.Status.ToString(), suggestions, selected,
+            policy.StaticRouting, reserved, route.BlockedReason);
     }
 
     /// <summary>
@@ -911,11 +1063,10 @@ public sealed class RemsApprovalController : ControllerBase
             return ConflictResult(CodeMarketingRequired, "At least one marketing tag is required before sending for approval.");
         }
 
-        // The commission has to be settled before it is signed off.
-        var allocated = Math.Round(
-            engagement.CommissionSplits.Where(s => !s.Deleted).Sum(s => s.CommissionPercentage),
-            2, MidpointRounding.AwayFromZero);
-        if (allocated != 100m)
+        // Commission is optional; a split somebody started has to be settled before it is signed off.
+        var splits = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();
+        var allocated = Math.Round(splits.Sum(s => s.CommissionPercentage), 2, MidpointRounding.AwayFromZero);
+        if (splits.Count > 0 && allocated != 100m)
         {
             return ConflictResult(
                 CodeCommissionNotFullyAllocated,

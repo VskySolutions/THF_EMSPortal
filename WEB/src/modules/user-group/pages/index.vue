@@ -207,7 +207,7 @@ const fmt = useDateFormat();
 const columns = [
   { name: "name", label: "Name", field: "name", align: "left", sortable: true, default: true },
   // Descriptions are rich text; the cell shows the text without its markup (see utils/richText).
-  { name: "description", label: "Description", field: (r) => stripHtml(r.description), align: "left" },
+  { name: "description", label: "Description", field: (r) => stripHtml(r.description), align: "left", sortable: true },
   { name: "memberCount", label: "Members", field: "memberCount", align: "left", sortable: true, default: true, filterable: false },
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }

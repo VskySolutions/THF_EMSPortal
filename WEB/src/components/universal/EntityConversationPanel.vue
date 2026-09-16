@@ -405,17 +405,29 @@ const onComposerKeydown = (e) => {
 };
 
 const pickMention = (c) => {
-  editorRef.value?.focus?.();
-  // Reselect the "@query" range and replace it with a non-editable mention token.
-  if (mentionRange) {
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(mentionRange);
-  }
-  const html = `${mentionTokenHtml(c)}&nbsp;`;
-  editorRef.value?.runCmd?.("insertHTML", html);
+  const range = mentionRange;
   mentionRange = null;
   mentionOpen.value = false;
+  const el = editorContentEl();
+  if (!range || !el) return;
+  editorRef.value?.focus?.();
+
+  // The typed "@query" is replaced by hand. QEditor's runCmd restores the caret it last saved — a collapsed
+  // point after the "@" — before inserting, so going through it left the "@" standing: "@@Name".
+  range.deleteContents();
+  const fragment = document.createRange().createContextualFragment(`${mentionTokenHtml(c)}&nbsp;`);
+  const last = fragment.lastChild;
+  range.insertNode(fragment);
+
+  // Carry on typing after the token.
+  const caret = document.createRange();
+  caret.setStartAfter(last);
+  caret.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(caret);
+  // QEditor reads the DOM back on input — this is what puts the token into the draft.
+  el.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
 // ---- post / edit / delete ----

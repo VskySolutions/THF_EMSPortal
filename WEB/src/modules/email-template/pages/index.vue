@@ -125,12 +125,13 @@ const scopeParams = computed(() => {
 
 const columns = [
   { name: "displayName", label: "Template", field: "displayName", align: "left", sortable: true, default: true },
-  { name: "subject", label: "Subject", field: "subject", align: "left", default: true },
+  { name: "subject", label: "Subject", field: "subject", align: "left", sortable: true, default: true },
   {
     name: "status",
     label: "Status",
     field: "isOverridden",
     align: "left",
+    sortable: true,
     default: true,
     filterOptions: [{ label: "Overridden", value: true }, { label: "Default", value: false }]
   },

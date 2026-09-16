@@ -147,9 +147,9 @@ const columns = [
   { name: "name", label: "Name", field: "name", align: "left", sortable: true, default: true },
   { name: "entityType", label: "Entity", field: "entityType", align: "left", sortable: true, default: true },
   { name: "itemCount", label: "Values", field: "itemCount", align: "left", sortable: true, default: true },
-  { name: "itemSortMode", label: "Order", field: "itemSortMode", align: "left", default: true },
-  { name: "origin", label: "Type", field: "isSystem", align: "left", default: true },
-  { name: "isActive", label: "Status", field: "isActive", align: "left", default: true },
+  { name: "itemSortMode", label: "Order", field: "itemSortMode", align: "left", sortable: true, default: true },
+  { name: "origin", label: "Type", field: "isSystem", align: "left", sortable: true, default: true },
+  { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, default: true },
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ];

@@ -225,6 +225,8 @@ public sealed class StickyNotesController : ControllerBase
             .Add("scope", n => n.Scope, n => n.CreatedOnUtc)
             .Add("expiresAtUtc", n => n.ExpiresAtUtc, n => n.CreatedOnUtc)
             .Add("dismissalCount", n => n.DismissalCount, n => n.CreatedOnUtc)
+            .Add("createdBy", n => n.CreatedBy, n => n.CreatedOnUtc)
+            .Add("updatedBy", n => n.UpdatedBy, n => n.CreatedOnUtc)
             .Add("createdOnUtc", n => n.CreatedOnUtc)
             .Add("updatedOnUtc", n => n.UpdatedOnUtc);
 
