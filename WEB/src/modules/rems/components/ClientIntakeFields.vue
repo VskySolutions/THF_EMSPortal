@@ -394,12 +394,13 @@ const ADDRESS_COLS = {
   postalCode: "col-12 col-sm-4 col-md-3"
 };
 
-// The billing block adds the three boxes saying who the invoice is for, and they LEAD it.
+// The billing block adds the four boxes saying who the invoice is for, and they LEAD it.
 const BILLING_COLS = {
   ...ADDRESS_COLS,
   firstName: "col-12 col-sm-6 col-md-3",
-  lastName: "col-12 col-sm-6 col-md-3",
-  email: "col-12 col-md-6"
+  lastName: "col-8 col-sm-4 col-md-3",
+  suffix: "col-4 col-sm-2 col-md-2",
+  email: "col-12 col-md-4"
 };
 
 const isIndividual = computed(() => props.entityType === "individual");

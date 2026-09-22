@@ -6,8 +6,8 @@
     :placeholder="placeholder"
     :readonly="readonly"
     :disable="disable"
-    :error="tooLong"
-    :error-message="`A ${label.toLowerCase()} is at most ${NAME_SUFFIX_MAX_LENGTH} characters.`"
+    :error="tooLong || error"
+    :error-message="tooLong ? `A ${label.toLowerCase()} is at most ${NAME_SUFFIX_MAX_LENGTH} characters.` : errorMessage"
     @blur="emit('blur', $event)"
   >
     <template #append>
@@ -57,7 +57,10 @@ defineProps({
   label: { type: String, default: "Suffix" },
   placeholder: { type: String, default: "Jr." },
   readonly: { type: Boolean, default: false },
-  disable: { type: Boolean, default: false }
+  disable: { type: Boolean, default: false },
+  // A message from the host, usually the server's, shown in the same slot as the length one.
+  error: { type: Boolean, default: false },
+  errorMessage: { type: String, default: "" }
 });
 
 const tooLong = computed(() => (model.value?.trim().length || 0) > NAME_SUFFIX_MAX_LENGTH);

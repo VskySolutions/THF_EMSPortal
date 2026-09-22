@@ -9,6 +9,9 @@ public static class PersonNames
     /// <summary>Mirrors the nvarchar(100) name columns, and the browser's NAME_MAX_LENGTH.</summary>
     public const int MaxLength = 100;
 
+    /// <summary>Mirrors the nvarchar(16) suffix columns, and the browser's NAME_SUFFIX_MAX_LENGTH.</summary>
+    public const int MaxSuffixLength = 16;
+
     /// <summary>
     /// What is wrong with a name, as a sentence to show against the field — or <c>null</c> when
     /// there is nothing wrong.

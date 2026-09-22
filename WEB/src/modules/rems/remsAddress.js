@@ -67,6 +67,7 @@ const ERROR_KEYS = {
   // rather than assumed, because this table is also what says which keys a message can arrive under.
   firstName: "firstName",
   lastName: "lastName",
+  suffix: "suffix",
   email: "email",
   phone: "phone"
 };
