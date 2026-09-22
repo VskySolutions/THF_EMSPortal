@@ -20,7 +20,7 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     private const int SearchMinLength = 2;
     private const int SearchMaxLength = 100;
 
-    private static readonly string[] Fields = { "customernumber", "name1", "createddate", "createdby" };
+    private static readonly string[] Fields = { "customernumber", "name1", "specification6name", "createddate", "createdby" };
 
     // The restriction is written in Maconomy's query language with the search text inside a quoted
     // literal, so a quote — or a backslash, or a control character — would break out of it.
@@ -80,9 +80,7 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
             cancellationToken);
 
         IReadOnlyList<MaconomyCustomerOption> options = result.Records
-            .Select(record => new MaconomyCustomerOption(
-                string.Join(" - ", new[] { Value(record, "customernumber"), Value(record, "name1") }.Where(s => s.Length > 0)),
-                Value(record, "customernumber")))
+            .Select(ToOption)
             .Where(option => option.Value.Length > 0)
             .ToList();
 
@@ -98,6 +96,20 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     {
         var text = Whitespace.Replace(Unsafe.Replace(search ?? string.Empty, string.Empty), " ").Trim();
         return text.Length <= SearchMaxLength ? text : text[..SearchMaxLength].TrimEnd();
+    }
+
+    /// <summary>"number - name (specification 6 name)" to read, blanks left out; the number to store.</summary>
+    private static MaconomyCustomerOption ToOption(IReadOnlyDictionary<string, string?> record)
+    {
+        var number = Value(record, "customernumber");
+        var name = Value(record, "name1");
+        var specification6Name = Value(record, "specification6name");
+        var text = string.Join(" - ", new[] { number, name }.Where(s => s.Length > 0));
+        if (specification6Name.Length > 0)
+        {
+            text = $"{text} ({specification6Name})";
+        }
+        return new MaconomyCustomerOption(text, number, specification6Name.Length > 0 ? specification6Name : null);
     }
 
     private static string Value(IReadOnlyDictionary<string, string?> record, string field)

@@ -255,7 +255,8 @@ export const maconomyApi = {
     api.post("/api/integrations/maconomy/connection/login", null, { params: { tenantId } }).then(unwrap),
   forgetToken: (tenantId) =>
     api.delete("/api/integrations/maconomy/connection/token", { params: { tenantId } }).then(envelope),
-  // → [{ text: "10023 - Acme Corp", value: "10023" }]; empty below two characters.
+  // → [{ text: "10023 - Acme Corp (Retail)", value: "10023", specification6Name: "Retail" }]; empty
+  // below two characters.
   searchCustomers: (search, limit, tenantId) =>
     api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap)
 };

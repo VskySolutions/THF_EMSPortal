@@ -52,5 +52,8 @@ public sealed record MaconomyConnectionResponse(
 /// <summary>The outcome of a fresh login: when the token was issued, and when it stops being used.</summary>
 public sealed record MaconomyLoginResponse(bool Connected, DateTime IssuedOnUtc, DateTime ExpiresOnUtc);
 
-/// <summary>One customer as a dropdown option: <c>text</c> is "number - name", <c>value</c> the number.</summary>
-public sealed record MaconomyCustomerOptionResponse(string Text, string Value);
+/// <summary>
+/// One customer as a dropdown option: <c>text</c> is "number - name (specification 6 name)", <c>value</c>
+/// the number, and <c>specification6Name</c> that field on its own, null when blank.
+/// </summary>
+public sealed record MaconomyCustomerOptionResponse(string Text, string Value, string? Specification6Name);

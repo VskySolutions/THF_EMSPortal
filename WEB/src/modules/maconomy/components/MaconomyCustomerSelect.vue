@@ -45,6 +45,13 @@
   </div>
 </template>
 
+<script>
+// Answers are shared by every picker and kept for two minutes: QSelect re-runs the filter whenever the
+// menu opens, and the same term a moment later is the same list.
+const CACHE_MS = 2 * 60 * 1000;
+const cache = new Map();
+</script>
+
 <script setup>
 // A customer picker fed by the Maconomy lookup: every two or more characters typed become a search, and
 // the chosen customer stays in the list however the next search narrows it.
@@ -85,9 +92,27 @@ const emptyText = ref(TOO_SHORT);
 // The chosen customer is kept at the top of every list, or QSelect would show its bare number as soon as
 // a search came back without it.
 const withSelected = (rows) => {
-  const list = rows.map((r) => ({ text: r.text, value: r.value }));
+  const list = rows.map((r) => ({
+    text: r.text,
+    value: r.value,
+    specification6Name: r.specification6Name || null
+  }));
   if (selected.value && !list.some((o) => o.value === selected.value.value)) list.unshift(selected.value);
   return list;
+};
+
+// One call per term, tenant and limit inside the cache window. A lookup still in flight is shared rather
+// than repeated, and a failed one is forgotten at once so the next keystroke tries again.
+const search = (term) => {
+  const key = `${props.tenantId || ""}|${props.limit || ""}|${term.toLowerCase()}`;
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && now - hit.at < CACHE_MS) return hit.rows;
+  cache.forEach((entry, k) => { if (now - entry.at >= CACHE_MS) cache.delete(k); });
+  const rows = maconomyApi.searchCustomers(term, props.limit || undefined, props.tenantId || undefined)
+    .catch((err) => { cache.delete(key); throw err; });
+  cache.set(key, { at: now, rows });
+  return rows;
 };
 
 const onFilter = (val, update) => {
@@ -99,7 +124,7 @@ const onFilter = (val, update) => {
     return;
   }
   loading.value = true;
-  maconomyApi.searchCustomers(term, props.limit || undefined, props.tenantId || undefined)
+  search(term)
     .then((rows) => {
       emptyText.value = "No customers match.";
       update(() => { options.value = withSelected(rows || []); });

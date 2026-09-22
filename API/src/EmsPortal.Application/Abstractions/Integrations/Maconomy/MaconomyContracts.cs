@@ -9,8 +9,11 @@ public sealed record MaconomyFilterRequest(string Restriction, IReadOnlyList<str
 /// <summary>The filter pane's records, each as field name → value text, and the row count Maconomy reported.</summary>
 public sealed record MaconomyFilterResult(IReadOnlyList<IReadOnlyDictionary<string, string?>> Records, int RowCount);
 
-/// <summary>One customer as a dropdown option: "number - name" to read, the number to store.</summary>
-public sealed record MaconomyCustomerOption(string Text, string Value);
+/// <summary>
+/// One customer as a dropdown option: "number - name (specification 6 name)" to read, the number to store,
+/// and the specification 6 name on its own, null when blank.
+/// </summary>
+public sealed record MaconomyCustomerOption(string Text, string Value, string? Specification6Name);
 
 /// <summary>What a fresh login produced: when the token was issued, and when it stops being used.</summary>
 public sealed record MaconomyLoginResult(DateTime IssuedOnUtc, DateTime ExpiresOnUtc);

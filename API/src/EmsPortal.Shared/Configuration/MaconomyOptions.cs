@@ -23,5 +23,5 @@ public sealed class MaconomyOptions
     public int TokenRefreshMarginSeconds { get; set; } = 60;
 
     /// <summary>Seconds a search result is kept per tenant and search text, absorbing keystroke bursts. Zero disables it.</summary>
-    public int SearchCacheSeconds { get; set; } = 30;
+    public int SearchCacheSeconds { get; set; } = 120;
 }
