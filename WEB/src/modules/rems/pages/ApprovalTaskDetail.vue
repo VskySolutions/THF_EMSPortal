@@ -594,7 +594,7 @@ const fmt = useDateFormat();
 const {
   typeLabel, typeHint, requestStatusOption, referralSourceLabel,
   entityTypeLabel, formStatusOption, submissionStateOption,
-  departmentLabel, serviceLineLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
+  departmentLabel, serviceLineLabel, jobTemplateLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
   approverRoleLabel, approverRoleOption, approvalStatusOption,
   engagementStatusOption, roundStatusOption
 } = useRemsMeta();
@@ -719,6 +719,7 @@ const setupRows = computed(() => {
     // request field, so it sits in the request block above rather than here).
     { label: "Industry", value: industryLabel(e.industry) },
     { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
+    { label: "Job Template", value: jobTemplateLabel(e.jobTemplate) },
     { label: "Department Director", value: text(e.departmentDirector?.name) },
     { label: "Engagement Executive", value: text(e.engagementExecutive?.name) },
     { label: "Billing Manager", value: text(e.billingManager?.name) }

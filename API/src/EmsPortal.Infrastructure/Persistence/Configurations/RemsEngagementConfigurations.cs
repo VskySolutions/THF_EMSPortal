@@ -28,6 +28,7 @@ internal sealed class RemsEngagementConfiguration : IEntityTypeConfiguration<REM
         // value anybody may delete.
         builder.HasOne(e => e.Department).WithMany().HasForeignKey(e => e.DepartmentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.ServiceLine).WithMany().HasForeignKey(e => e.ServiceLineId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(e => e.JobTemplate).WithMany().HasForeignKey(e => e.JobTemplateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.Industry).WithMany().HasForeignKey(e => e.IndustryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.BillingPeriod).WithMany().HasForeignKey(e => e.BillingPeriodId).OnDelete(DeleteBehavior.Restrict);
 
@@ -35,6 +36,7 @@ internal sealed class RemsEngagementConfiguration : IEntityTypeConfiguration<REM
         // what the rest of the setup asks, so every read of an engagement wants it.
         builder.Navigation(e => e.Department).AutoInclude();
         builder.Navigation(e => e.ServiceLine).AutoInclude();
+        builder.Navigation(e => e.JobTemplate).AutoInclude();
         builder.Navigation(e => e.Industry).AutoInclude();
         builder.Navigation(e => e.BillingPeriod).AutoInclude();
         // A description of how the client is billed, not a treatise: long enough for the two or three

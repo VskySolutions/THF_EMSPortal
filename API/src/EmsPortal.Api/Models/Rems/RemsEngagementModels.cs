@@ -140,6 +140,7 @@ public sealed record RemsEngagementView(
     Guid Id,
     string? Department,
     string? ServiceLine,
+    string? JobTemplate,
     string? Industry,
     RemsUserRef? DepartmentDirector,
     RemsUserRef? EngagementExecutive,
@@ -274,6 +275,9 @@ public sealed class UpdateRemsEngagementRequest
     /// <c>REMS.ServiceLine</c> code; the key kept its old name).
     /// </summary>
     public string? ServiceLine { get; set; }
+
+    /// <summary>The job template the engagement is set up from (option-set <c>REMS.JobTemplate</c> code).</summary>
+    public string? JobTemplate { get; set; }
 
     /// <summary>
     /// The client's trade — the INDUSTRY as the setup form labels it (option-set

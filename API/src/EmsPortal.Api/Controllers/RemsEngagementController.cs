@@ -590,12 +590,17 @@ public sealed class RemsEngagementController : ControllerBase
                 await _codes.RemsIdAsync(RemsOptionSetKeys.Department, incomingDepartment, cancellationToken);
         }
 
-        // The two sub-classifications. Nothing branches on either — they narrow the line and the industry
+        // The three sub-classifications. Nothing branches on any of them — they narrow the line and the industry
         // group for reporting.
         if (request.ServiceLine is not null)
         {
             engagement.ServiceLineId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.ServiceLine, Normalize(request.ServiceLine), cancellationToken);
+        }
+        if (request.JobTemplate is not null)
+        {
+            engagement.JobTemplateId = await _codes.RemsIdAsync(
+                RemsOptionSetKeys.JobTemplate, Normalize(request.JobTemplate), cancellationToken);
         }
         if (request.Industry is not null)
         {

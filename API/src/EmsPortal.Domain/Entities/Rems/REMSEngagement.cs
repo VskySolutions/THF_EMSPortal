@@ -5,8 +5,8 @@ namespace EmsPortal.Domain.Entities;
 /// <summary>
 /// The engagement being set up by a <see cref="REMS"/> request — exactly one per request. Holds the
 /// servicing team, fee estimate, realization and billing schedule, and routes through approval.
-/// <see cref="Department"/>, <see cref="ServiceLine"/>, <see cref="Industry"/> and
-/// <see cref="BillingPeriod"/> store option-set codes.
+/// <see cref="Department"/>, <see cref="ServiceLine"/>, <see cref="JobTemplate"/>, <see cref="Industry"/>
+/// and <see cref="BillingPeriod"/> store option-set codes.
 /// <para>
 /// It hangs off the REQUEST, not off a <see cref="REMSEntity"/>. The initiator fills the engagement
 /// setup before the client is ever contacted, so there is no entity to attach it to when it is created —
@@ -44,6 +44,12 @@ public class REMSEngagement : AuditableEntity
     /// code). Classification only — nothing branches on it.
     /// </summary>
     public Guid? ServiceLineId { get; set; }
+
+    /// <summary>
+    /// The job template the engagement is set up from (option-set <c>REMS.JobTemplate</c> code): the kind
+    /// of work, finer than the service line. Classification only, like it.
+    /// </summary>
+    public Guid? JobTemplateId { get; set; }
 
     /// <summary>
     /// The client's trade — what the setup form calls the INDUSTRY (option-set <c>REMS.Industry</c>
@@ -99,10 +105,11 @@ public class REMSEngagement : AuditableEntity
     // "one active per parent" can be enforced by a filtered unique index (WHERE [Deleted] = 0) rather
     // than EF's non-filtered convention 1:1 index, which would block soft-delete + re-create.
     public REMS? Rems { get; set; }
-    // The four option-set references above. Every read goes through these — `.Value` is the code the
+    // The five option-set references above. Every read goes through these — `.Value` is the code the
     // application branches on and the API puts on the wire.
     public OptionSetItem? Department { get; set; }
     public OptionSetItem? ServiceLine { get; set; }
+    public OptionSetItem? JobTemplate { get; set; }
     public OptionSetItem? Industry { get; set; }
     public OptionSetItem? BillingPeriod { get; set; }
     public ICollection<REMSEngagementMarketingMethod> MarketingMethods { get; set; } = new List<REMSEngagementMarketingMethod>();

@@ -18,6 +18,7 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
         => _dbContext.RemsEngagements
             .Include(e => e.Department)
             .Include(e => e.ServiceLine)
+            .Include(e => e.JobTemplate)
             .Include(e => e.Industry)
             .Include(e => e.BillingPeriod)
             .Include(e => e.MarketingMethods)
@@ -32,6 +33,7 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
         => _dbContext.RemsEngagements
             .Include(e => e.Department)
             .Include(e => e.ServiceLine)
+            .Include(e => e.JobTemplate)
             .Include(e => e.Industry)
             .Include(e => e.BillingPeriod)
             .Include(e => e.MarketingMethods)
@@ -51,6 +53,7 @@ internal sealed class RemsEngagementRepository : IRemsEngagementRepository
         => _dbContext.RemsEngagements
             .Include(e => e.Department)
             .Include(e => e.ServiceLine)
+            .Include(e => e.JobTemplate)
             .Include(e => e.Industry)
             .Include(e => e.BillingPeriod)
             .Include(e => e.MarketingMethods)

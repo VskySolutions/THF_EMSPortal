@@ -129,6 +129,7 @@ public sealed record RemsApprovalEngagementView(
     string Status,
     string? Department,
     string? ServiceLine,
+    string? JobTemplate,
     string? Industry,
     RemsApprovalClientView Client,
     RemsApprovalEntityView Entity,

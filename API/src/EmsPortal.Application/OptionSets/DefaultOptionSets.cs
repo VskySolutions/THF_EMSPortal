@@ -349,11 +349,9 @@ public static class DefaultOptionSets
             // approval as client work. Carries no conditional detail: the audit and tax cards key off the
             // "audit" and "tax" codes specifically, so an Admin engagement asks for neither a signed CAF
             // nor a fiscal year end.
-            //
-            // RETIRED for the same reason and in the same way as Audit above — hidden, not deleted. An
-            // engagement is a piece of CLIENT work, and the firm's own internal jobs stopped being booked
-            // through this setup; the ones already booked keep their department.
-            new ItemDefinition("admin", "Admin", 6, IsActive: false),
+            // Retired for a while, as Audit above still is; offered again since September 2026, alongside
+            // the Non-Chargeable Internal service line it pairs with.
+            new ItemDefinition("admin", "Admin", 6),
         // Everything conditional on the engagement setup keys off these codes by name — the signed CAF on
         // audit and assurance, the fiscal year end on tax, the purchase order on gcs, the billing pair on
         // cas, and the approval prerequisites behind all of them (RemsEngagementCodes). So the seeded six
@@ -371,33 +369,49 @@ public static class DefaultOptionSets
             new ItemDefinition("program_admin_support", "Program and Administrative Support", 6),
         }),
         // The service actually being sold. A classification field: what the firm is engaged to do, for
-        // reporting and for the billing/marketing view. The Internal-* values are the firm's own work,
-        // booked as engagements so the same setup and approval route covers them.
+        // reporting and for the billing/marketing view. Non-Chargeable Internal is the firm's own work,
+        // booked as an engagement so the same setup and approval route covers it.
         new Definition(EntityType.Rems, "REMS.ServiceLine", "REMS Service Line", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("attest_services", "Attest Services", 1),
             new ItemDefinition("tax_compliance", "Tax Compliance", 2),
             new ItemDefinition("client_accounting_services", "Client Accounting Services", 3),
-            new ItemDefinition("outsourced_cfo", "Outsourced CFO", 4),
-            new ItemDefinition("consulting", "Consulting", 5),
-            new ItemDefinition("business_valuation", "Business Valuation", 6),
-            new ItemDefinition("it_services", "IT Services", 7),
-            new ItemDefinition("plan_administration", "Plan Administration", 8),
-            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 9),
-            new ItemDefinition("payroll_services", "Payroll Services", 10),
-            new ItemDefinition("peer_review", "Peer Review", 11),
-            new ItemDefinition("soc", "SOC", 12, Description:
+            new ItemDefinition("consulting", "Consulting", 4),
+            new ItemDefinition("business_valuation", "Business Valuation", 5),
+            new ItemDefinition("it_services", "IT Services", 6),
+            new ItemDefinition("plan_administration", "Plan Administration", 7),
+            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 8),
+            new ItemDefinition("peer_review", "Peer Review", 9),
+            new ItemDefinition("soc", "SOC", 10, Description:
                 "System and Organization Controls reporting (SOC 1 / SOC 2)."),
-            new ItemDefinition("employee_benefits", "Employee Benefits", 13),
-            new ItemDefinition("estate_planning", "Estate Planning", 14),
-            new ItemDefinition("litigation_support", "Litigation Support", 15),
-            new ItemDefinition("forensic_accounting", "Forensic Accounting", 16),
-            new ItemDefinition("internal_accounting", "Internal-Accounting", 17),
-            new ItemDefinition("internal_billing", "Internal-Billing", 18),
-            new ItemDefinition("internal_operations", "Internal-Operations", 19),
-            new ItemDefinition("internal_marketing", "Internal-Marketing", 20),
-            new ItemDefinition("internal_it", "Internal-IT", 21),
-            new ItemDefinition("internal_miscellaneous", "Internal-Miscellaneous", 22),
+            new ItemDefinition("employee_benefits", "Employee Benefits", 11),
+            new ItemDefinition("estate_planning", "Estate Planning", 12),
+            new ItemDefinition("litigation_support", "Litigation Support", 13),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 14),
+            new ItemDefinition("non_chargeable_internal", "Non-Chargeable Internal", 15),
+        }),
+        // The job template the engagement is set up from: the kind of work, finer than the service line
+        // and the department beside it. Classification only, so nothing branches on it. The list as THF
+        // supplied it, in its order.
+        new Definition(EntityType.Rems, "REMS.JobTemplate", "REMS Job Template", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("tax_compliance", "Tax Compliance", 1),
+            new ItemDefinition("consulting_engagement", "Consulting Engagement", 2),
+            new ItemDefinition("mergers_acquisitions", "Mergers and Acquisitions", 3),
+            new ItemDefinition("pension_administration_tax_compliance", "Pension Administration and Tax Compliance", 4),
+            new ItemDefinition("business_valuation", "Business Valuation", 5),
+            new ItemDefinition("agreed_upon_procedures", "Agreed Upon Procedures", 6),
+            new ItemDefinition("audit", "Audit", 7),
+            new ItemDefinition("examination", "Examination", 8),
+            new ItemDefinition("compilation", "Compilation", 9),
+            new ItemDefinition("review", "Review", 10),
+            new ItemDefinition("peer_review", "Peer Review", 11),
+            new ItemDefinition("information_technology_services", "Information Technology Services", 12),
+            new ItemDefinition("soc", "SOC", 13),
+            new ItemDefinition("litigation", "Litigation", 14),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 15),
+            new ItemDefinition("governmental_consulting_services", "Governmental Consulting Services", 16),
+            new ItemDefinition("client_accounting_services", "Client Accounting Services", 17),
         }),
         // Engagement tax forms (WO-114): the checklist values referenced by foreign key from
         // REMSEngagementTaxForm.TaxFormId on a tax engagement's tax detail.

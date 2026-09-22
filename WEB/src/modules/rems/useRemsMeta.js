@@ -138,6 +138,7 @@ export function useRemsMeta () {
   const entityTypeLabel = (v) => labelFrom(options.entityType, v);
   const departmentLabel = (v) => labelFrom(options.department, v);
   const serviceLineLabel = (v) => labelFrom(options.serviceLine, v);
+  const jobTemplateLabel = (v) => labelFrom(options.jobTemplate, v);
   const industryLabel = (v) => labelFrom(options.industry, v);
   // GCS staffing level. Resolved here because the approver's packet carries the CODE — that screen's
   // option labels are resolved server-side only for the sets keyed by item id (marketing, tax forms).
@@ -208,6 +209,7 @@ export function useRemsMeta () {
   const entityTypeOptions = computed(() => options.entityType);
   const departmentOptions = computed(() => options.department);
   const serviceLineOptions = computed(() => options.serviceLine);
+  const jobTemplateOptions = computed(() => options.jobTemplate);
   const industryOptions = computed(() => options.industry);
   // "Waiting For Pickup" is a filter value of its own now. It is not a stored status, but the server reads
   // it the way the column does — with the admins, and nobody holding it — and reads the two admin stages
@@ -241,6 +243,7 @@ export function useRemsMeta () {
     statusHint,
     departmentLabel,
     serviceLineLabel,
+    jobTemplateLabel,
     industryLabel,
     personnelLevelLabel,
     billingPeriodLabel,
@@ -251,6 +254,7 @@ export function useRemsMeta () {
     entityTypeOptions,
     departmentOptions,
     serviceLineOptions,
+    jobTemplateOptions,
     industryOptions,
     statusFilterOptions,
     approvalStatusFilterOptions,
@@ -399,6 +403,7 @@ export function useRemsEngagementOptionSets () {
     // Service Line and Industry — still keyed serviceLine / industry in the data, per the note at
     // the top of this file. Code-valued, so they come from the shared catalogue too.
     serviceLineOptions: computed(() => catalog.serviceLine),
+    jobTemplateOptions: computed(() => catalog.jobTemplate),
     industryOptions: computed(() => catalog.industry),
     // How often the client is billed (REMS.BillingPeriod). Code-valued like Department and Service Line,
     // so it comes from the shared catalogue rather than being resolved by id.

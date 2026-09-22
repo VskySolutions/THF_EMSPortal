@@ -97,6 +97,7 @@ internal static class RemsWorkspaceMapper
             engagement.Id,
             engagement.Department?.Value,
             engagement.ServiceLine?.Value,
+            engagement.JobTemplate?.Value,
             engagement.Industry?.Value,
             UserRef(engagement.DepartmentDirectorId, names),
             UserRef(engagement.EngagementExecutiveId, names),

@@ -39,6 +39,7 @@ public sealed class UpdateRemsEngagementRequestValidator : AbstractValidator<Upd
     {
         RuleFor(x => x.Department).MaximumLength(64).When(x => x.Department is not null);
         RuleFor(x => x.ServiceLine).MaximumLength(64).When(x => x.ServiceLine is not null);
+        RuleFor(x => x.JobTemplate).MaximumLength(64).When(x => x.JobTemplate is not null);
         RuleFor(x => x.Industry).MaximumLength(64).When(x => x.Industry is not null);
         RuleFor(x => x.BillingPeriod).MaximumLength(64).When(x => x.BillingPeriod is not null);
         RuleFor(x => x.FirstYearFeeEstimate)

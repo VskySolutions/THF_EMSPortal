@@ -1334,6 +1334,7 @@ public sealed class RemsApprovalController : ControllerBase
             engagement.Status.ToString(),
             engagement.Department?.Value,
             engagement.ServiceLine?.Value,
+            engagement.JobTemplate?.Value,
             engagement.Industry?.Value,
             clientView,
             entityView,

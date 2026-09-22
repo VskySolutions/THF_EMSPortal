@@ -6,12 +6,17 @@
         <!-- ── What the firm does, where the work sits, and who heads that ──────────────────────── -->
         <app-select
           v-model="core.serviceLine" :options="serviceLineOptions" label="Service Line" required
-          class="col-12 col-sm-4" :readonly="!editable" :clearable="false"
+          class="col-12 col-sm-6" :readonly="!editable" :clearable="false"
           :rules="[requiredRule('a Service Line')]"
           info="From the REMS Service Line option list (Administration → Option Sets). What the firm is actually engaged to do."
         />
         <app-select
-          v-model="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-4"
+          v-model="core.jobTemplate" :options="jobTemplateOptions" label="Job Template" class="col-12 col-sm-6"
+          :readonly="!editable"
+          info="From the REMS Job Template option list (Administration → Option Sets). The template the engagement's job is set up from, finer than the service line."
+        />
+        <app-select
+          v-model="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-6"
           :readonly="!editable" :clearable="false" :rules="[requiredRule('a Department')]"
           info="From the REMS Department option list (Administration → Option Sets). The choice decides what else this form asks: CAS is asked how it is billed, Audit needs a signed CAF, Tax a fiscal year end."
         />
@@ -19,7 +24,7 @@
              department is picked and written server-side on save (AC-REMS-014.7). -->
         <app-readonly-field
           :model-value="directorName" label="Department Director" placeholder="Not assigned"
-          :hint="directorHint" :hint-alert="directorHintAlert" class="col-12 col-sm-4"
+          :hint="directorHint" :hint-alert="directorHintAlert" class="col-12 col-sm-6"
         />
 
         <!-- ── The two people who run it ────────────────────────────────────────────────────────── -->
@@ -345,6 +350,7 @@ const props = defineProps({
   deptOptions: { type: Array, default: () => [] },
   // Rendered as "Service Line"; still named for the data behind it. See the note at the top of useRemsMeta.
   serviceLineOptions: { type: Array, default: () => [] },
+  jobTemplateOptions: { type: Array, default: () => [] },
   taxFormOptions: { type: Array, default: () => [] },
   taxFormUnavailable: { type: Boolean, default: false },
   billingPeriodOptions: { type: Array, default: () => [] },
@@ -400,6 +406,7 @@ const buildCore = (e) => ({
   department: e.department || null,
   // No `industry`: the industry is asked on the Client Information tab and written by the page.
   serviceLine: e.serviceLine || null,
+  jobTemplate: e.jobTemplate || null,
   engagementExecutiveId: e.engagementExecutive?.id || null,
   billingManagerId: e.billingManager?.id || null,
   firstYearFeeEstimate: e.firstYearFeeEstimate ?? "",
@@ -732,6 +739,7 @@ const saveSetup = async (engagementId, remsId = null) => {
     // Empty string rather than null for the clearable one: the endpoint reads null as "leave this field
     // alone" and only an empty value clears.
     serviceLine: core.value.serviceLine ?? "",
+    jobTemplate: core.value.jobTemplate ?? "",
     engagementExecutiveId: core.value.engagementExecutiveId,
     billingManagerId: core.value.billingManagerId,
     // One fee question per engagement, and only the one that was asked is written. Omitted — not blanked —

@@ -283,6 +283,7 @@
                   :entity-type="setupForm.entityType"
                   :dept-options="departmentOptions"
                   :service-line-options="serviceLineOptions"
+                  :job-template-options="jobTemplateOptions"
                   :tax-form-options="taxFormOptions"
                   :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
@@ -427,7 +428,7 @@ const { emsFormActivity, requestStatusOption, approverRoleLabel } = useRemsMeta(
 const { typeOptions, load: loadTypes } = useRemsOptionSets();
 const { entityTypeOptions, load: loadEntityTypes } = useRemsEntityTypes();
 const {
-  departmentOptions, serviceLineOptions, industryOptions,
+  departmentOptions, serviceLineOptions, jobTemplateOptions, industryOptions,
   marketingGroups, marketingUnavailable,
   taxFormOptions, taxFormUnavailable, billingPeriodOptions, personnelLevelOptions,
   load: loadEngagementOptions
@@ -506,6 +507,7 @@ const newEngagement = Object.freeze({
   id: null,
   department: null,
   serviceLine: null,
+  jobTemplate: null,
   departmentDirector: null,
   engagementExecutive: null,
   billingManager: null,
@@ -970,6 +972,7 @@ const setupRows = computed(() => {
   // order.
   return [
     { label: "Service Line", value: labelOf(serviceLineOptions.value, e.serviceLine) },
+    { label: "Job Template", value: labelOf(jobTemplateOptions.value, e.jobTemplate) },
     { label: "Department", value: labelOf(departmentOptions.value, e.department) },
     { label: "Department Director", value: e.departmentDirector?.name },
     { label: "Engagement Executive", value: e.engagementExecutive?.name },
