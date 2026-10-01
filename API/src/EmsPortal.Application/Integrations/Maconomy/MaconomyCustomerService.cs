@@ -20,7 +20,10 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     private const int SearchMinLength = 2;
     private const int SearchMaxLength = 100;
 
-    private static readonly string[] Fields = { "customernumber", "name1", "specification6name", "createddate", "createdby" };
+    private static readonly string[] Fields =
+    {
+        "customernumber", "name1", "specification6name", "electronicmailaddress", "telephone", "createddate", "createdby",
+    };
 
     // The restriction is written in Maconomy's query language with the search text inside a quoted
     // literal, so a quote — or a backslash, or a control character — would break out of it.
@@ -103,15 +106,35 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     {
         var number = Value(record, "customernumber");
         var name = Value(record, "name1");
-        var specification6Name = Value(record, "specification6name");
+        var specification6 = Value(record, "specification6name");
+        var entityType = EntityTypeOf(specification6);
+        var specification6Name = entityType?.Name ?? specification6;
         var text = string.Join(" - ", new[] { number, name }.Where(s => s.Length > 0));
         if (specification6Name.Length > 0)
         {
             text = $"{text} ({specification6Name})";
         }
-        return new MaconomyCustomerOption(text, number, specification6Name.Length > 0 ? specification6Name : null);
+        return new MaconomyCustomerOption(
+            text, number, specification6Name.Length > 0 ? specification6Name : null, entityType?.Code,
+            Optional(record, "electronicmailaddress"), Optional(record, "telephone"));
     }
+
+    // THF's Maconomy holds the customer's entity type in specification 6, as a number. The codes are the
+    // REMS.EntityType option set's; a number not listed is shown as Maconomy sent it.
+    private static (string Code, string Name)? EntityTypeOf(string specification6) => specification6 switch
+    {
+        "1" => ("individual", "Individual"),
+        "2" => ("government", "Government"),
+        "3" => ("not_for_profit", "Not-for-Profit"),
+        "4" => ("insurance", "Insurance"),
+        "5" => ("commercial", "Commercial"),
+        "6" => ("trust_estate", "Trust and Estate"),
+        _ => null,
+    };
 
     private static string Value(IReadOnlyDictionary<string, string?> record, string field)
         => record.TryGetValue(field, out var value) ? (value ?? string.Empty).Trim() : string.Empty;
+
+    private static string? Optional(IReadOnlyDictionary<string, string?> record, string field)
+        => Value(record, field) is { Length: > 0 } value ? value : null;
 }

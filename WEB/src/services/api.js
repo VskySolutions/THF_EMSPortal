@@ -255,13 +255,13 @@ export const maconomyApi = {
     api.post("/api/integrations/maconomy/connection/login", null, { params: { tenantId } }).then(unwrap),
   forgetToken: (tenantId) =>
     api.delete("/api/integrations/maconomy/connection/token", { params: { tenantId } }).then(envelope),
-  // → [{ text: "10023 - Acme Corp (Retail)", value: "10023", specification6Name: "Retail" }]; empty
-  // below two characters.
+  // → [{ text: "10023 - Acme Corp (Commercial)", value: "10023", specification6Name: "Commercial",
+  // entityType: "commercial", emailAddress: "ap@acme.com", phoneNumber: "850-555-0100" }]; empty below
+  // two characters.
   searchCustomers: (search, limit, tenantId) =>
     api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap)
 };
 
-// Transactional email templates (WO email templates).
 // The tenant's branding: its theme (name, colours, type, buttons) and its images. `tenantId` is the Super
 // Admin's override, used by the Tenants screen; everyone else is pinned to their own tenant server-side.
 export const brandingApi = {
@@ -289,6 +289,7 @@ export const brandingApi = {
     api.delete(`/api/branding/assets/${slot}`, { params: { tenantId } }).then(unwrap)
 };
 
+// Transactional email templates (WO email templates).
 export const emailTemplateApi = {
   list: (params) => api.get("/api/admin/email-templates", { params }).then(envelope),
   get: (key, params) => api.get(`/api/admin/email-templates/${key}`, { params }).then(unwrap),
@@ -550,9 +551,16 @@ export const remsApi = {
   handBack: (id) => api.post(`/api/rems/requests/${id}/hand-back`).then(unwrap),
 
   remove: (id) => api.delete(`/api/rems/requests/${id}`).then(envelope),
-  // Client picker: [{ id, name, email, phone, suffix }].
-  clientLookup: (q, entityType) =>
-    api.get("/api/rems/clients/lookup", { params: { q, entityType } }).then(unwrap),
+  // Client picker, across every entity type: [{ id, name, email, phone, suffix, firstName, lastName,
+  // corporateName, isOrganisation, entityType }]. `excludingRemsId` is the request being edited.
+  clientLookup: (q, excludingRemsId) =>
+    api.get("/api/rems/clients/lookup", { params: { q, excludingRemsId } }).then(unwrap),
+  // One client on file, in the picker's shape.
+  client: (id, excludingRemsId) =>
+    api.get(`/api/rems/clients/${id}`, { params: { excludingRemsId } }).then(unwrap),
+  // Whether a NEW client's details already belong to one on file: { byName, byEmail }, each a picker
+  // row or null. params: { name?, email?, remsId? }.
+  clientOnFile: (params) => api.get("/api/rems/clients/on-file", { params }).then(unwrap),
   // Users in the active tenant, by role: [{ id, name, email }].
   admins: (role) => api.get("/api/rems/admins", { params: role ? { role } : undefined }).then(unwrap),
   // The clients across the requests the caller may see under a scope, for the Client filter: [{ id, name }].

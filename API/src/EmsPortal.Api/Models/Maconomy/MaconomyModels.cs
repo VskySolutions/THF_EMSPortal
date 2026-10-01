@@ -54,6 +54,9 @@ public sealed record MaconomyLoginResponse(bool Connected, DateTime IssuedOnUtc,
 
 /// <summary>
 /// One customer as a dropdown option: <c>text</c> is "number - name (specification 6 name)", <c>value</c>
-/// the number, and <c>specification6Name</c> that field on its own, null when blank.
+/// the number, <c>specification6Name</c> that name on its own, null when blank, <c>entityType</c> the
+/// REMS entity type code it stands for, null when it stands for none, and <c>emailAddress</c> and
+/// <c>phoneNumber</c> the customer's own, each null when blank.
 /// </summary>
-public sealed record MaconomyCustomerOptionResponse(string Text, string Value, string? Specification6Name);
+public sealed record MaconomyCustomerOptionResponse(
+    string Text, string Value, string? Specification6Name, string? EntityType, string? EmailAddress, string? PhoneNumber);

@@ -171,8 +171,9 @@ public sealed class MaconomyController : ControllerBase
     /// <summary>
     /// Customers whose number or name contains <paramref name="search"/>, as dropdown options: <c>text</c>
     /// is "number - name (specification 6 name)", <c>value</c> the number, <c>specification6Name</c> that
-    /// field on its own. Empty below two characters. <paramref name="limit"/> defaults to the tenant's
-    /// setting and is capped platform-wide. Logs in by itself when it has to.
+    /// name on its own, <c>entityType</c> the REMS entity type code it stands for, <c>emailAddress</c> and
+    /// <c>phoneNumber</c> the customer's own. Empty below two characters. <paramref name="limit"/> defaults
+    /// to the tenant's setting and is capped platform-wide. Logs in by itself when it has to.
     /// </summary>
     [HttpGet("customers")]
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaconomyCustomerOptionResponse>>>(StatusCodes.Status200OK)]
@@ -201,7 +202,8 @@ public sealed class MaconomyController : ControllerBase
         {
             var options = await _customers.SearchAsync(tenant, search, limit, cancellationToken);
             IReadOnlyList<MaconomyCustomerOptionResponse> data = options
-                .Select(o => new MaconomyCustomerOptionResponse(o.Text, o.Value, o.Specification6Name))
+                .Select(o => new MaconomyCustomerOptionResponse(
+                    o.Text, o.Value, o.Specification6Name, o.EntityType, o.EmailAddress, o.PhoneNumber))
                 .ToList();
             return Ok(ApiResponseFactory.Success(data, $"{data.Count} customer(s) found."));
         }

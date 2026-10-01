@@ -104,6 +104,14 @@
               <div class="text-caption text-grey-7">Selected</div>
               <div class="text-body1 text-weight-medium">{{ picked.text }}</div>
               <div class="text-caption text-grey-7">value <code>{{ picked.value }}</code></div>
+              <div class="text-caption text-grey-7">
+                <template v-if="picked.emailAddress">email <code>{{ picked.emailAddress }}</code></template>
+                <template v-else>no email</template>
+              </div>
+              <div class="text-caption text-grey-7">
+                <template v-if="picked.phoneNumber">phone <code>{{ picked.phoneNumber }}</code></template>
+                <template v-else>no phone</template>
+              </div>
             </div>
           </q-card-section>
         </q-card>

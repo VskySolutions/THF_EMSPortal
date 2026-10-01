@@ -714,13 +714,13 @@ const setupRows = computed(() => {
   const e = engagement.value;
   const rows = [
     { label: "Entity", value: `${e.entity?.name || "—"}${e.entity?.ein ? ` · EIN ${e.entity.ein}` : ""}` },
-    { label: "Department", value: departmentLabel(e.department) },
-    // Same industry-then-service sequence the setup form is filled in (the Entity Type itself is a
-    // request field, so it sits in the request block above rather than here).
+    // The industry, chosen on the Client Information tab, then the setup in the sequence it is filled in
+    // (the Entity Type itself is a request field, so it sits in the request block above rather than here).
     { label: "Industry", value: industryLabel(e.industry) },
+    { label: "Department", value: departmentLabel(e.department) },
+    { label: "Department Director", value: text(e.departmentDirector?.name) },
     { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
     { label: "Job Template", value: jobTemplateLabel(e.jobTemplate) },
-    { label: "Department Director", value: text(e.departmentDirector?.name) },
     { label: "Engagement Executive", value: text(e.engagementExecutive?.name) },
     { label: "Billing Manager", value: text(e.billingManager?.name) }
   ];

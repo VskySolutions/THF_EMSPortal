@@ -11,9 +11,11 @@ public sealed record MaconomyFilterResult(IReadOnlyList<IReadOnlyDictionary<stri
 
 /// <summary>
 /// One customer as a dropdown option: "number - name (specification 6 name)" to read, the number to store,
-/// and the specification 6 name on its own, null when blank.
+/// the specification 6 name on its own, null when blank, the REMS entity type it stands for, null when
+/// it stands for none, and the customer's email address and telephone, each null when blank.
 /// </summary>
-public sealed record MaconomyCustomerOption(string Text, string Value, string? Specification6Name);
+public sealed record MaconomyCustomerOption(
+    string Text, string Value, string? Specification6Name, string? EntityType, string? EmailAddress, string? PhoneNumber);
 
 /// <summary>What a fresh login produced: when the token was issued, and when it stops being used.</summary>
 public sealed record MaconomyLoginResult(DateTime IssuedOnUtc, DateTime ExpiresOnUtc);

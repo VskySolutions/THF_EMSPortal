@@ -753,8 +753,9 @@ internal sealed class RemsRepository : IRemsRepository
                     && (r.ClientPersonId == personId || r.ExistingClientReferenceId == personId),
                 cancellationToken);
 
-    public async Task<IReadOnlyList<Person>> LookupClientsAsync(
-        string term, string? entityTypeCode, int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RemsClientLookupRow>> LookupClientsAsync(
+        string term, string? entityTypeCode, Guid? excludingRemsId, int limit,
+        CancellationToken cancellationToken = default)
     {
         // Only the people a request names as its client, not every Person filed as one: the request and
         // its form carry the ambient tenant and soft-delete filters, so a deleted request's client goes
@@ -768,7 +769,7 @@ internal sealed class RemsRepository : IRemsRepository
         var clientIds = requests.Select(r => r.ClientPersonId!.Value);
 
         var search = term.Trim();
-        return await _dbContext.Persons
+        var people = await _dbContext.Persons
             .Where(p => p.IsActive && clientIds.Contains(p.Id))
             .Where(p =>
                 p.FirstName.Contains(search) ||
@@ -781,5 +782,43 @@ internal sealed class RemsRepository : IRemsRepository
             .OrderBy(p => p.ClientDisplayName)
             .Take(limit)
             .ToListAsync(cancellationToken);
+
+        var entityTypes = await GetClientEntityTypesAsync(
+            people.Select(p => p.Id).ToList(), excludingRemsId, cancellationToken);
+        return people
+            .Select(p => new RemsClientLookupRow(p, entityTypes.GetValueOrDefault(p.Id)))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> GetClientEntityTypesAsync(
+        IReadOnlyCollection<Guid> personIds, Guid? excludingRemsId,
+        CancellationToken cancellationToken = default)
+    {
+        if (personIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        // From the request down, so a deleted request's form goes with it.
+        var filed = await _dbContext.Rems
+            .Where(r => r.ClientPersonId != null && personIds.Contains(r.ClientPersonId.Value))
+            .Where(r => excludingRemsId == null || r.Id != excludingRemsId)
+            .SelectMany(r => r.Forms, (r, f) => new
+            {
+                PersonId = r.ClientPersonId!.Value,
+                Code = f.EntityType!.Value,
+                f.SentOnUtc,
+                f.CreatedOnUtc,
+            })
+            .ToListAsync(cancellationToken);
+
+        // A sent form is the type the client was actually asked under; a draft's can still change.
+        return filed
+            .GroupBy(f => f.PersonId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(f => f.SentOnUtc.HasValue)
+                    .ThenByDescending(f => f.SentOnUtc ?? f.CreatedOnUtc)
+                    .First().Code);
     }
 }

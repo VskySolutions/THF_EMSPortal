@@ -3,28 +3,33 @@
     <!-- Core engagement placement + team + fee/realization (AC-REMS-014.5-10). -->
     <q-form ref="formRef" greedy>
       <div class="row q-col-gutter-md">
-        <!-- ── What the firm does, where the work sits, and who heads that ──────────────────────── -->
+        <!-- ── Where the work sits, who heads that, and what the firm does ──────────────────────── -->
+        <!-- In this order because each narrows the next: the department decides which service lines are
+             offered, and the department and line together which job templates. -->
         <app-select
-          v-model="core.serviceLine" :options="serviceLineOptions" label="Service Line" required
-          class="col-12 col-sm-6" :readonly="!editable" :clearable="false"
-          :rules="[requiredRule('a Service Line')]"
-          info="From the REMS Service Line option list (Administration → Option Sets). What the firm is actually engaged to do."
-        />
-        <app-select
-          v-model="core.jobTemplate" :options="jobTemplateOptions" label="Job Template" class="col-12 col-sm-6"
-          :readonly="!editable"
-          info="From the REMS Job Template option list (Administration → Option Sets). The template the engagement's job is set up from, finer than the service line."
-        />
-        <app-select
-          v-model="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-6"
-          :readonly="!editable" :clearable="false" :rules="[requiredRule('a Department')]"
-          info="From the REMS Department option list (Administration → Option Sets). The choice decides what else this form asks: CAS is asked how it is billed, Audit needs a signed CAF, Tax a fiscal year end."
+          :model-value="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-6"
+          :readonly="!editable" :rules="[requiredRule('a Department')]"
+          info="From the REMS Department option list (Administration → Option Sets). The choice decides what else this form asks — CAS is asked how it is billed, Audit needs a signed CAF, Tax a fiscal year end — and which service lines are offered."
+          @update:model-value="onDepartmentPicked"
         />
         <!-- Read-only Department Director: the selected department's head, resolved as soon as the
              department is picked and written server-side on save (AC-REMS-014.7). -->
         <app-readonly-field
           :model-value="directorName" label="Department Director" placeholder="Not assigned"
           :hint="directorHint" :hint-alert="directorHintAlert" class="col-12 col-sm-6"
+        />
+        <app-select
+          :model-value="core.serviceLine" :options="offeredServiceLines" label="Service Line" required
+          class="col-12 col-sm-6" :readonly="!editable"
+          :rules="[serviceLineRule]" :hint="serviceLineHint"
+          info="From the REMS Service Line option list (Administration → Option Sets), narrowed to the lines the selected Department offers. What the firm is actually engaged to do."
+          @update:model-value="onServiceLinePicked"
+        />
+        <app-select
+          :model-value="core.jobTemplate" :options="offeredJobTemplates" label="Job Template" class="col-12 col-sm-6"
+          :readonly="!editable" :hint="jobTemplateHint"
+          info="From the REMS Job Template option list (Administration → Option Sets), narrowed to the templates the selected Department and Service Line are set up from. Finer than the service line."
+          @update:model-value="onJobTemplatePicked"
         />
 
         <!-- ── The two people who run it ────────────────────────────────────────────────────────── -->
@@ -335,8 +340,9 @@ import { useConfirm } from "composables/useConfirm";
 import { formatDateOnly } from "composables/useDateFormat";
 import { MAX_UPLOAD_MB } from "composables/useFileDrop";
 import {
-  isTaxDepartment, isGovernmentAudit, isCasDepartment, isAssuranceDepartment,
-  isGcsDepartment, requiresClientAcceptanceForm
+  useRemsMeta, isTaxDepartment, isGovernmentAudit, isCasDepartment, isAssuranceDepartment,
+  isGcsDepartment, requiresClientAcceptanceForm,
+  remsServiceLineOptions, remsServiceLineFitsDepartment, remsJobTemplateOptions, remsJobTemplateFitsServiceLine
 } from "modules/rems/useRemsMeta";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -457,6 +463,12 @@ const buildTax = (t) => {
 };
 const tax = ref(buildTax(props.engagement.tax));
 
+// What just happened to a stored Service Line or Job Template the new choice above it does not offer. A
+// field that empties itself with no explanation reads as data lost rather than as an answer that stopped
+// applying. Set and read further down, beside the pickers they belong to.
+const serviceLineCleared = ref("");
+const jobTemplateCleared = ref("");
+
 // Re-sync every local form when the parent adopts a fresh engagement view.
 watch(() => props.engagement, (e) => {
   syncing = true;
@@ -466,6 +478,8 @@ watch(() => props.engagement, (e) => {
   tax.value = buildTax(e.tax);
   cafOverride.value = undefined;
   govOverride.value = undefined;
+  serviceLineCleared.value = "";
+  jobTemplateCleared.value = "";
   nextTick(() => { syncing = false; });
 });
 
@@ -477,6 +491,75 @@ watch(() => tax.value.fiscalYearEnd, (fye, previous) => {
   tax.value.originalDueDate = derived.originalDueDate;
   tax.value.firstExtensionDueDate = derived.firstExtensionDueDate;
 });
+
+// ---- Service Line and Job Template, narrowed by what sits above them ----
+// The department decides which lines are offered, and the department and line together which templates
+// (REMS_SERVICE_LINES_BY_DEPARTMENT / REMS_JOB_TEMPLATES_BY_SERVICE_LINE). The labels are for the notes below.
+const { departmentLabel, serviceLineLabel, jobTemplateLabel } = useRemsMeta();
+const offeredServiceLines = computed(() =>
+  remsServiceLineOptions(props.serviceLineOptions, core.value.department, core.value.serviceLine));
+const offeredJobTemplates = computed(() =>
+  remsJobTemplateOptions(props.jobTemplateOptions, core.value.department, core.value.serviceLine, core.value.jobTemplate));
+
+// The cleared note when there is one, otherwise the reason an empty picker is empty.
+const serviceLineHint = computed(() =>
+  serviceLineCleared.value ||
+  (core.value.department ? "" : "Choose a Department first — it decides which service lines are offered."));
+const jobTemplateHint = computed(() => {
+  if (jobTemplateCleared.value) return jobTemplateCleared.value;
+  if (!core.value.serviceLine) return "Choose a Service Line first — it decides which job templates are offered.";
+  if (!offeredJobTemplates.value.length) return `No job template applies to ${serviceLineLabel(core.value.serviceLine)}.`;
+  return "";
+});
+
+// Drops a job template the department and service line no longer offer, and says so — unless there is no
+// service line at all, when the hint under the box already says what to choose first.
+const reconcileJobTemplate = () => {
+  const template = core.value.jobTemplate;
+  const line = core.value.serviceLine;
+  if (!template) return;
+  if (line && remsJobTemplateFitsServiceLine(core.value.department, line, template)) return;
+  core.value.jobTemplate = null;
+  if (!line) return;
+  jobTemplateCleared.value =
+    `Job Template cleared — ${jobTemplateLabel(template)} is not offered for ${serviceLineLabel(line)} ` +
+    `in ${departmentLabel(core.value.department)}.`;
+};
+
+const onDepartmentPicked = (value) => {
+  core.value.department = value;
+  serviceLineCleared.value = "";
+  jobTemplateCleared.value = "";
+  const line = core.value.serviceLine;
+  if (!value) {
+    // Removing the department empties the chain beneath it, quietly: the hints under the two boxes say
+    // what to choose first, and neither box is at fault.
+    core.value.serviceLine = null;
+    core.value.jobTemplate = null;
+    return;
+  }
+  if (line && !remsServiceLineFitsDepartment(value, line)) {
+    // The note first, so the required rule that fires on the change below already has it to show.
+    serviceLineCleared.value =
+      `Service Line cleared — ${serviceLineLabel(line)} is not offered under ${departmentLabel(value)}.`;
+    core.value.serviceLine = null;
+  }
+  reconcileJobTemplate();
+};
+
+// A note has done its job the moment a value is chosen beneath it; removing the service line takes the job
+// template with it.
+const onServiceLinePicked = (value) => {
+  core.value.serviceLine = value;
+  serviceLineCleared.value = "";
+  jobTemplateCleared.value = "";
+  reconcileJobTemplate();
+};
+
+const onJobTemplatePicked = (value) => {
+  core.value.jobTemplate = value;
+  jobTemplateCleared.value = "";
+};
 
 // ---- Conditional visibility keys off the LOCALLY selected department (immediate) ----
 // Every one of these reads `core.value.department` rather than the saved engagement, so picking a
@@ -535,6 +618,7 @@ const directorsKnown = computed(() => props.departmentDirectors.length > 0);
 
 const directorHint = computed(() => {
   if (!directorsKnown.value) return "Assigned from the selected department's head when you save.";
+  if (!core.value.department) return "Assigned from the department's head once a Department is chosen.";
   if (departmentChangedUnsaved.value) {
     return mappedDirectorName.value
       ? "From the selected department's head — assigned when you save."
@@ -548,7 +632,7 @@ const directorHint = computed(() => {
 
 // Draw attention while the choice is unsaved, and whenever a department has nobody to direct it.
 const directorHintAlert = computed(() =>
-  directorsKnown.value && (departmentChangedUnsaved.value || (!!core.value.department && !directorName.value)));
+  directorsKnown.value && !!core.value.department && (departmentChangedUnsaved.value || !directorName.value));
 
 // ---- The signed client-acceptance form on file ----
 // What this component has done to the CAF SINCE the engagement it was handed was read: the row returned by
@@ -652,6 +736,13 @@ const removePurchaseOrder = async () => {
 // Service Line, Department, the engagement team and % Realization are mandatory (they are also the
 // backend's send-for-approval prerequisites), so Save & Next cannot pass with any of them blank.
 const requiredRule = (what) => (v) => (v !== null && v !== undefined && v !== "") || `Select ${what}`;
+// The same rule for the Service Line, with two differences. With no department there is nothing to choose
+// it under, so an empty box is not at fault: the hint says what to choose first, and the department's own
+// rule blocks the save. And when the department just emptied it, the message says so — "Select a Service
+// Line" alone reads as a blank the user forgot.
+const serviceLineRule = (v) =>
+  requiredRule("a Service Line")(v) === true || !core.value.department || serviceLineCleared.value ||
+  "Select a Service Line";
 
 // Money: blank is "not known yet", a negative is wrong however early it is typed. One rule, five boxes.
 const amountRule = (v) => v === "" || v === null || v === undefined || Number(v) >= 0 || "Enter a valid amount";
@@ -735,9 +826,9 @@ const saveSetup = async (engagementId, remsId = null) => {
   }
 
   let view = (await remsApi.updateEngagement(engagementId, {
-    department: core.value.department,
-    // Empty string rather than null for the clearable one: the endpoint reads null as "leave this field
-    // alone" and only an empty value clears.
+    // Empty string rather than null for the three clearable ones: the endpoint reads null as "leave this
+    // field alone" and only an empty value clears.
+    department: core.value.department ?? "",
     serviceLine: core.value.serviceLine ?? "",
     jobTemplate: core.value.jobTemplate ?? "",
     engagementExecutiveId: core.value.engagementExecutiveId,

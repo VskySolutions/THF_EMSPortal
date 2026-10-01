@@ -109,6 +109,9 @@ public sealed record RemsPoolCounts(int Unassigned, int Mine, int All);
 /// <summary>One entry of a list's Client dropdown: the client's id and the name the list shows.</summary>
 public sealed record RemsClientChoice(Guid Id, string Name);
 
+/// <summary>A client-picker candidate: the person, and the REMS.EntityType code they were last filed under.</summary>
+public sealed record RemsClientLookupRow(Person Person, string? EntityType);
+
 /// <summary>
 /// How many requests each quick-filter button on My Requests would list, keyed by the button's value:
 /// the Status group by REMS.Status code (<c>waiting_for_pickup</c> included) and the EMS group by form
@@ -437,6 +440,17 @@ public interface IRemsRepository
     /// (<see cref="REMS.ClientPersonId"/>), narrowed to requests whose intake form was raised under
     /// <paramref name="entityTypeCode"/> when one is given, and matched on name, email or phone.
     /// </summary>
-    Task<IReadOnlyList<Person>> LookupClientsAsync(
-        string term, string? entityTypeCode, int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RemsClientLookupRow>> LookupClientsAsync(
+        string term, string? entityTypeCode, Guid? excludingRemsId, int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The REMS.EntityType code each client was last filed under, read off the intake forms of the
+    /// requests that name them — a sent form before a draft, the newest first.
+    /// <paramref name="excludingRemsId"/> leaves one request out, so the request being edited does not
+    /// answer for the client's record. A client no form names is absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetClientEntityTypesAsync(
+        IReadOnlyCollection<Guid> personIds, Guid? excludingRemsId,
+        CancellationToken cancellationToken = default);
 }

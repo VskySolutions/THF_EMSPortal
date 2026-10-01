@@ -39,14 +39,16 @@ export const isIndividualEntityType = (entityType) => entityType === REMS_ENTITY
 export const REMS_ENTITY_TYPE_TRUST_ESTATE = "trust_estate";
 
 // ---- Which industries belong to which entity type ----
-// Entity type and trade do not partition cleanly — a hospital is Health Care whether it is Commercial or
-// Not-for-Profit — which is why this is a map of OVERLAPPING sets rather than a tree.
+// THF's table. Entity type and trade do not partition cleanly — a hospital is Health Care whether it is
+// Commercial or Not-for-Profit — which is why this is a map of OVERLAPPING sets rather than a tree.
 export const REMS_INDUSTRIES_BY_ENTITY_TYPE = Object.freeze({
   individual: Object.freeze(["individual"]),
+  // The unqualified `government` is retired from the list. Claimed here all the same, so that a firm
+  // which turns it back on sees it under Government and nowhere else.
   government: Object.freeze(["state_government", "local_government", "federal_government", "government"]),
   not_for_profit: Object.freeze([
-    "trade_associations", "charitable_organizations_foundations", "other_not_for_profit",
-    "educational_institutions", "health_care"
+    "health_care", "educational_institutions", "trade_associations", "charitable_organizations_foundations",
+    "other_not_for_profit"
   ]),
   insurance: Object.freeze([
     "insurance_health", "insurance_property_casualty", "insurance_life", "insurance_other"
@@ -56,31 +58,117 @@ export const REMS_INDUSTRIES_BY_ENTITY_TYPE = Object.freeze({
     "financial_institutions_banking", "hospitality", "manufacturing", "professional_service_firms",
     "real_estate", "retail", "health_care", "oil_gas_distribution", "wholesale", "technology",
     "educational_institutions", "distribution"
-  ])
-  // `trust_estate` and `business` are deliberately absent: neither has a stated list, so both are offered every trade.
+  ]),
+  trust_estate: Object.freeze(["trust_estate"])
+  // The legacy `business` is deliberately absent: it has no stated list, so it is offered every trade.
 });
 
-// Every industry code this map places somewhere. Anything outside it is a tenant's own addition.
-const CLAIMED_INDUSTRY_CODES = new Set(Object.values(REMS_INDUSTRIES_BY_ENTITY_TYPE).flat());
+// ---- Which service lines belong to which department, and which job templates to each pair ----
+// THF's table again. A job template goes with the PAIR rather than with the service line alone: Assurance
+// Services means audits and reviews under Assurance and Governmental Consulting Services under GCS.
+export const REMS_SERVICE_LINES_BY_DEPARTMENT = Object.freeze({
+  tax: Object.freeze([
+    "tax_compliance", "consulting", "mergers_acquisitions", "plan_administration", "employee_benefits",
+    "estate_planning"
+  ]),
+  assurance: Object.freeze([
+    "attest_services", "consulting", "it_services", "soc", "employee_benefits", "litigation_support",
+    "forensic_accounting"
+  ]),
+  gcs: Object.freeze(["attest_services", "consulting", "it_services"]),
+  cas: Object.freeze(["client_accounting_services", "mergers_acquisitions", "consulting"]),
+  // Not on the table, which lists client work: the firm's own work is booked under Admin against the one
+  // line it was brought back alongside.
+  admin: Object.freeze(["non_chargeable_internal"])
+  // The retired `audit` is deliberately absent, so an engagement still filed under it is offered every line.
+});
 
-/** The Industry options to offer for an entity type, out of the tenant's resolved list. `selected` is the
-    value currently stored, which is always kept. */
-export function remsIndustryOptions (options, entityType, selected = null) {
-  // Rule 1 — nothing to offer until the entity type is answered. Rule 4 still holds: a record that
-  // somehow carries an industry without an entity type keeps showing the one it has.
-  if (!entityType) return options.filter((o) => o.value === selected);
-  const allowed = REMS_INDUSTRIES_BY_ENTITY_TYPE[entityType];
+export const REMS_JOB_TEMPLATES_BY_SERVICE_LINE = Object.freeze({
+  tax: Object.freeze({
+    tax_compliance: Object.freeze(["tax_compliance"]),
+    consulting: Object.freeze(["consulting_engagement", "business_valuation"]),
+    mergers_acquisitions: Object.freeze(["mergers_acquisitions"]),
+    plan_administration: Object.freeze(["pension_administration_tax_compliance"]),
+    employee_benefits: Object.freeze(["pension_administration_tax_compliance"]),
+    estate_planning: Object.freeze(["tax_compliance"])
+  }),
+  assurance: Object.freeze({
+    attest_services: Object.freeze([
+      "agreed_upon_procedures", "audit", "examination", "compilation", "review", "peer_review"
+    ]),
+    consulting: Object.freeze(["consulting_engagement"]),
+    it_services: Object.freeze(["information_technology_services"]),
+    soc: Object.freeze(["soc"]),
+    employee_benefits: Object.freeze(["pension_administration_tax_compliance"]),
+    litigation_support: Object.freeze(["litigation"]),
+    forensic_accounting: Object.freeze(["forensic_accounting"])
+  }),
+  gcs: Object.freeze({
+    attest_services: Object.freeze(["governmental_consulting_services"]),
+    consulting: Object.freeze(["governmental_consulting_services"]),
+    it_services: Object.freeze(["information_technology_services"])
+  }),
+  cas: Object.freeze({
+    client_accounting_services: Object.freeze(["client_accounting_services"]),
+    mergers_acquisitions: Object.freeze(["mergers_acquisitions"]),
+    consulting: Object.freeze(["consulting_engagement"])
+  }),
+  // No template applies to the firm's own work, and the picker says so rather than offering all seventeen.
+  admin: Object.freeze({ non_chargeable_internal: Object.freeze([]) })
+});
+
+// Every code each map places somewhere. Anything outside it is a tenant's own addition and is offered
+// under every parent — a firm adding a value should not have to say which parents may see it.
+const claimed = (lists) => new Set(lists.flat());
+const CLAIMED_INDUSTRY_CODES = claimed(Object.values(REMS_INDUSTRIES_BY_ENTITY_TYPE));
+const CLAIMED_SERVICE_LINE_CODES = claimed(Object.values(REMS_SERVICE_LINES_BY_DEPARTMENT));
+const CLAIMED_JOB_TEMPLATE_CODES = claimed(
+  Object.values(REMS_JOB_TEMPLATES_BY_SERVICE_LINE).flatMap((byLine) => Object.values(byLine)));
+
+// The options a parent value offers, out of the tenant's resolved list: the ones its list names, every
+// tenant addition, and whatever is currently stored — always kept, so a record never loses its answer. A
+// parent with no list of its own (one the tenant added) offers everything.
+const narrowTo = (options, allowed, claimedCodes, selected) => {
   if (!allowed) return options;
   return options.filter((o) =>
-    allowed.includes(o.value) || !CLAIMED_INDUSTRY_CODES.has(o.value) || o.value === selected);
+    allowed.includes(o.value) || !claimedCodes.has(o.value) || o.value === selected);
+};
+
+// Whether a stored value is one its parent offers — what decides if a changed parent clears it.
+const fitsUnder = (allowed, claimedCodes, value) =>
+  !value || !allowed || allowed.includes(value) || !claimedCodes.has(value);
+
+/** The Industry options to offer for an entity type. `selected` is the value currently stored. */
+export function remsIndustryOptions (options, entityType, selected = null) {
+  // Nothing to offer until the entity type is answered — except a stored value, which keeps showing.
+  if (!entityType) return options.filter((o) => o.value === selected);
+  return narrowTo(options, REMS_INDUSTRIES_BY_ENTITY_TYPE[entityType], CLAIMED_INDUSTRY_CODES, selected);
 }
 
-/** Whether an industry is one this entity type offers — what decides if a changed entity type clears it. */
-export const remsIndustryFitsEntityType = (entityType, industry) => {
-  if (!industry) return true;
-  const allowed = REMS_INDUSTRIES_BY_ENTITY_TYPE[entityType];
-  return !allowed || allowed.includes(industry) || !CLAIMED_INDUSTRY_CODES.has(industry);
-};
+export const remsIndustryFitsEntityType = (entityType, industry) =>
+  fitsUnder(REMS_INDUSTRIES_BY_ENTITY_TYPE[entityType], CLAIMED_INDUSTRY_CODES, industry);
+
+/** The Service Line options to offer for a department, the same way. */
+export function remsServiceLineOptions (options, department, selected = null) {
+  if (!department) return options.filter((o) => o.value === selected);
+  return narrowTo(options, REMS_SERVICE_LINES_BY_DEPARTMENT[department], CLAIMED_SERVICE_LINE_CODES, selected);
+}
+
+export const remsServiceLineFitsDepartment = (department, serviceLine) =>
+  fitsUnder(REMS_SERVICE_LINES_BY_DEPARTMENT[department], CLAIMED_SERVICE_LINE_CODES, serviceLine);
+
+// The pair's list, or nothing where either half is the tenant's own — which then offers every template.
+const jobTemplatesFor = (department, serviceLine) =>
+  REMS_JOB_TEMPLATES_BY_SERVICE_LINE[department]?.[serviceLine];
+
+/** The Job Template options to offer for a department and service line together. */
+export function remsJobTemplateOptions (options, department, serviceLine, selected = null) {
+  if (!serviceLine) return options.filter((o) => o.value === selected);
+  return narrowTo(options, jobTemplatesFor(department, serviceLine), CLAIMED_JOB_TEMPLATE_CODES, selected);
+}
+
+export const remsJobTemplateFitsServiceLine = (department, serviceLine, jobTemplate) =>
+  fitsUnder(jobTemplatesFor(department, serviceLine), CLAIMED_JOB_TEMPLATE_CODES, jobTemplate);
 
 // ---------------------------------------------------------------------------------------------------
 // THERE ARE NO LABEL, COLOUR OR DESCRIPTION MAPS IN THIS FILE. Every word, colour and icon a REMS value is

@@ -6,10 +6,15 @@
     :model-value="modelValue" :label="label" :placeholder="placeholder" :readonly="readonly || locked"
     :error="error" :error-message="errorMessage"
     @update:model-value="$emit('update:modelValue', $event)"
+    @blur="$emit('blur', $event)"
     @click="openMenu"
   >
     <template #append>
-      <q-icon v-if="locked" name="o_lock" size="18px" color="grey-6" />
+      <q-icon v-if="locked" name="o_lock" size="18px" color="grey-6">
+        <q-tooltip v-if="lockedNote" anchor="top right" self="bottom right" max-width="300px" :delay="200">
+          {{ lockedNote }}
+        </q-tooltip>
+      </q-icon>
       <q-icon
         v-else-if="!readonly" name="o_arrow_drop_down" size="24px" color="grey-7" class="cursor-pointer"
         aria-label="Suffix suggestions"
@@ -53,10 +58,12 @@ defineProps({
   readonly: { type: Boolean, default: false },
   // Locked reads as readonly with a padlock in the corner saying why.
   locked: { type: Boolean, default: false },
+  lockedNote: { type: String, default: "" },
   error: { type: Boolean, default: false },
   errorMessage: { type: String, default: "" }
 });
-const emit = defineEmits(["update:modelValue"]);
+// `picked` says the answer is complete, which a typed one is only once the box is left.
+const emit = defineEmits(["update:modelValue", "blur", "picked"]);
 
 const SUFFIX_OPTIONS = CLIENT_NAME_SUFFIXES;
 const menuOpen = ref(false);
@@ -64,6 +71,7 @@ const menuOpen = ref(false);
 const openMenu = () => { menuOpen.value = true; };
 const pick = (value) => {
   emit("update:modelValue", value);
+  emit("picked", value);
   menuOpen.value = false;
 };
 </script>

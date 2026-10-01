@@ -29,9 +29,12 @@
       @update:model-value="onPick"
     >
       <template #option="scope">
-        <q-item v-bind="scope.itemProps">
+        <q-item v-bind="scope.itemProps" class="maconomy-customer-option">
           <q-item-section>
             <q-item-label>{{ scope.opt.text }}</q-item-label>
+            <q-item-label caption>
+              {{ scope.opt.emailAddress || "no email" }} · {{ scope.opt.phoneNumber || "no phone" }}
+            </q-item-label>
           </q-item-section>
         </q-item>
       </template>
@@ -95,7 +98,10 @@ const withSelected = (rows) => {
   const list = rows.map((r) => ({
     text: r.text,
     value: r.value,
-    specification6Name: r.specification6Name || null
+    specification6Name: r.specification6Name || null,
+    entityType: r.entityType || null,
+    emailAddress: r.emailAddress || null,
+    phoneNumber: r.phoneNumber || null
   }));
   if (selected.value && !list.some((o) => o.value === selected.value.value)) list.unshift(selected.value);
   return list;
@@ -148,5 +154,11 @@ const onPick = (value) => {
 /* The same control height as every other dense field (see AppSelect). */
 .maconomy-customer-select :deep(.q-field__control) {
   min-height: 40px !important;
+}
+
+/* Two lines to a row, so more room than the 3px a one-line menu row gets. */
+.q-item.maconomy-customer-option {
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 </style>
