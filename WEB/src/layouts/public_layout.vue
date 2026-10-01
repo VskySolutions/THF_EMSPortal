@@ -3,8 +3,11 @@
   <q-layout view="hHh lpR fFf">
     <q-header class="public-header">
       <q-toolbar class="public-toolbar">
-        <img src="~assets/logo.png" alt="EMS Portal" class="public-header__logo">
-        <q-toolbar-title class="text-weight-bold">EMS Portal</q-toolbar-title>
+        <img
+          :src="branding.logoDarkUrl || stockLogo" :alt="branding.appName"
+          class="public-header__logo" :class="{ 'public-header__logo--custom': !!branding.logoDarkUrl }"
+        >
+        <q-toolbar-title v-if="branding.showNameBesideLogo" class="text-weight-bold">{{ branding.appName }}</q-toolbar-title>
       </q-toolbar>
     </q-header>
 
@@ -19,7 +22,20 @@
 </template>
 
 <script setup>
-// No shell chrome, no stores — the public form is fully self-contained and unauthenticated.
+// No shell chrome and no session — the public form is self-contained and unauthenticated. The one thing
+// it asks for itself is the branding of the firm that sent the link, which the invite code identifies.
+import { onMounted } from "vue";
+import { useRoute } from "vue-router";
+import stockLogo from "assets/logo.png";
+import { useBrandingStore } from "stores/branding";
+
+const route = useRoute();
+const branding = useBrandingStore();
+
+onMounted(() => {
+  const inviteCode = route.params.inviteCode;
+  if (typeof inviteCode === "string" && inviteCode) branding.loadForInvite(inviteCode);
+});
 </script>
 
 <style scoped>
@@ -35,6 +51,12 @@
   width: 32px;
   height: 32px;
   margin-right: 12px;
+}
+/* A tenant's logo keeps its height and takes the width it needs. */
+.public-header__logo--custom {
+  width: auto;
+  max-width: 200px;
+  object-fit: contain;
 }
 /* The one page this layout carries is a long form, so the page gutter is kept modest — what is spent
    here is spent before the client has answered anything. */

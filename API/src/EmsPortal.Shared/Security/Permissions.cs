@@ -41,6 +41,10 @@ public static class Permissions
     /// <summary>Set up, test and remove the tenant's Maconomy connection. The customer lookup it powers needs no permission beyond signing in.</summary>
     public const string IntegrationsMaconomyManage = "integrations.maconomy.manage";
 
+    // Branding
+    /// <summary>Change how the tenant's copy of the application looks: name, logos, colours, type and buttons. Reading it needs no permission — everyone has to be able to draw the screen.</summary>
+    public const string BrandingManage = "branding.manage";
+
     // Universal Features (Phase 14)
     /// <summary>Manage tenant-wide Universal Feature settings: tags, shared saved views, tenant sticky
     /// notes, and Modified Log field configuration.</summary>
@@ -115,6 +119,7 @@ public static class Permissions
         GroupsManage,
         EmailManage,
         IntegrationsMaconomyManage,
+        BrandingManage,
         SettingsManage, RecordsAdminDelete,
         OptionSetsRead, OptionSetsManage,
         RemsRequestsRead, RemsRequestsCreate, RemsRequestsUpdate, RemsRequestsDelete, RemsRequestsAssign,
@@ -144,6 +149,8 @@ public static class Permissions
         EmailManage,
         // Tenant Admins connect their tenant to Maconomy.
         IntegrationsMaconomyManage,
+        // Tenant Admins decide how their tenant's copy of the application looks.
+        BrandingManage,
         // Tenant Admins manage tenant-wide UF settings and the deleted-records lifecycle.
         SettingsManage, RecordsAdminDelete,
         // Tenant Admins manage their tenant's option lists.

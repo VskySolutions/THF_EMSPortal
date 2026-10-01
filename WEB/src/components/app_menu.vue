@@ -11,7 +11,7 @@
           clickable
           :to="item.to"
           :exact="item.exact"
-          active-class="text-primary bg-teal-1"
+          active-class="text-primary bg-teal-1 app-menu__active"
           @click="onItem(item)"
         >
           <q-item-section avatar><q-icon :name="item.icon" size="20px" /></q-item-section>
@@ -63,7 +63,7 @@
               clickable
               :to="item.to"
               :exact="item.exact"
-              active-class="text-primary bg-teal-1"
+              active-class="text-primary bg-teal-1 app-menu__active"
               @click="onItem(item)"
             >
               <q-item-section avatar><q-icon :name="item.icon" size="20px" /></q-item-section>
@@ -91,7 +91,7 @@
           clickable
           :to="item.to"
           :exact="item.exact"
-          active-class="text-primary bg-teal-1"
+          active-class="text-primary bg-teal-1 app-menu__active"
           class="app-menu__nested"
           @click="onItem(item)"
         >
@@ -201,6 +201,7 @@ const sections = [
     items: [
       { label: "Email Accounts", icon: "o_mail", to: "/smtp-accounts", permissions: [Permissions.EmailManage] },
       { label: "Email Templates", icon: "o_drafts", to: "/email-templates", permissions: [Permissions.EmailManage] },
+      { label: "Branding", icon: "o_palette", to: "/settings/branding", permissions: [Permissions.BrandingManage] },
       { label: "Maconomy", icon: "o_hub", to: "/settings/maconomy", permissions: [Permissions.IntegrationsMaconomyManage] },
       // Gated on MANAGE, not read: Partner and REMS Admin hold optionSets.read so their dropdowns resolve,
       // but the lists are configuration and only Super Admin / Tenant Admin maintain them.

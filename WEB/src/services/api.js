@@ -262,6 +262,33 @@ export const maconomyApi = {
 };
 
 // Transactional email templates (WO email templates).
+// The tenant's branding: its theme (name, colours, type, buttons) and its images. `tenantId` is the Super
+// Admin's override, used by the Tenants screen; everyone else is pinned to their own tenant server-side.
+export const brandingApi = {
+  // → { tenantId, tenantName, tenantIdentifier, isCustomised, theme, assets: { logo, logoDark, logoMark, favicon,
+  // loginBackground }, updatedByName, updatedOnUtc }. `theme` is sparse: null means "as shipped".
+  get: (tenantId) => api.get("/api/branding", { params: { tenantId } }).then(unwrap),
+  // Anonymous: { theme, assets } for the sign-in screen, by tenant identifier.
+  getPublic: (tenant) => anonApi.get("/api/branding/public", { params: { tenant } }).then(unwrap),
+  // Anonymous: { theme, assets } of the firm that sent a client this form link.
+  getForInvite: (inviteCode) =>
+    anonApi.get(`/api/branding/public/forms/${encodeURIComponent(inviteCode)}`).then(unwrap),
+  // payload: the WHOLE theme; a value left null goes back to the stock look.
+  save: (theme, tenantId) => api.put("/api/branding", theme, { params: { tenantId } }).then(unwrap),
+  // Theme and images both. Returns the (now stock) branding.
+  reset: (tenantId) => api.delete("/api/branding", { params: { tenantId } }).then(unwrap),
+  // slot: "logo" | "logoDark" | "logoMark" | "favicon" | "loginBackground". Saved at once, not with the theme.
+  uploadAsset: (slot, file, tenantId) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post(`/api/branding/assets/${slot}`, form, {
+      params: { tenantId }, headers: { "Content-Type": "multipart/form-data" }
+    }).then(unwrap);
+  },
+  removeAsset: (slot, tenantId) =>
+    api.delete(`/api/branding/assets/${slot}`, { params: { tenantId } }).then(unwrap)
+};
+
 export const emailTemplateApi = {
   list: (params) => api.get("/api/admin/email-templates", { params }).then(envelope),
   get: (key, params) => api.get(`/api/admin/email-templates/${key}`, { params }).then(unwrap),

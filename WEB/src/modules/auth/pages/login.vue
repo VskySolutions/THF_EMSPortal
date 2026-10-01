@@ -1,8 +1,8 @@
 <template>
   <q-card flat bordered class="auth-card q-pa-lg">
     <div class="q-mb-lg">
-      <div class="text-h5 text-weight-bold">Welcome back 👋</div>
-      <div class="text-body2 text-grey-7 q-mt-xs">Please sign in to your account to continue.</div>
+      <div class="text-h5 text-weight-bold">{{ branding.login.headline }}</div>
+      <div class="text-body2 text-grey-7 q-mt-xs">{{ branding.login.subtext }}</div>
     </div>
 
     <q-banner v-if="errorMessage" dense rounded class="bg-red-1 text-negative q-mb-md auth-error">
@@ -79,6 +79,7 @@ import useVuelidate from "@vuelidate/core";
 import { required, helpers, email } from "@vuelidate/validators";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
+import { useBrandingStore } from "stores/branding";
 import { getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { setLocalStorage, getLocalStorage, clearLocalStorage } from "assets/utils";
 import { postLoginDestination } from "modules/auth/returnPath";
@@ -88,6 +89,7 @@ import AppPasswordField from "components/common/AppPasswordField.vue";
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const branding = useBrandingStore();
 
 const loading = ref(false);
 const microsoftLoading = ref(false);

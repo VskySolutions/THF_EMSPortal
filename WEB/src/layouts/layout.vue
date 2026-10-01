@@ -5,7 +5,7 @@
         <div class="flex items-center">
           <q-btn v-if="isLoggedIn" flat dense round icon="o_menu" class="text-black" aria-label="Menu" @click="toggleLeftDrawer" />
           <q-btn flat no-caps class="no-padding q-ml-md" @click="$router.push('/')">
-            <span class="text-weight-bold fs-18 text-primary">EMS Portal</span>
+            <span class="text-weight-bold fs-18 text-primary">{{ branding.appName }}</span>
           </q-btn>
         </div>
         <!-- User menu when signed in, otherwise a login action -->
@@ -102,7 +102,8 @@
 
     <q-footer bordered class="bg-white">
       <div class="text-center q-py-sm">
-        <h6 class="q-my-none text-black" style="font-size: 13px; font-weight: 400;">
+        <div v-if="branding.footerText" class="text-black" style="font-size: 13px;">{{ branding.footerText }}</div>
+        <h6 v-else class="q-my-none text-black" style="font-size: 13px; font-weight: 400;">
           Copyright &copy; 2025 Vsky. Website Designed and Developed by
           <a href="https://www.vskysolutions.com/" target="_blank" style="text-decoration: none; color: #007bff;">
             VSky Solutions.
@@ -118,6 +119,7 @@ import { ref, computed, watch } from "vue";
 import { LocalStorage, Dialog, useQuasar } from "quasar";
 import { storeToRefs } from "pinia";
 import { useTenantStore } from "stores/tenant";
+import { useBrandingStore } from "stores/branding";
 
 import UserInfo from "shared/user_info.vue";
 import AsideHeader from "shared/aside_header.vue";
@@ -128,6 +130,7 @@ import AppTenantScopeSelect from "components/common/AppTenantScopeSelect.vue";
 import { useTenantScope } from "composables/useTenantScope";
 
 const $q = useQuasar();
+const branding = useBrandingStore();
 const isLoggedIn = !!LocalStorage.getItem("token");
 
 // Persist the drawer open/closed state across reloads (defaults to open). Above the breakpoint the

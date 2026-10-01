@@ -13,121 +13,135 @@
       <q-spinner color="primary" size="40px" />
     </div>
 
-    <div v-else-if="tenant">
-      <!-- Basic info -->
-      <q-card flat bordered class="tenant-card q-mb-md">
-        <q-card-section class="text-subtitle1 text-weight-medium">Basic information</q-card-section>
-        <q-separator />
-        <q-card-section class="row q-col-gutter-md">
-          <app-text-field v-model="name" label="Name" class="col-12 col-sm-6" />
-          <app-text-field :model-value="tenant.identifier" readonly label="Identifier" class="col-12 col-sm-6" />
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn unelevated no-caps color="primary" label="Save" :loading="savingName" :disable="name === tenant.name" @click="saveName" />
-        </q-card-actions>
-      </q-card>
-
-      <!-- Status -->
-      <q-card flat bordered class="tenant-card q-mb-md">
-        <q-card-section class="row items-center">
-          <div class="text-subtitle1 text-weight-medium">Status</div>
-          <q-badge :color="statusColor" class="q-ml-md">{{ tenant.status }}</q-badge>
-          <q-space />
-          <q-btn
-            v-if="tenant.status !== 'Archived'"
-            outline
-            no-caps
-            :color="tenant.status === 'Active' ? 'negative' : 'positive'"
-            :label="tenant.status === 'Active' ? 'Deactivate' : 'Activate'"
-            @click="toggleStatus"
-          />
-        </q-card-section>
-      </q-card>
-
-      <!-- The tenant's own user accounts. -->
-      <app-data-table
-        v-if="canReadUsers"
-        page-key="tenant-users"
-        row-key="userId"
-        :title="`Users in ${tenant.name}`"
-        class="q-mb-md"
-        :rows="userRows"
-        :columns="userColumns"
-        :loading="loadingUsers"
-        :total-records="totalUsers"
-        :pagination="userPagination"
-        @request="onUsersRequest"
-        @refresh="loadUsers"
+    <template v-else-if="tenant">
+      <!-- Branding is offered for a tenant that is in use; an inactive one has nobody to show it to. -->
+      <q-tabs
+        v-if="canBrand" v-model="tab" dense no-caps align="left" active-color="primary" indicator-color="primary"
+        class="text-grey-8 q-mb-md"
       >
-        <template #actions>
-          <q-input
-            v-model="userSearch" dense outlined debounce="300" placeholder="Search name or email"
-            style="min-width: 220px;"
-          >
-            <template #prepend><q-icon name="o_search" /></template>
-          </q-input>
-          <q-btn
-            v-if="canWriteUsers" unelevated no-caps color="primary" icon="o_person_add" label="Add User"
-            @click="createUserOpen = true"
-          />
-        </template>
+        <q-tab name="overview" icon="o_apartment" label="Overview" />
+        <q-tab name="branding" icon="o_palette" label="Branding" />
+      </q-tabs>
 
-        <template #body-cell-isActive="cell">
-          <q-td :props="cell">
-            <q-badge :color="cell.value ? 'positive' : 'grey'">{{ cell.value ? "Active" : "Inactive" }}</q-badge>
-          </q-td>
-        </template>
+      <!-- Mounted on first visit and kept, so a draft survives a look back at the overview. -->
+      <branding-editor v-if="brandingOpened" v-show="tab === 'branding'" :tenant-id="tenantId" />
 
-        <template #body-cell-actions="cell">
-          <q-td :props="cell">
+      <div v-show="tab === 'overview'">
+        <!-- Basic info -->
+        <q-card flat bordered class="tenant-card q-mb-md">
+          <q-card-section class="text-subtitle1 text-weight-medium">Basic information</q-card-section>
+          <q-separator />
+          <q-card-section class="row q-col-gutter-md">
+            <app-text-field v-model="name" label="Name" class="col-12 col-sm-6" />
+            <app-text-field :model-value="tenant.identifier" readonly label="Identifier" class="col-12 col-sm-6" />
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn unelevated no-caps color="primary" label="Save" :loading="savingName" :disable="name === tenant.name" @click="saveName" />
+          </q-card-actions>
+        </q-card>
+
+        <!-- Status -->
+        <q-card flat bordered class="tenant-card q-mb-md">
+          <q-card-section class="row items-center">
+            <div class="text-subtitle1 text-weight-medium">Status</div>
+            <q-badge :color="statusColor" class="q-ml-md">{{ tenant.status }}</q-badge>
+            <q-space />
             <q-btn
-              flat round dense color="primary" icon="o_visibility"
-              :to="{ name: 'user_detail', params: { id: cell.row.userId } }"
+              v-if="tenant.status !== 'Archived'"
+              outline
+              no-caps
+              :color="tenant.status === 'Active' ? 'negative' : 'positive'"
+              :label="tenant.status === 'Active' ? 'Deactivate' : 'Activate'"
+              @click="toggleStatus"
+            />
+          </q-card-section>
+        </q-card>
+
+        <!-- The tenant's own user accounts. -->
+        <app-data-table
+          v-if="canReadUsers"
+          page-key="tenant-users"
+          row-key="userId"
+          :title="`Users in ${tenant.name}`"
+          class="q-mb-md"
+          :rows="userRows"
+          :columns="userColumns"
+          :loading="loadingUsers"
+          :total-records="totalUsers"
+          :pagination="userPagination"
+          @request="onUsersRequest"
+          @refresh="loadUsers"
+        >
+          <template #actions>
+            <q-input
+              v-model="userSearch" dense outlined debounce="300" placeholder="Search name or email"
+              style="min-width: 220px;"
             >
-              <q-tooltip>View / Manage</q-tooltip>
-            </q-btn>
-            <!-- One button per action, all of them on the row. -->
+              <template #prepend><q-icon name="o_search" /></template>
+            </q-input>
             <q-btn
-              v-if="canWriteUsers" type="a"
-              flat round dense
-              :color="cell.row.isActive ? 'grey-8' : 'positive'"
-              :icon="cell.row.isActive ? 'o_block' : 'o_check_circle'"
-              @click="setUserStatus(cell.row, !cell.row.isActive)"
-            >
-              <q-tooltip>{{ cell.row.isActive ? "Deactivate" : "Activate" }}</q-tooltip>
-            </q-btn>
-            <q-btn
-              v-if="canResetPassword" type="a"
-              flat round dense color="primary" icon="o_lock_reset" @click="resetUserPassword(cell.row)"
-            >
-              <q-tooltip>Reset Password</q-tooltip>
-            </q-btn>
-          </q-td>
-        </template>
-      </app-data-table>
+              v-if="canWriteUsers" unelevated no-caps color="primary" icon="o_person_add" label="Add User"
+              @click="createUserOpen = true"
+            />
+          </template>
 
-      <!-- The account is created IN this tenant, so the drawer is told which one and never asks. -->
-      <user-create-drawer v-model="createUserOpen" :tenant-id="tenantId" @created="loadUsers" />
+          <template #body-cell-isActive="cell">
+            <q-td :props="cell">
+              <q-badge :color="cell.value ? 'positive' : 'grey'">{{ cell.value ? "Active" : "Inactive" }}</q-badge>
+            </q-td>
+          </template>
 
-      <temp-password-dialog v-model="tempPwOpen" :password="tempPassword" />
+          <template #body-cell-actions="cell">
+            <q-td :props="cell">
+              <q-btn
+                flat round dense color="primary" icon="o_visibility"
+                :to="{ name: 'user_detail', params: { id: cell.row.userId } }"
+              >
+                <q-tooltip>View / Manage</q-tooltip>
+              </q-btn>
+              <!-- One button per action, all of them on the row. -->
+              <q-btn
+                v-if="canWriteUsers" type="a"
+                flat round dense
+                :color="cell.row.isActive ? 'grey-8' : 'positive'"
+                :icon="cell.row.isActive ? 'o_block' : 'o_check_circle'"
+                @click="setUserStatus(cell.row, !cell.row.isActive)"
+              >
+                <q-tooltip>{{ cell.row.isActive ? "Deactivate" : "Activate" }}</q-tooltip>
+              </q-btn>
+              <q-btn
+                v-if="canResetPassword" type="a"
+                flat round dense color="primary" icon="o_lock_reset" @click="resetUserPassword(cell.row)"
+              >
+                <q-tooltip>Reset Password</q-tooltip>
+              </q-btn>
+            </q-td>
+          </template>
+        </app-data-table>
 
-      <!-- Danger zone -->
-      <q-card v-if="tenant.status !== 'Archived'" flat bordered class="tenant-card danger-zone q-mb-md">
-        <q-card-section class="text-subtitle1 text-weight-medium text-negative">Danger zone</q-card-section>
-        <q-separator />
-        <q-banner v-if="archiveError" dense class="bg-red-1 text-negative q-ma-md">
-          <template #avatar><q-icon name="o_error" color="negative" /></template>
-          {{ archiveError }}
-        </q-banner>
-        <q-card-actions>
-          <div class="text-body2 text-grey-7 q-pa-sm">Archiving retires this tenant.</div>
-          <q-space />
-          <q-btn outline no-caps color="negative" icon="o_archive" label="Archive tenant" @click="archive" />
-        </q-card-actions>
-      </q-card>
+        <!-- The account is created IN this tenant, so the drawer is told which one and never asks. -->
+        <user-create-drawer v-model="createUserOpen" :tenant-id="tenantId" @created="loadUsers" />
 
-      <app-record-audit :audit="tenant.audit" />
-    </div>
+        <temp-password-dialog v-model="tempPwOpen" :password="tempPassword" />
+
+        <!-- Danger zone -->
+        <q-card v-if="tenant.status !== 'Archived'" flat bordered class="tenant-card danger-zone q-mb-md">
+          <q-card-section class="text-subtitle1 text-weight-medium text-negative">Danger zone</q-card-section>
+          <q-separator />
+          <q-banner v-if="archiveError" dense class="bg-red-1 text-negative q-ma-md">
+            <template #avatar><q-icon name="o_error" color="negative" /></template>
+            {{ archiveError }}
+          </q-banner>
+          <q-card-actions>
+            <div class="text-body2 text-grey-7 q-pa-sm">Archiving retires this tenant.</div>
+            <q-space />
+            <q-btn outline no-caps color="negative" icon="o_archive" label="Archive tenant" @click="archive" />
+          </q-card-actions>
+        </q-card>
+
+        <app-record-audit :audit="tenant.audit" />
+      </div>
+    </template>
   </q-page>
 </template>
 
@@ -150,6 +164,7 @@ import AppDataTable from "components/common/AppDataTable.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
 import UserCreateDrawer from "components/user/UserCreateDrawer.vue";
 import TempPasswordDialog from "components/temp_password_dialog.vue";
+import BrandingEditor from "modules/branding/components/BrandingEditor.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -168,11 +183,18 @@ const name = ref("");
 const savingName = ref(false);
 const archiveError = ref("");
 
+// ---- Tabs ----
+const tab = ref("overview");
+const brandingOpened = ref(false);
+watch(tab, (value) => { if (value === "branding") brandingOpened.value = true; });
+
 // Whether the tenant being edited is one the signed-in user actually belongs to.
 const authStore = useAuthStore();
 const tenantStore = useTenantStore();
 const isOwnTenant = computed(() => tenantStore.assignments.some((t) => t.tenantId === tenantId));
 const reloadAssignments = () => authStore.loadProfile().catch(() => { /* non-fatal: the name catches up on the next sign-in */ });
+
+const canBrand = computed(() => has(Permissions.BrandingManage) && tenant.value?.status === "Active");
 
 const statusColor = computed(() =>
   ({ Active: "positive", Inactive: "grey", Archived: "blue-grey" }[tenant.value?.status] || "grey"));
