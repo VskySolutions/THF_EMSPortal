@@ -9,6 +9,7 @@ public static class RemsOptionSetKeys
     public const string EntityType = "REMS.EntityType";
     public const string Department = "REMS.Department";
     public const string ServiceLine = "REMS.ServiceLine";
+    public const string JobTemplate = "REMS.JobTemplate";
     public const string Industry = "REMS.Industry";
     public const string BillingPeriod = "REMS.BillingPeriod";
     public const string PersonnelLevel = "REMS.PersonnelLevel";

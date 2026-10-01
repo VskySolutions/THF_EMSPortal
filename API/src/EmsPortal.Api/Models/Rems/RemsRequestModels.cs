@@ -73,6 +73,12 @@ public sealed class UpdateRemsRequestRequest
     public Guid? CSEId { get; set; }
     public Guid? ExistingClientReferenceId { get; set; }
 
+    /// <summary>
+    /// Takes the request off the existing client it is linked to, so the details sent with it file a
+    /// new one. Its own flag because a null <see cref="ExistingClientReferenceId"/> means "leave alone".
+    /// </summary>
+    public bool ClearExistingClientReference { get; set; }
+
     // Saving a request cannot re-point who reviews it: an admin gains a request by picking it up and loses
     // it by handing it back, both actions of their own rather than a field somebody else writes on an edit.
 }
@@ -219,7 +225,22 @@ public sealed record RemsClientLookupItem(
     /// <summary>The legal name, for an organisation.</summary>
     string? CorporateName,
     /// <summary>Which of the two this is.</summary>
-    bool IsOrganisation);
+    bool IsOrganisation,
+    /// <summary>
+    /// The REMS.EntityType code the client's record holds, which a request for them is filed under. Null
+    /// for an organisation no intake form has classified yet.
+    /// </summary>
+    string? EntityType);
+
+/// <summary>
+/// The clients already on file that a NEW client's details belong to — what the save would refuse or
+/// link to, asked before it is attempted.
+/// </summary>
+public sealed record RemsClientOnFile(
+    /// <summary>The organisation filed under exactly this name, which the save links the request to.</summary>
+    RemsClientLookupItem? ByName,
+    /// <summary>The client holding this email, which the save refuses a second record for.</summary>
+    RemsClientLookupItem? ByEmail);
 
 /// <summary>An option in the assign-to-admin dropdown (WO-111).</summary>
 public sealed record RemsAdminOption(Guid Id, string Name, string? Email);

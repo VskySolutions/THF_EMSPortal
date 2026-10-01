@@ -35,6 +35,10 @@ public sealed class RemsRequestsController : ControllerBase
 {
     private const string CodeNotDeletable = "REMS_REQUEST_NOT_DELETABLE";
     private const string CodeDuplicateEmail = "REMS_DUPLICATE_CLIENT_EMAIL";
+    private const string CodeClientLocked = "REMS_CLIENT_LOCKED";
+
+    /// <summary>How many clients one search returns. The picker says so when it is reached.</summary>
+    private const int ClientLookupLimit = 20;
 
     private readonly IRemsRepository _rems;
     private readonly IRemsEngagementRepository _engagements;
@@ -260,7 +264,10 @@ public sealed class RemsRequestsController : ControllerBase
         // filed as new.
         var type = request.Type;
         if (request.ExistingClientReferenceId is null
-            && await FindSoleClientByExactNameAsync(request.ClientName, cancellationToken) is { } matchedClientId)
+            && await FindSoleClientByExactNameAsync(
+                request.ClientName,
+                KindOf(request.ClientCorporateName, request.ClientFirstName, request.ClientLastName),
+                excludingPersonId: null, cancellationToken) is { } matchedClientId)
         {
             request.ExistingClientReferenceId = matchedClientId;
             if (type == RemsRequestTypes.BrandNewClient) type = RemsRequestTypes.ExistingClient;
@@ -373,12 +380,44 @@ public sealed class RemsRequestsController : ControllerBase
             return badClient;
         }
 
+        // A null reference means "leave the link alone", so taking it off is asked for by its own flag.
+        if (request.ClearExistingClientReference
+            && request.ExistingClientReferenceId is null
+            && rems.ExistingClientReferenceId is not null)
+        {
+            if (rems.Status!.Value != RemsRequestStatuses.Draft)
+            {
+                return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
+                    CodeClientLocked,
+                    "The client can no longer be changed.",
+                    "This request's intake form has been sent, so the client it names is fixed."));
+            }
+
+            rems.ExistingClientReferenceId = null;
+        }
+
+        // The client as this save leaves them. An omitted field keeps what is already on the person.
+        var client = new ClientDetails(
+            request.ClientName ?? rems.ClientPerson?.ClientDisplayName,
+            request.ClientNameSuffix ?? rems.ClientNameSuffix,
+            request.CustomerEmail ?? rems.CustomerEmail,
+            request.CustomerMobileNumber ?? rems.CustomerMobileNumber,
+            request.ClientFirstName ?? rems.ClientPerson?.FirstName,
+            request.ClientLastName ?? rems.ClientPerson?.LastName,
+            request.ClientCorporateName ?? rems.ClientPerson?.CorporateName);
+
+        // The client this request itself created is not a match for its own name.
+        var ownClient = await FindOwnClientAsync(rems, cancellationToken);
+
         // Same name, same client — as on create. Confined to a request that is not already linked, so an
         // edit can never re-point an existing reference at somebody the name happens to match.
         if (rems.ExistingClientReferenceId is null
             && request.ExistingClientReferenceId is null
             && request.ClientName is not null
-            && await FindSoleClientByExactNameAsync(request.ClientName, cancellationToken) is { } matchedClientId)
+            && await FindSoleClientByExactNameAsync(
+                request.ClientName,
+                KindOf(client.CorporateName, client.FirstName, client.LastName),
+                ownClient?.Id, cancellationToken) is { } matchedClientId)
         {
             request.ExistingClientReferenceId = matchedClientId;
             if ((request.Type ?? rems.Type!.Value) == RemsRequestTypes.BrandNewClient)
@@ -387,11 +426,15 @@ public sealed class RemsRequestsController : ControllerBase
             }
         }
 
-        // The client this request already minted is not a duplicate of itself, so it is excluded.
+        // Nor is it a duplicate of its own email — while it stays this request's client. Once somebody
+        // else shares the record a changed name files a SECOND one, and that one would be the duplicate.
+        var keepsOwnClient = ownClient is not null
+            && (await IsOwnToRewriteAsync(rems, ownClient, cancellationToken)
+                || ClientShape.Of(client).Describes(ownClient));
         if (await RejectDuplicateClientEmailAsync(
                 request.ExistingClientReferenceId ?? rems.ExistingClientReferenceId,
-                request.CustomerEmail ?? rems.CustomerEmail,
-                rems.ClientPersonId,
+                client.Email,
+                keepsOwnClient ? ownClient!.Id : null,
                 cancellationToken) is { } emailClash)
         {
             return emailClash;
@@ -406,18 +449,8 @@ public sealed class RemsRequestsController : ControllerBase
         if (request.ExistingClientReferenceId.HasValue) rems.ExistingClientReferenceId = request.ExistingClientReferenceId;
 
         // The client IS the person record now, so this is where an edited name, suffix, email or mobile
-        // actually lands. An omitted field leaves what is already on the person alone.
-        rems.ClientPersonId = await ResolveClientPersonAsync(
-            rems,
-            new ClientDetails(
-                request.ClientName ?? rems.ClientPerson?.ClientDisplayName,
-                request.ClientNameSuffix ?? rems.ClientNameSuffix,
-                request.CustomerEmail ?? rems.CustomerEmail,
-                request.CustomerMobileNumber ?? rems.CustomerMobileNumber,
-                request.ClientFirstName ?? rems.ClientPerson?.FirstName,
-                request.ClientLastName ?? rems.ClientPerson?.LastName,
-                request.ClientCorporateName ?? rems.ClientPerson?.CorporateName),
-            rems.TenantId, cancellationToken);
+        // actually lands.
+        rems.ClientPersonId = await ResolveClientPersonAsync(rems, client, rems.TenantId, cancellationToken);
 
         // Editing never moves a request along any more. A draft leaves draft only by being sent to the
         // client, which is its own action.
@@ -832,8 +865,13 @@ public sealed class RemsRequestsController : ControllerBase
     /// raised under it are offered. Omitted, every REMS client is — which is what a caller who has not
     /// answered the entity type yet should see, rather than an empty list they cannot explain.
     /// </param>
+    /// <param name="excludingRemsId">
+    /// The request being edited, left out of what each client's record is read from — its own entity
+    /// type is the question, not part of the answer.
+    /// </param>
     public async Task<IActionResult> ClientLookup(
-        [FromQuery] string? q, [FromQuery] string? entityType, CancellationToken cancellationToken)
+        [FromQuery] string? q, [FromQuery] string? entityType, [FromQuery] Guid? excludingRemsId,
+        CancellationToken cancellationToken)
     {
         var term = q?.Trim() ?? string.Empty;
         if (term.Length == 0)
@@ -842,19 +880,60 @@ public sealed class RemsRequestsController : ControllerBase
                 Array.Empty<RemsClientLookupItem>(), "Enter a name, email or phone number to search."));
         }
 
-        // Only the people a request names as its client, under the entity type this one is being raised
-        // for: a Person row filed as a client by anything else is not one of the firm's REMS clients. The
-        // ambient tenant filter pins the search to the caller's active tenant.
-        var items = await _rems.LookupClientsAsync(term, entityType, limit: 20, cancellationToken);
+        // Only the people a request names as its client: a Person row filed as a client by anything else
+        // is not one of the firm's REMS clients. The ambient tenant filter pins the search to the caller's
+        // active tenant.
+        var items = await _rems.LookupClientsAsync(
+            term, entityType, excludingRemsId, limit: ClientLookupLimit, cancellationToken);
 
-        // The PARTS, not one joined string.
-        var results = items.Select(p => new RemsClientLookupItem(
-            p.Id, p.ClientDisplayName, p.PrimaryEmail, p.MobileNumber, p.Suffix,
-            p.IsOrganisation ? string.Empty : p.FirstName,
-            p.IsOrganisation ? string.Empty : p.LastName,
-            p.CorporateName,
-            p.IsOrganisation));
+        var results = items.Select(row => ToLookupItem(row.Person, row.EntityType));
         return Ok(ApiResponseFactory.Success(results, "Clients retrieved."));
+    }
+
+    /// <summary>One client on file as the picker shows them — what a request already linked to them reads its lock from.</summary>
+    [HttpGet("/api/rems/clients/{id:guid}")]
+    [RequirePermission(Permissions.RemsRequestsCreate)]
+    [ProducesResponseType<ApiResponse<RemsClientLookupItem>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Client(
+        Guid id, [FromQuery] Guid? excludingRemsId, CancellationToken cancellationToken)
+    {
+        if (await _persons.GetByIdAsync(id, cancellationToken) is not { SourceEntityType: EntityType.Client } client)
+        {
+            return NotFound(ApiResponseFactory.NotFound("Client not found."));
+        }
+
+        var item = await ToLookupItemAsync(client, excludingRemsId, cancellationToken);
+        return Ok(ApiResponseFactory.Success(item, "Client retrieved."));
+    }
+
+    /// <summary>
+    /// Whether a NEW client's name or email already belongs to a client on file: the two checks the save
+    /// makes, asked first so the form can say so beside the field.
+    /// </summary>
+    /// <param name="remsId">The request being edited, whose own client is not a duplicate of itself.</param>
+    [HttpGet("/api/rems/clients/on-file")]
+    [RequirePermission(Permissions.RemsRequestsCreate)]
+    [ProducesResponseType<ApiResponse<RemsClientOnFile>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ClientOnFile(
+        [FromQuery] string? name, [FromQuery] string? email, [FromQuery] Guid? remsId,
+        CancellationToken cancellationToken)
+    {
+        var rems = remsId is { } id ? await _rems.GetByIdAsync(id, cancellationToken) : null;
+        var ownClient = rems is null ? null : await FindOwnClientAsync(rems, cancellationToken);
+
+        // Only an organisation is linked by its name — two people called John Smith are two clients.
+        var byName = await FindSoleClientByExactNameAsync(
+                name, PartyType.Organisation, ownClient?.Id, cancellationToken) is { } namedId
+            ? await _persons.GetByIdAsync(namedId, cancellationToken)
+            : null;
+        var byEmail = Normalize(email) is { } address
+            ? await _persons.FindClientByEmailAsync(address, ownClient?.Id, cancellationToken)
+            : null;
+
+        var onFile = new RemsClientOnFile(
+            byName is null ? null : await ToLookupItemAsync(byName, remsId, cancellationToken),
+            byEmail is null ? null : await ToLookupItemAsync(byEmail, remsId, cancellationToken));
+        return Ok(ApiResponseFactory.Success(onFile, "Checked against the clients on file."));
     }
 
     /// <summary>The tenant's Admin and Super Admin users.</summary>
@@ -923,7 +1002,10 @@ public sealed class RemsRequestsController : ControllerBase
         => privileged || IsMine(r, me);
 
     /// <summary>The client already on file under this exact name, if there is exactly one.</summary>
-    private async Task<Guid?> FindSoleClientByExactNameAsync(string? clientName, CancellationToken cancellationToken)
+    /// <param name="kind">Matches only clients of this kind, so a company is never linked to a person of the same name. Null matches either.</param>
+    /// <param name="excludingPersonId">The asking request's own client, who is not a match for themselves.</param>
+    private async Task<Guid?> FindSoleClientByExactNameAsync(
+        string? clientName, PartyType? kind, Guid? excludingPersonId, CancellationToken cancellationToken)
     {
         var name = clientName?.Trim();
         if (string.IsNullOrEmpty(name) || name.Length < 2)
@@ -933,14 +1015,53 @@ public sealed class RemsRequestsController : ControllerBase
 
         var (candidates, _) = await _persons.ListAsync(
             name, tenantId: null, isUser: null, isActive: true, SortRequest.Default, page: 1, limit: 20,
-            sourceEntityType: EntityType.Client, cancellationToken: cancellationToken);
+            sourceEntityType: EntityType.Client, partyType: kind, cancellationToken: cancellationToken);
         var matches = candidates
+            .Where(p => p.Id != excludingPersonId)
             .Where(p => string.Equals(p.FullName.Trim(), name, StringComparison.OrdinalIgnoreCase))
             .Select(p => p.Id)
             .Distinct()
             .ToList();
         return matches.Count == 1 ? matches[0] : null;
     }
+
+    /// <summary>Which kind of client the submitted name describes, or null where it came as one string.</summary>
+    private static PartyType? KindOf(string? corporateName, string? firstName, string? lastName)
+    {
+        if (Normalize(corporateName) is not null)
+        {
+            return PartyType.Organisation;
+        }
+
+        return Normalize(firstName) is not null || Normalize(lastName) is not null
+            ? PartyType.Individual
+            : null;
+    }
+
+    /// <summary>The client record this request itself created, or null where it names one already on file.</summary>
+    private async Task<Person?> FindOwnClientAsync(REMS rems, CancellationToken cancellationToken)
+        => rems.ClientPersonId is { } personId
+            && await _persons.GetByIdAsync(personId, cancellationToken) is { SourceEntityType: EntityType.Client } person
+            && person.SourceEntityId == rems.Id
+                ? person
+                : null;
+
+    private async Task<RemsClientLookupItem> ToLookupItemAsync(
+        Person client, Guid? excludingRemsId, CancellationToken cancellationToken)
+    {
+        var filed = await _rems.GetClientEntityTypesAsync(new[] { client.Id }, excludingRemsId, cancellationToken);
+        return ToLookupItem(client, filed.GetValueOrDefault(client.Id));
+    }
+
+    /// <summary>The name in PARTS, not one joined string, so the form never has to guess where it splits.</summary>
+    private static RemsClientLookupItem ToLookupItem(Person client, string? lastFiledUnder)
+        => new(
+            client.Id, client.ClientDisplayName, client.PrimaryEmail, client.MobileNumber, client.Suffix,
+            client.IsOrganisation ? string.Empty : client.FirstName,
+            client.IsOrganisation ? string.Empty : client.LastName,
+            client.CorporateName,
+            client.IsOrganisation,
+            RemsClientEntityType.Of(client, lastFiledUnder));
 
     /// <summary>
     /// Puts the request's client into the Persons table and returns who they are, so a client entered
@@ -950,47 +1071,40 @@ public sealed class RemsRequestsController : ControllerBase
     private async Task<Guid> ResolveClientPersonAsync(
         REMS rems, ClientDetails client, Guid tenantId, CancellationToken cancellationToken)
     {
-        // Two names and a particle, on purpose.
-        var corporate = Normalize(client.CorporateName);
-        var isOrganisation = corporate is not null;
-        var suffix = isOrganisation ? null : Normalize(client.Suffix);
-        var email = Normalize(client.Email);
-        var phone = Normalize(client.Phone);
-
-        // The PARTS where the form sent them, the guessed split only where it did not.
-        var (first, last) = isOrganisation
-            ? (string.Empty, string.Empty)
-            : Normalize(client.FirstName) is not null || Normalize(client.LastName) is not null
-                ? (Normalize(client.FirstName) ?? string.Empty, Normalize(client.LastName) ?? string.Empty)
-                : SplitName(client.Name?.Trim() ?? string.Empty);
-
-        // What the record reads as.
-        var name = isOrganisation
-            ? corporate!
-            : string.Join(" ", new[] { first, last }.Where(p => p.Length > 0));
-        var displayName = suffix is null || name.Length == 0 ? name : $"{name} {suffix}";
+        var shape = ClientShape.Of(client);
+        var ownClient = await FindOwnClientAsync(rems, cancellationToken);
+        var ownToRewrite = ownClient is not null
+            && await IsOwnToRewriteAsync(rems, ownClient, cancellationToken);
 
         // Matched an existing client. A reference that no longer resolves (person deleted, or another
         // tenant's) falls through and is treated as a client we do not have.
         if (rems.ExistingClientReferenceId is { } referenceId
             && await _persons.GetByIdAsync(referenceId, cancellationToken) is { } matched)
         {
-            var filled = false;
-            if (email is not null && string.IsNullOrWhiteSpace(matched.PrimaryEmail))
+            // The record this draft created is nobody's once it names somebody else, and left behind it
+            // would go on holding its email against the next new client.
+            if (ownToRewrite && ownClient!.Id != matched.Id
+                && rems.Status?.Value == RemsRequestStatuses.Draft)
             {
-                matched.PrimaryEmail = email;
+                _persons.Remove(ownClient);
+            }
+
+            var filled = false;
+            if (shape.Email is not null && string.IsNullOrWhiteSpace(matched.PrimaryEmail))
+            {
+                matched.PrimaryEmail = shape.Email;
                 filled = true;
             }
-            if (phone is not null && string.IsNullOrWhiteSpace(matched.MobileNumber))
+            if (shape.Phone is not null && string.IsNullOrWhiteSpace(matched.MobileNumber))
             {
-                matched.MobileNumber = phone;
+                matched.MobileNumber = shape.Phone;
                 filled = true;
             }
             // Only into a blank, like the two above: this request's particle is an answer about the
             // client, but a particle already on their record was put there deliberately and is theirs.
-            if (suffix is not null && string.IsNullOrWhiteSpace(matched.Suffix))
+            if (shape.Suffix is not null && string.IsNullOrWhiteSpace(matched.Suffix))
             {
-                matched.Suffix = suffix;
+                matched.Suffix = shape.Suffix;
                 filled = true;
             }
             if (filled)
@@ -1001,25 +1115,19 @@ public sealed class RemsRequestsController : ControllerBase
             return matched.Id;
         }
 
-        // A person this request minted, still referred to by nobody else. Excludes one who has since become
-        // a user — their profile is theirs from that point on, not a by-product of the request.
-        if (rems.ClientPersonId is { } ownedId
-            && await _persons.GetByIdAsync(ownedId, cancellationToken) is { UserId: null } owned
-            && owned.SourceEntityType == EntityType.Client
-            && owned.SourceEntityId == rems.Id
-            && !await _rems.IsClientPersonSharedAsync(ownedId, rems.Id, cancellationToken))
+        if (ownToRewrite)
         {
-            owned.PartyType = isOrganisation ? PartyType.Organisation : PartyType.Individual;
-            owned.CorporateName = corporate;
-            owned.FirstName = first;
-            owned.LastName = last;
-            owned.Suffix = suffix;
-            owned.DisplayName = displayName;
-            owned.PrimaryEmail = email;
-            owned.MobileNumber = phone;
-            owned.LastProfileUpdatedOn = DateTime.UtcNow;
-            _persons.Update(owned);
-            return owned.Id;
+            shape.WriteTo(ownClient!);
+            ownClient!.LastProfileUpdatedOn = DateTime.UtcNow;
+            _persons.Update(ownClient);
+            return ownClient.Id;
+        }
+
+        // Its own client, since shared or made a user: no longer this request's to rewrite, and still its
+        // client while nothing about them is being changed.
+        if (ownClient is not null && shape.Describes(ownClient))
+        {
+            return ownClient.Id;
         }
 
         var person = new Person
@@ -1033,21 +1141,73 @@ public sealed class RemsRequestsController : ControllerBase
             // Client, not Rems: this person IS the client, and the picker offers only those.
             SourceEntityType = EntityType.Client,
             SourceEntityId = rems.Id,
-            // Which shape this record is. It decides where the name lives, how the client lists read it
-            // back, and whether the picker offers this record for an individual request or a corporate one.
-            PartyType = isOrganisation ? PartyType.Organisation : PartyType.Individual,
-            CorporateName = corporate,
-            FirstName = first,
-            LastName = last,
-            Suffix = suffix,
-            DisplayName = displayName,
-            PrimaryEmail = email,
-            MobileNumber = phone,
             IsActive = true,
             LastProfileUpdatedOn = DateTime.UtcNow,
         };
+        shape.WriteTo(person);
         await _persons.AddAsync(person, cancellationToken);
         return person.Id;
+    }
+
+    /// <summary>
+    /// Whether the client this request created is still its to rewrite: referred to by nobody else, and
+    /// not since made a user — a profile is its owner's from that point on, not a by-product of a request.
+    /// </summary>
+    private async Task<bool> IsOwnToRewriteAsync(REMS rems, Person ownClient, CancellationToken cancellationToken)
+        => ownClient.UserId is null
+            && !await _rems.IsClientPersonSharedAsync(ownClient.Id, rems.Id, cancellationToken);
+
+    /// <summary>A client's submitted details, in the shape their <see cref="Person"/> record stores them.</summary>
+    private sealed record ClientShape(
+        bool IsOrganisation, string? Corporate, string First, string Last, string? Suffix,
+        string? Email, string? Phone)
+    {
+        public static ClientShape Of(ClientDetails client)
+        {
+            var corporate = Normalize(client.CorporateName);
+            var isOrganisation = corporate is not null;
+            var firstName = Normalize(client.FirstName);
+            var lastName = Normalize(client.LastName);
+
+            // The PARTS where the form sent them, the guessed split only where it did not.
+            var (first, last) = isOrganisation
+                ? (string.Empty, string.Empty)
+                : firstName is not null || lastName is not null
+                    ? (firstName ?? string.Empty, lastName ?? string.Empty)
+                    : SplitName(client.Name);
+
+            return new ClientShape(
+                isOrganisation, corporate, first, last,
+                isOrganisation ? null : Normalize(client.Suffix),
+                Normalize(client.Email), Normalize(client.Phone));
+        }
+
+        /// <summary>Whether this is what the record already says, so that saving it changes nothing.</summary>
+        public bool Describes(Person person)
+            => person.IsOrganisation == IsOrganisation
+                && Normalize(person.CorporateName) == Corporate
+                && person.FirstName.Trim() == First
+                && person.LastName.Trim() == Last
+                && Normalize(person.Suffix) == Suffix
+                && string.Equals(Normalize(person.PrimaryEmail), Email, StringComparison.OrdinalIgnoreCase)
+                && Normalize(person.MobileNumber) == Phone;
+
+        public void WriteTo(Person person)
+        {
+            var name = IsOrganisation
+                ? Corporate!
+                : string.Join(" ", new[] { First, Last }.Where(p => p.Length > 0));
+
+            // Which shape the record is decides where the name lives and how the client lists read it back.
+            person.PartyType = IsOrganisation ? PartyType.Organisation : PartyType.Individual;
+            person.CorporateName = Corporate;
+            person.FirstName = First;
+            person.LastName = Last;
+            person.Suffix = Suffix;
+            person.DisplayName = Suffix is null || name.Length == 0 ? name : $"{name} {Suffix}";
+            person.PrimaryEmail = Email;
+            person.MobileNumber = Phone;
+        }
     }
 
     /// <summary>First word is the given name, the rest the family name.</summary>
@@ -1064,16 +1224,28 @@ public sealed class RemsRequestsController : ControllerBase
     }
 
     /// <summary>
-    /// The 409 for filing a brand-new client under an email another client already holds, or null to
-    /// carry on.
+    /// The 409 for giving a client an email another client already holds, or null to carry on. It is
+    /// given to a brand-new client, and to one on file whose record has none.
     /// </summary>
     private async Task<IActionResult?> RejectDuplicateClientEmailAsync(
         Guid? existingClientReferenceId, string? email, Guid? excludingPersonId, CancellationToken cancellationToken)
     {
         var trimmed = Normalize(email);
-        if (existingClientReferenceId is not null || trimmed is null)
+        if (trimmed is null)
         {
             return null;
+        }
+
+        if (existingClientReferenceId is { } linkedId)
+        {
+            // A client on file keeps the email their record holds, so nothing is being given.
+            if (await _persons.GetByIdAsync(linkedId, cancellationToken) is not { } linked
+                || !string.IsNullOrWhiteSpace(linked.PrimaryEmail))
+            {
+                return null;
+            }
+
+            excludingPersonId = linkedId;
         }
 
         if (await _persons.FindClientByEmailAsync(trimmed, excludingPersonId, cancellationToken) is not { } holder)
@@ -1085,7 +1257,7 @@ public sealed class RemsRequestsController : ControllerBase
             CodeDuplicateEmail,
             "A client is already on file with that email address.",
             $"“{holder.ClientDisplayName}” is already on file with the email {trimmed}. Search for them in the "
-                + "Client box and pick them, rather than filing a second record for the same client."));
+                + "Client box and pick them, or give a different address — an email belongs to one client."));
     }
 
     // ResolveParentClientAsync stood alongside the reference check below — it validated the Parent Client id

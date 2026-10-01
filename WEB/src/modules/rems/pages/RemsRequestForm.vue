@@ -249,6 +249,7 @@
                   :cse-hint="cseHint"
                   :readonly="!canEditClient"
                   :client-locked="clientLocked"
+                  :saved="request"
                   :compact="showSubmittedPane"
                   :setup-readonly="!canEditSetup"
                   :entity-type-options="entityTypeOptions"
@@ -283,6 +284,7 @@
                   :entity-type="setupForm.entityType"
                   :dept-options="departmentOptions"
                   :service-line-options="serviceLineOptions"
+                  :job-template-options="jobTemplateOptions"
                   :tax-form-options="taxFormOptions"
                   :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
@@ -427,7 +429,7 @@ const { emsFormActivity, requestStatusOption, approverRoleLabel } = useRemsMeta(
 const { typeOptions, load: loadTypes } = useRemsOptionSets();
 const { entityTypeOptions, load: loadEntityTypes } = useRemsEntityTypes();
 const {
-  departmentOptions, serviceLineOptions, industryOptions,
+  departmentOptions, serviceLineOptions, jobTemplateOptions, industryOptions,
   marketingGroups, marketingUnavailable,
   taxFormOptions, taxFormUnavailable, billingPeriodOptions, personnelLevelOptions,
   load: loadEngagementOptions
@@ -506,6 +508,7 @@ const newEngagement = Object.freeze({
   id: null,
   department: null,
   serviceLine: null,
+  jobTemplate: null,
   departmentDirector: null,
   engagementExecutive: null,
   billingManager: null,
@@ -937,10 +940,10 @@ const clientRows = computed(() => [
   // Read as one name, the particle after it — the pair is edited as two boxes because they are two
   // different things to store, not because they are two things about the client.
   { label: "Client", value: clientForm.clientName, suffix: clientForm.clientNameSuffix || "" },
+  { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Client Email Address", value: clientForm.customerEmail },
   { label: "Client Phone Number", value: clientForm.customerMobileNumber },
   { label: "Relationship to THF", value: labelOf(typeOptions.value, clientForm.type) },
-  { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Industry", value: labelOf(industryOptions.value, setupForm.industry) },
   // Whose client this is. Read here rather than under the engagement setup, which is where it is asked.
   { label: "CSE", value: nameOf(cseOptions.value, setupForm.cseUserId) },
@@ -969,9 +972,10 @@ const setupRows = computed(() => {
   // The same sequence the form is filled in, so reading a request and typing one describe it in the same
   // order.
   return [
-    { label: "Service Line", value: labelOf(serviceLineOptions.value, e.serviceLine) },
     { label: "Department", value: labelOf(departmentOptions.value, e.department) },
     { label: "Department Director", value: e.departmentDirector?.name },
+    { label: "Service Line", value: labelOf(serviceLineOptions.value, e.serviceLine) },
+    { label: "Job Template", value: labelOf(jobTemplateOptions.value, e.jobTemplate) },
     { label: "Engagement Executive", value: e.engagementExecutive?.name },
     { label: "Billing Manager", value: e.billingManager?.name },
     // Every row from here down is asked of some departments and not others, so the summary asks the same
@@ -1004,8 +1008,14 @@ const setupRows = computed(() => {
         { label: "PO Beginning Date", value: dateOnly(e.government?.purchaseOrderStartDate) },
         { label: "PO Ending Date", value: dateOnly(e.government?.purchaseOrderEndDate) },
         { label: "Purchase Order", value: e.government?.purchaseOrderMediaId ? "On file" : "Not yet provided" },
-        { label: "Personnel Level", value: labelOf(personnelLevelOptions.value, e.government?.personnelLevel) },
-        { label: "Bill Rate / Hour", value: currency(e.government?.billRatePerHour) }
+        // The rate card, one "level: rate" per entry. Read by the label the API resolved off the same list
+        // the picker uses, so a level since retired from it still has a name.
+        {
+          label: "Bill Rate by Personnel Level",
+          value: (e.government?.personnelRates || []).map((r) =>
+            `${r.personnelLevelLabel || labelOf(personnelLevelOptions.value, r.personnelLevel)}: ${currency(r.billRatePerHour)}/hr`),
+          wide: true
+        }
       ]
       : []),
     ...(isTaxDepartment(e.department)
@@ -1104,16 +1114,30 @@ const refreshEngagement = async () => {
 };
 
 // ---- What the page writes ----
-// The client half, which is what the API requires to accept a request at all.
+// Whether a client has been settled on: one on file, or a new one being described. The tab says which
+// while it is open; a request read without it open is judged by the name it carries.
+const clientChosen = () => {
+  if (clientForm.existingClientReferenceId) return true;
+  const fields = clientFieldsRef.value;
+  return fields ? !!fields.addingNew : !!clientForm.clientName?.trim();
+};
+
+// The client half, which is what the API requires to accept a request at all. Top to bottom, as the tab
+// reads: who the client is, what kind of entity they are, then what they are called.
 const clientProblem = () => {
-  // Point at the box that is actually blank: for an individual that is First/Last Name, not the search —
-  // and each of the two, because a surname on its own composes into a name that would otherwise pass.
+  if (!clientChosen()) return "Search for the client, or add a new one.";
+  if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
+  // Each of the two, because a surname on its own composes into a name that would otherwise pass.
   if (isIndividualEntityType(setupForm.entityType)) {
     if (!clientForm.clientFirstName?.trim() || !clientForm.clientLastName?.trim()) {
       return "Give the client's first and last name.";
     }
   } else if (!clientForm.clientName?.trim()) {
-    return "Search for the client, or type the new client's name.";
+    return "Give the client's name.";
+  }
+  // The save would refuse it; said here so the form never files a request it then has to take back.
+  if (clientFieldsRef.value?.emailHolder) {
+    return "That email belongs to a client already on file. Use that client, or give a different address.";
   }
   if (!clientForm.type) return "Choose how this referral relates to THF's records.";
   // The email, specifically.
@@ -1133,11 +1157,7 @@ const setupProblem = () => {
   return "";
 };
 
-// Top to bottom, as the tab reads: the entity type comes before the client it decides the shape of.
-const createProblem = () => {
-  if (!setupForm.entityType) return setupProblem();
-  return clientProblem() || setupProblem();
-};
+const createProblem = () => clientProblem() || setupProblem();
 
 // No `description`: "Message from Partner" is not on the form, and leaving the field out of the payload is
 // what preserves it — the endpoint reads an omitted field as "leave this alone".
@@ -1165,6 +1185,10 @@ const autoSaveOn = computed(() =>
 let clientBaseline = "";
 const clientSnapshot = () => JSON.stringify(clientPayload());
 
+// Whether the client on screen has reached the server. The entity type is checked against the client
+// the server holds, so it waits for them rather than being judged against the one just replaced.
+let clientUnsaved = false;
+
 const {
   state: saveState, message: saveMessage, pending: savePending,
   mark: markDirty, flush: flushSaves, suspend: suspendSaves, resume: resumeSaves, reset: resetSaves
@@ -1175,15 +1199,23 @@ const {
     if (problem) {
       // The chip says the tab cannot be saved; this is what points at the field that is why.
       attempted.value = true;
+      clientUnsaved = true;
       return problem;
     }
 
     // The fields and the attachments are marked by the same flag but are two different writes, and
     // either can be the only one there is — a file picked with nothing retyped must still upload.
     if (clientSnapshot() !== clientBaseline) {
-      request.value = await remsApi.update(remsId.value, clientPayload());
-      clientBaseline = clientSnapshot();
+      clientUnsaved = true;
+      const payload = clientPayload();
+      request.value = await remsApi.update(remsId.value, {
+        ...payload,
+        // A null reference reads as "leave the link alone", so taking it off is said out loud.
+        clearExistingClientReference: !payload.existingClientReferenceId
+      });
+      clientBaseline = JSON.stringify(payload);
     }
+    clientUnsaved = false;
     // Uploaded now rather than on selection, so the files land on a request that exists.
     const mediaIds = (await clientFieldsRef.value?.uploadAttachments(remsId.value)) || [];
     if (mediaIds.length) request.value = await remsApi.addFiles(remsId.value, mediaIds);
@@ -1198,6 +1230,7 @@ const {
         ? "The CSE and the Entity Type are saved together — choose a CSE on the Client Information tab."
         : "The CSE and the Entity Type are saved together — choose an Entity Type on the Client Information tab.";
     }
+    if (clientUnsaved) return "The entity type is saved once the client above it is complete.";
     await remsApi.saveForm(remsId.value, {
       cseUserId: setupForm.cseUserId,
       entityType: setupForm.entityType
@@ -1448,6 +1481,9 @@ const createFollowUp = async (row) => {
     await flushSaves();
     const follow = await remsApi.create({
       clientName: row.fullName,
+      // These rows are the client's other BUSINESSES. Sent as the legal name, or the server reads one
+      // string as a person's and splits it into a first and a last name.
+      clientCorporateName: row.fullName,
       customerEmail: row.emailAddress || undefined,
       customerMobileNumber: row.phoneNumber || undefined,
       type: clientForm.type,

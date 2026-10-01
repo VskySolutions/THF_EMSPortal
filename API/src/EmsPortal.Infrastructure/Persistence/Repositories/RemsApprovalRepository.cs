@@ -55,6 +55,7 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
             // codes behind all of them.
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Department)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.ServiceLine)
+            .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.JobTemplate)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Industry)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.BillingPeriod)
             .Include(t => t.Round).ThenInclude(r => r!.Engagement).ThenInclude(e => e!.Rems).ThenInclude(r => r!.Status)

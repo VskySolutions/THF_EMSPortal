@@ -1,0 +1,164 @@
+<template>
+  <div class="app-field">
+    <app-field-label :label="label" :info="info" />
+    <!-- Built on QSelect directly rather than AppSelect: that one narrows a list it already holds, and
+         this one has to ask Maconomy for the list every time the reader types. -->
+    <q-select
+      v-model="model"
+      :options="options"
+      option-label="text"
+      option-value="value"
+      emit-value
+      map-options
+      use-input
+      fill-input
+      hide-selected
+      :input-debounce="300"
+      :loading="loading"
+      :readonly="readonly"
+      :disable="disable"
+      :hint="hint"
+      :placeholder="placeholder"
+      :aria-label="label"
+      outlined
+      dense
+      clearable
+      hide-bottom-space
+      class="maconomy-customer-select"
+      @filter="onFilter"
+      @update:model-value="onPick"
+    >
+      <template #option="scope">
+        <q-item v-bind="scope.itemProps" class="maconomy-customer-option">
+          <q-item-section>
+            <q-item-label>{{ scope.opt.text }}</q-item-label>
+            <q-item-label caption>
+              {{ scope.opt.emailAddress || "no email" }} · {{ scope.opt.phoneNumber || "no phone" }}
+            </q-item-label>
+          </q-item-section>
+        </q-item>
+      </template>
+      <!-- The dropdown says why it is empty: too few characters, no match, or what went wrong. -->
+      <template #no-option>
+        <q-item>
+          <q-item-section :class="failed ? 'text-negative' : 'text-grey-6'">{{ emptyText }}</q-item-section>
+        </q-item>
+      </template>
+    </q-select>
+  </div>
+</template>
+
+<script>
+// Answers are shared by every picker and kept for two minutes: QSelect re-runs the filter whenever the
+// menu opens, and the same term a moment later is the same list.
+const CACHE_MS = 2 * 60 * 1000;
+const cache = new Map();
+</script>
+
+<script setup>
+// A customer picker fed by the Maconomy lookup: every two or more characters typed become a search, and
+// the chosen customer stays in the list however the next search narrows it.
+import { ref, computed } from "vue";
+import { maconomyApi, getApiErrorMessage } from "services/api";
+import AppFieldLabel from "components/common/AppFieldLabel.vue";
+
+const MIN_CHARS = 2;
+const TOO_SHORT = `Type at least ${MIN_CHARS} characters of a customer number or name.`;
+
+const props = defineProps({
+  // The customer number, which is what the API returns as `value`.
+  modelValue: { type: String, default: null },
+  label: { type: String, default: "Customer" },
+  info: { type: String, default: "" },
+  hint: { type: String, default: "" },
+  placeholder: { type: String, default: "Type a customer number or name" },
+  // The Super Admin's scope override; everyone else is pinned to their own tenant server-side.
+  tenantId: { type: String, default: null },
+  // Rows per search; null takes the tenant's default.
+  limit: { type: Number, default: null },
+  readonly: { type: Boolean, default: false },
+  disable: { type: Boolean, default: false }
+});
+const emit = defineEmits(["update:modelValue", "selected"]);
+
+const model = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val)
+});
+
+const options = ref([]);
+const selected = ref(null);
+const loading = ref(false);
+const failed = ref(false);
+const emptyText = ref(TOO_SHORT);
+
+// The chosen customer is kept at the top of every list, or QSelect would show its bare number as soon as
+// a search came back without it.
+const withSelected = (rows) => {
+  const list = rows.map((r) => ({
+    text: r.text,
+    value: r.value,
+    specification6Name: r.specification6Name || null,
+    entityType: r.entityType || null,
+    emailAddress: r.emailAddress || null,
+    phoneNumber: r.phoneNumber || null
+  }));
+  if (selected.value && !list.some((o) => o.value === selected.value.value)) list.unshift(selected.value);
+  return list;
+};
+
+// One call per term, tenant and limit inside the cache window. A lookup still in flight is shared rather
+// than repeated, and a failed one is forgotten at once so the next keystroke tries again.
+const search = (term) => {
+  const key = `${props.tenantId || ""}|${props.limit || ""}|${term.toLowerCase()}`;
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && now - hit.at < CACHE_MS) return hit.rows;
+  cache.forEach((entry, k) => { if (now - entry.at >= CACHE_MS) cache.delete(k); });
+  const rows = maconomyApi.searchCustomers(term, props.limit || undefined, props.tenantId || undefined)
+    .catch((err) => { cache.delete(key); throw err; });
+  cache.set(key, { at: now, rows });
+  return rows;
+};
+
+const onFilter = (val, update) => {
+  const term = (val || "").trim();
+  failed.value = false;
+  if (term.length < MIN_CHARS) {
+    emptyText.value = TOO_SHORT;
+    update(() => { options.value = withSelected([]); });
+    return;
+  }
+  loading.value = true;
+  search(term)
+    .then((rows) => {
+      emptyText.value = "No customers match.";
+      update(() => { options.value = withSelected(rows || []); });
+    })
+    .catch((err) => {
+      // Said inside the dropdown rather than as a toast: a toast per keystroke is a wall of toasts.
+      failed.value = true;
+      emptyText.value = getApiErrorMessage(err, "The lookup failed.");
+      update(() => { options.value = withSelected([]); });
+    })
+    .finally(() => { loading.value = false; });
+};
+
+const onPick = (value) => {
+  selected.value = value ? options.value.find((o) => o.value === value) || null : null;
+  emit("selected", selected.value);
+};
+</script>
+
+<style scoped>
+/* The same control height as every other dense field (see AppSelect). */
+.maconomy-customer-select :deep(.q-field__control) {
+  min-height: 40px !important;
+}
+
+/* Two lines to a row, so more room than the 3px a one-line menu row gets. */
+.q-item.maconomy-customer-option {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+</style>

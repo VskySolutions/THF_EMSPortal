@@ -1334,6 +1334,7 @@ public sealed class RemsApprovalController : ControllerBase
             engagement.Status.ToString(),
             engagement.Department?.Value,
             engagement.ServiceLine?.Value,
+            engagement.JobTemplate?.Value,
             engagement.Industry?.Value,
             clientView,
             entityView,
@@ -1359,8 +1360,8 @@ public sealed class RemsApprovalController : ControllerBase
                     // The PO's value is money, so it is withheld from a role that may not see the fee.
                     maySeeFinancials ? government.PurchaseOrderAmount : null,
                     government.PurchaseOrderMediaId, government.PurchaseOrderMedia?.OriginalFileName,
-                    government.PersonnelLevel?.Value,
-                    maySeeFinancials ? government.BillRatePerHour : null),
+                    // The rates are money too: such a role reads which levels are staffed, not at what.
+                    RemsWorkspaceMapper.PersonnelRates(government, withRates: maySeeFinancials)),
             taxView,
             marketing,
             engagement.CommissionSplits

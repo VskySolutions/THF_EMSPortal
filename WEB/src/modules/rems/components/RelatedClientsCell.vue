@@ -19,11 +19,13 @@
         </span>
       </template>
 
-      <!-- No parent, and no client name repeated: the Client Name column is right beside this one, and a
-           heading that only restates it is a heading that says nothing. -->
+      <!-- The parent entity, tagged the way the individual's parent is above: the cell reads as a tree, and
+           the tag at its head is what says whose Child Entity rows these are. -->
       <template v-else>
-        <q-icon name="o_apartment" size="16px" class="rcc__head-icon" />
-        <span class="rcc__head-label">Parent Entities</span>
+        <q-badge class="rcc__tag rcc__tag--parent">Parent Entity</q-badge>
+        <span class="rcc__name">
+          <app-name-with-suffix :name="parent.name" :suffix="parent.suffix" />
+        </span>
       </template>
     </div>
 
@@ -89,8 +91,8 @@ const props = defineProps({
   // The request's entity type (a REMS.EntityType code). It decides which of the two readings above
   // applies, because it is what decided which question the client was asked in the first place.
   entityType: { type: String, default: "" },
-  // { name, suffix, jointWith: { name, relation } | null } — the client the request was raised for.
-  // Read only in the individual reading; a company's panel does not name its client again.
+  // { name, suffix, jointWith: { name, relation } | null } — the client the request was raised for, and
+  // the head of the panel in both readings.
   parent: { type: Object, required: true },
   // [{ kind, id, name, relation, email, phoneNumber, status, reference, createdRemsId }]
   rows: { type: Array, default: () => [] },
@@ -168,18 +170,6 @@ const contactHint = (row) => [row.email, row.phoneNumber].filter(Boolean).join("
   background: #eaf0f6;
   color: #4a5b6b;
   border: 1px solid #dbe4ec;
-}
-/* The entities heading: the same weight as a parent's name, since it is what stands in for one. */
-.rcc__head-icon {
-  color: var(--q-primary);
-  flex: 0 0 auto;
-}
-.rcc__head-label {
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: #35485c;
 }
 .rcc__name {
   font-weight: 500;

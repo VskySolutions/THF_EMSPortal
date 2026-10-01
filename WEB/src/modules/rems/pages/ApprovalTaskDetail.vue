@@ -257,8 +257,8 @@
                   </q-card-section>
                 </q-card>
 
-                <!-- GCS: the purchase order the engagement is set up against, and the rate it is staffed
-                     at. -->
+                <!-- GCS: the purchase order the engagement is set up against, and the rate it bills at
+                     each level it is staffed at. -->
                 <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
                   <q-card-section class="q-py-sm text-subtitle2 text-primary">
                     <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
@@ -270,6 +270,25 @@
                         <div class="rems-label">{{ item.label }}</div>
                         <div class="rems-value">{{ item.value }}</div>
                       </div>
+                    </div>
+                    <!-- The rate card: what an hour bills for at each level the engagement is staffed at. -->
+                    <div class="q-mt-md">
+                      <div class="rems-subhead">Bill Rate by Personnel Level</div>
+                      <q-markup-table v-if="gcsRates.length" flat bordered dense separator="horizontal">
+                        <thead>
+                          <tr>
+                            <th class="text-left">Personnel Level</th>
+                            <th class="text-right">Bill Rate / Hour</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="r in gcsRates" :key="r.code">
+                            <td>{{ r.level }}</td>
+                            <td class="text-right">{{ r.rate }}</td>
+                          </tr>
+                        </tbody>
+                      </q-markup-table>
+                      <div v-else class="rems-value">—</div>
                     </div>
                     <!-- The purchase order itself, openable, the same way the signed CAF is. -->
                     <div v-if="purchaseOrderFile" class="q-mt-md">
@@ -575,7 +594,7 @@ const fmt = useDateFormat();
 const {
   typeLabel, typeHint, requestStatusOption, referralSourceLabel,
   entityTypeLabel, formStatusOption, submissionStateOption,
-  departmentLabel, serviceLineLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
+  departmentLabel, serviceLineLabel, jobTemplateLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
   approverRoleLabel, approverRoleOption, approvalStatusOption,
   engagementStatusOption, roundStatusOption
 } = useRemsMeta();
@@ -695,12 +714,13 @@ const setupRows = computed(() => {
   const e = engagement.value;
   const rows = [
     { label: "Entity", value: `${e.entity?.name || "—"}${e.entity?.ein ? ` · EIN ${e.entity.ein}` : ""}` },
-    { label: "Department", value: departmentLabel(e.department) },
-    // Same industry-then-service sequence the setup form is filled in (the Entity Type itself is a
-    // request field, so it sits in the request block above rather than here).
+    // The industry, chosen on the Client Information tab, then the setup in the sequence it is filled in
+    // (the Entity Type itself is a request field, so it sits in the request block above rather than here).
     { label: "Industry", value: industryLabel(e.industry) },
-    { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
+    { label: "Department", value: departmentLabel(e.department) },
     { label: "Department Director", value: text(e.departmentDirector?.name) },
+    { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
+    { label: "Job Template", value: jobTemplateLabel(e.jobTemplate) },
     { label: "Engagement Executive", value: text(e.engagementExecutive?.name) },
     { label: "Billing Manager", value: text(e.billingManager?.name) }
   ];
@@ -755,10 +775,19 @@ const gcsRows = computed(() => {
     // The PO's value and the bill rate are money, and are withheld from a role that may not see the fee.
     { label: "Purchase Order Amount", value: restricted ? "Reserved" : money(g.purchaseOrderAmount) },
     { label: "PO Beginning Date", value: dateOnly(g.purchaseOrderStartDate) },
-    { label: "PO Ending Date", value: dateOnly(g.purchaseOrderEndDate) },
-    { label: "Personnel Level", value: text(personnelLevelLabel(g.personnelLevel)) },
-    { label: "Bill Rate / Hour", value: restricted ? "Reserved" : money(g.billRatePerHour) }
+    { label: "PO Ending Date", value: dateOnly(g.purchaseOrderEndDate) }
   ];
+});
+
+// The rate card, as the setup listed it: each level the engagement is staffed at and what an hour at it
+// bills for. Read by the label the API resolved, so a level since retired from the list still has a name.
+const gcsRates = computed(() => {
+  const restricted = engagement.value.financialsRestricted;
+  return (engagement.value.government?.personnelRates || []).map((r) => ({
+    code: r.personnelLevel,
+    level: r.personnelLevelLabel || personnelLevelLabel(r.personnelLevel),
+    rate: restricted ? "Reserved" : money(r.billRatePerHour)
+  }));
 });
 
 // The uploaded purchase order as a stored-file row, so the approver can open it.

@@ -71,6 +71,8 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<UserDepartment> UserDepartments => Set<UserDepartment>();
 
     public DbSet<SmtpAccount> SmtpAccounts => Set<SmtpAccount>();
+    public DbSet<MaconomyConnection> MaconomyConnections => Set<MaconomyConnection>();
+    public DbSet<TenantBranding> TenantBrandings => Set<TenantBranding>();
 
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
 
@@ -117,6 +119,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<REMSEngagement> RemsEngagements => Set<REMSEngagement>();
     public DbSet<REMSEngagementAuditDetail> RemsEngagementAuditDetails => Set<REMSEngagementAuditDetail>();
     public DbSet<REMSEngagementGovernmentDetail> RemsEngagementGovernmentDetails => Set<REMSEngagementGovernmentDetail>();
+    public DbSet<REMSEngagementPersonnelRate> RemsEngagementPersonnelRates => Set<REMSEngagementPersonnelRate>();
     public DbSet<REMSEngagementTaxDetail> RemsEngagementTaxDetails => Set<REMSEngagementTaxDetail>();
     public DbSet<REMSEngagementTaxForm> RemsEngagementTaxForms => Set<REMSEngagementTaxForm>();
     public DbSet<REMSEngagementMarketingMethod> RemsEngagementMarketingMethods => Set<REMSEngagementMarketingMethod>();
@@ -150,6 +153,8 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<UserDepartment>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         // SMTP accounts are tenant-scoped; a tenant only ever sees its own mail accounts.
         modelBuilder.Entity<SmtpAccount>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<MaconomyConnection>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<TenantBranding>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Universal Features (Phase 14): every UF table is tenant-scoped + soft-deletable, so it
         // carries the combined ambient-tenant + soft-delete filter. FieldModifiedLog is the lone
@@ -188,6 +193,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<REMSEngagement>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSEngagementAuditDetail>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSEngagementGovernmentDetail>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<REMSEngagementPersonnelRate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSEngagementTaxDetail>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSEngagementTaxForm>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSEngagementMarketingMethod>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
@@ -315,6 +321,12 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                 case SmtpAccount smtpAccount when smtpAccount.TenantId == Guid.Empty:
                     smtpAccount.TenantId = _tenantContext.TenantId;
                     break;
+                case MaconomyConnection maconomyConnection when maconomyConnection.TenantId == Guid.Empty:
+                    maconomyConnection.TenantId = _tenantContext.TenantId;
+                    break;
+                case TenantBranding tenantBranding when tenantBranding.TenantId == Guid.Empty:
+                    tenantBranding.TenantId = _tenantContext.TenantId;
+                    break;
 
                 // ---- Universal Features (Phase 14) ----
                 case ConversationMessage conversationMessage when conversationMessage.TenantId == Guid.Empty:
@@ -414,6 +426,9 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                     break;
                 case REMSEngagementGovernmentDetail remsGovDetail when remsGovDetail.TenantId == Guid.Empty:
                     remsGovDetail.TenantId = _tenantContext.TenantId;
+                    break;
+                case REMSEngagementPersonnelRate remsPersonnelRate when remsPersonnelRate.TenantId == Guid.Empty:
+                    remsPersonnelRate.TenantId = _tenantContext.TenantId;
                     break;
                 case REMSEngagementTaxDetail remsTaxDetail when remsTaxDetail.TenantId == Guid.Empty:
                     remsTaxDetail.TenantId = _tenantContext.TenantId;

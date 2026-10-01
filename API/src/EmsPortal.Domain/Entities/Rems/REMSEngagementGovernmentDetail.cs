@@ -56,14 +56,13 @@ public class REMSEngagementGovernmentDetail : AuditableEntity
     /// <summary>GCS: the uploaded purchase order document (Media).</summary>
     public Guid? PurchaseOrderMediaId { get; set; }
 
-    /// <summary>GCS: the level the work is staffed at — a foreign key to the <c>REMS.PersonnelLevel</c> item.</summary>
-    public Guid? PersonnelLevelId { get; set; }
-
-    /// <summary>GCS: the hourly rate billed at that level.</summary>
-    public decimal? BillRatePerHour { get; set; }
-
     // ---- Navigations ----
     public REMSEngagement? Engagement { get; set; }
-    public OptionSetItem? PersonnelLevel { get; set; }
     public Media? PurchaseOrderMedia { get; set; }
+
+    /// <summary>
+    /// GCS: the rate card — the hourly rate at each personnel level the engagement is staffed at. Every
+    /// level on the list is offered on the setup; only the ones given a rate have a row here.
+    /// </summary>
+    public ICollection<REMSEngagementPersonnelRate> PersonnelRates { get; set; } = new List<REMSEngagementPersonnelRate>();
 }

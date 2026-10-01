@@ -37,6 +37,7 @@ public sealed class RemsFormController : ControllerBase
     private const string CodeClientEmailMissing = "REMS_CLIENT_EMAIL_MISSING";
     private const string CodeCommissionNotFullyAllocated = "REMS_COMMISSION_NOT_FULLY_ALLOCATED";
     private const string CodeEntityTypeLocked = "REMS_ENTITY_TYPE_LOCKED";
+    private const string CodeEntityTypeOffRecord = "REMS_ENTITY_TYPE_OFF_RECORD";
     private const string CodeFormAlreadySubmitted = "REMS_FORM_ALREADY_SUBMITTED";
 
     private readonly IRemsRepository _rems;
@@ -156,6 +157,14 @@ public sealed class RemsFormController : ControllerBase
         {
             return FormConflict(CodeEntityTypeLocked,
                 "The entity type and invite link are locked once the form has been sent.");
+        }
+
+        // Checked only when the type is being set or changed, so a request filed before the rule existed
+        // can still save its CSE.
+        if (industryChanged
+            && await EntityTypeOffRecordAsync(rems, request.EntityType, cancellationToken) is { } offRecord)
+        {
+            return FormConflict(CodeEntityTypeOffRecord, offRecord);
         }
 
         // CSE assign / reassign detection drives the in-app notification (AC-REMS-007.8/9).
@@ -774,6 +783,34 @@ public sealed class RemsFormController : ControllerBase
 
     private IActionResult FormConflict(string code, string message)
         => StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(code, message, message));
+
+    /// <summary>
+    /// Why a request for a client ALREADY ON FILE cannot be filed under this entity type, or null where
+    /// it can. A new client's type is whatever the form says; theirs is the one their record holds.
+    /// </summary>
+    private async Task<string?> EntityTypeOffRecordAsync(
+        REMS rems, string entityType, CancellationToken cancellationToken)
+    {
+        if (rems.ExistingClientReferenceId is null || rems.ClientPerson is not { } client)
+        {
+            return null;
+        }
+
+        var filed = await _rems.GetClientEntityTypesAsync(new[] { client.Id }, rems.Id, cancellationToken);
+        var held = RemsClientEntityType.Of(client, filed.GetValueOrDefault(client.Id));
+        if (held is not null)
+        {
+            return string.Equals(held, entityType, StringComparison.Ordinal)
+                ? null
+                : $"“{client.ClientDisplayName}” is already on file under a different entity type. A request "
+                    + "for a client on file is filed under the entity type their record holds.";
+        }
+
+        // An organisation no form has classified yet: any type but a person's.
+        return RemsClientEntityType.IsIndividual(entityType)
+            ? $"“{client.ClientDisplayName}” is on file as an organisation, so it cannot be filed as an Individual."
+            : null;
+    }
 
     /// <summary>The human-readable reason for a Failed event, for the Email Log.</summary>
     private static string? DescribeFailure(REMSFormEmailEvent emailEvent)

@@ -17,6 +17,11 @@ public static class DependencyInjection
         // SMTP Email Accounts: account management business logic.
         services.AddScoped<Abstractions.Email.ISmtpAccountService, Email.SmtpAccountService>();
 
+        // Maconomy: the tenant's connection, the token that keeps it alive, and the customer lookup.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyConnectionService, Integrations.Maconomy.MaconomyConnectionService>();
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomySessionManager, Integrations.Maconomy.MaconomySessionManager>();
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCustomerService, Integrations.Maconomy.MaconomyCustomerService>();
+
         // Email templates: management + rendering.
         services.AddScoped<Abstractions.Email.IEmailTemplateService, Email.EmailTemplateService>();
 

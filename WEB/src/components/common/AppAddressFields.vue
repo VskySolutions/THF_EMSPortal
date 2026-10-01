@@ -78,6 +78,11 @@
         :rules="nameRules('Last Name', { required: contactRequired })"
         :error="!!errorFor('lastName')" :error-message="errorFor('lastName')"
       />
+      <!-- The generational particle on their name. Never required, whatever the host says of the rest. -->
+      <app-name-suffix-field
+        v-model="address.suffix" :class="[col('suffix'), contactOrder]" :disable="disable" :readonly="readonly"
+        :error="!!errorFor('suffix')" :error-message="errorFor('suffix')"
+      />
       <app-text-field
         v-model="address.email" :label="contactLabelFor('Email Address')" type="email"
         :required="contactRequired" :class="[col('email'), contactOrder]"
@@ -107,6 +112,7 @@ import { orderedCountries, countryOption, countryNameFromIso } from "composables
 import { nameRules } from "utils/personName";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
+import AppNameSuffixField from "components/common/AppNameSuffixField.vue";
 
 const address = defineModel({ type: Object, required: true });
 
@@ -119,7 +125,7 @@ const props = defineProps({
   required: { type: Boolean, default: false },
   // Also capture Landmark / Building / Floor / Unit.
   extended: { type: Boolean, default: false },
-  // Also capture the addressee — first name, last name, email. Off by default: an address is a place, and
+  // Also capture the addressee — first name, last name, suffix, email. Off by default: an address is a place, and
   // only a form that genuinely asks "and who is it addressed to?" wants these.
   contact: { type: Boolean, default: false },
   // The heading over that block.
@@ -127,7 +133,7 @@ const props = defineProps({
   // Ask the addressee BEFORE the place. For a form whose question is "who is this invoice for, and where
   // does it go?" rather than "where is this address, and who is at it?".
   contactFirst: { type: Boolean, default: false },
-  // The addressee's three boxes are mandatory.
+  // The addressee's boxes are mandatory, the suffix aside.
   contactRequired: { type: Boolean, default: false },
   // Grid widths, per field, keyed by the canonical field names above — the one thing a host may change
   // about this field-set's LAYOUT. Anything not named keeps the default below.
@@ -148,7 +154,8 @@ const DEFAULT_COLS = {
   addressLine2: "col-12 col-sm-4",
   postalCode: "col-12 col-sm-4",
   firstName: "col-12 col-sm-6",
-  lastName: "col-12 col-sm-6",
+  lastName: "col-8 col-sm-4",
+  suffix: "col-4 col-sm-2",
   email: "col-12 col-sm-6"
 };
 
@@ -266,7 +273,7 @@ const REQUIRED_FIELDS = [
   ["postalCode", "Zip Code is required"]
 ];
 
-// The addressee's three, checked the same way when the host says they are mandatory.
+// The addressee's three required boxes, checked the same way when the host says they are mandatory.
 const REQUIRED_CONTACT_FIELDS = [
   ["firstName", "First Name is required"],
   ["lastName", "Last Name is required"],

@@ -56,6 +56,7 @@ public sealed class RemsFormPayloadValidator
             // exactly these two boxes. See PersonNames, which the browser mirrors.
             RequireName(failures, "clientFirstName", payload.ClientFirstName, "First name");
             RequireName(failures, "clientLastName", payload.ClientLastName, "Last name");
+            LimitSuffix(failures, "clientSuffix", payload.ClientSuffix);
         }
         else if (string.IsNullOrWhiteSpace(payload.ClientName))
         {
@@ -223,6 +224,7 @@ public sealed class RemsFormPayloadValidator
         RequireField(failures, $"{prefix}.lastName", address.LastName, "Last name is required.");
         RequireName(failures, $"{prefix}.firstName", address.FirstName, "First name");
         RequireName(failures, $"{prefix}.lastName", address.LastName, "Last name");
+        LimitSuffix(failures, $"{prefix}.suffix", address.Suffix);
 
         if (string.IsNullOrWhiteSpace(address.Email))
         {
@@ -246,6 +248,7 @@ public sealed class RemsFormPayloadValidator
         RequireField(failures, $"{prefix}.lastName", individual.LastName, "Last name is required.");
         RequireName(failures, $"{prefix}.firstName", individual.FirstName, "First name");
         RequireName(failures, $"{prefix}.lastName", individual.LastName, "Last name");
+        LimitSuffix(failures, $"{prefix}.suffix", individual.Suffix);
         RequireField(
             failures, $"{prefix}.billingPreference", individual.BillingPreference,
             "A billing preference is required.");
@@ -302,6 +305,7 @@ public sealed class RemsFormPayloadValidator
             RequireName(failures, $"{prefix}.firstName", role.FirstName, "First name");
             RequireName(failures, $"{prefix}.lastName", role.LastName, "Last name");
         }
+        LimitSuffix(failures, $"{prefix}.suffix", role.Suffix);
 
         if (string.IsNullOrWhiteSpace(role.Email))
         {
@@ -337,6 +341,15 @@ public sealed class RemsFormPayloadValidator
         if (PersonNames.Issue(value, label) is { } issue)
         {
             failures.Add(new ValidationFailure(property, issue));
+        }
+    }
+
+    /// <summary>A suffix, when one is given, fits its column. Never required: most people have none.</summary>
+    private static void LimitSuffix(List<ValidationFailure> failures, string property, string? value)
+    {
+        if (value is not null && value.Trim().Length > PersonNames.MaxSuffixLength)
+        {
+            failures.Add(new ValidationFailure(property, $"A suffix is at most {PersonNames.MaxSuffixLength} characters."));
         }
     }
 

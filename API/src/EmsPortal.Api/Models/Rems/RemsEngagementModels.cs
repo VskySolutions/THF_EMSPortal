@@ -140,6 +140,7 @@ public sealed record RemsEngagementView(
     Guid Id,
     string? Department,
     string? ServiceLine,
+    string? JobTemplate,
     string? Industry,
     RemsUserRef? DepartmentDirector,
     RemsUserRef? EngagementExecutive,
@@ -186,8 +187,15 @@ public sealed record RemsGovernmentDetailView(
     decimal? PurchaseOrderAmount,
     Guid? PurchaseOrderMediaId,
     string? PurchaseOrderFileName,
-    string? PersonnelLevel,
-    decimal? BillRatePerHour);
+    /// <summary>The GCS rate card, in the personnel-level list's own order.</summary>
+    IReadOnlyList<RemsPersonnelRateView> PersonnelRates);
+
+/// <summary>
+/// One line of a GCS engagement's rate card. The level is the <c>REMS.PersonnelLevel</c> code, with its
+/// label beside it so a level since retired from the list still reads; the rate is null where the reader
+/// may not see money.
+/// </summary>
+public sealed record RemsPersonnelRateView(string PersonnelLevel, string PersonnelLevelLabel, decimal? BillRatePerHour);
 
 /// <summary>
 /// Tax engagement detail: fiscal year end, the two due dates (derived from it and then editable), the
@@ -268,6 +276,9 @@ public sealed class UpdateRemsEngagementRequest
     /// </summary>
     public string? ServiceLine { get; set; }
 
+    /// <summary>The job template the engagement is set up from (option-set <c>REMS.JobTemplate</c> code).</summary>
+    public string? JobTemplate { get; set; }
+
     /// <summary>
     /// The client's trade — the INDUSTRY as the setup form labels it (option-set
     /// <c>REMS.Industry</c> code, likewise).
@@ -335,8 +346,14 @@ public sealed class UpdateRemsGovernmentDetailRequest
     public string? PurchaseOrderNumber { get; set; }
     public decimal? PurchaseOrderAmount { get; set; }
 
-    /// <summary>Option-set <c>REMS.PersonnelLevel</c> code.</summary>
-    public string? PersonnelLevel { get; set; }
+    /// <summary>The rate card. Levels not listed, and lines with no rate, are levels the engagement is not staffed at.</summary>
+    public List<RemsPersonnelRateInput> PersonnelRates { get; set; } = new();
+}
+
+/// <summary>One line of the rate card: a <c>REMS.PersonnelLevel</c> code and the hourly rate billed at it.</summary>
+public sealed class RemsPersonnelRateInput
+{
+    public string PersonnelLevel { get; set; } = string.Empty;
     public decimal? BillRatePerHour { get; set; }
 }
 

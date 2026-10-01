@@ -19,6 +19,10 @@ export const ApiErrorCodes = Object.freeze({
   TenantInactive: "TENANT_INACTIVE",
   TenantNotFound: "TENANT_NOT_FOUND",
   TenantArchived: "TENANT_ARCHIVED",
+  // Maconomy integration
+  MaconomyNotConfigured: "MACONOMY_NOT_CONFIGURED",
+  MaconomyAuthFailed: "MACONOMY_AUTH_FAILED",
+  MaconomyUnavailable: "MACONOMY_UNAVAILABLE",
   InternalError: "INTERNAL_ERROR"
 });
 
@@ -232,6 +236,57 @@ export const smtpAccountApi = {
   // body: { recipientEmail } → { success, sentAtUtc?, serverResponse?, errorCategory?, errorDetail? }
   test: (id, recipientEmail, tenantId) =>
     api.post(`/api/admin/smtp-accounts/${id}/test`, { recipientEmail }, { params: { tenantId } }).then(unwrap)
+};
+
+// The tenant's Maconomy connection and the customer lookup it powers. `tenantId` is the Super Admin's
+// scope override; everyone else is pinned to their own tenant server-side.
+export const maconomyApi = {
+  // → the connection with its secrets masked, or null when none is configured yet.
+  getConnection: (tenantId) =>
+    api.get("/api/integrations/maconomy/connection", { params: { tenantId } }).then(unwrap),
+  // payload: { baseUrl, instanceCode, userName, password?, containerId?, defaultLimit, isEnabled };
+  // omit the password to keep the stored one.
+  saveConnection: (payload, tenantId) =>
+    api.put("/api/integrations/maconomy/connection", payload, { params: { tenantId } }).then(unwrap),
+  deleteConnection: (tenantId) =>
+    api.delete("/api/integrations/maconomy/connection", { params: { tenantId } }).then(envelope),
+  // Logs in afresh and stores the token → { connected, issuedOnUtc, expiresOnUtc }.
+  login: (tenantId) =>
+    api.post("/api/integrations/maconomy/connection/login", null, { params: { tenantId } }).then(unwrap),
+  forgetToken: (tenantId) =>
+    api.delete("/api/integrations/maconomy/connection/token", { params: { tenantId } }).then(envelope),
+  // → [{ text: "10023 - Acme Corp (Commercial)", value: "10023", specification6Name: "Commercial",
+  // entityType: "commercial", emailAddress: "ap@acme.com", phoneNumber: "850-555-0100" }]; empty below
+  // two characters.
+  searchCustomers: (search, limit, tenantId) =>
+    api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap)
+};
+
+// The tenant's branding: its theme (name, colours, type, buttons) and its images. `tenantId` is the Super
+// Admin's override, used by the Tenants screen; everyone else is pinned to their own tenant server-side.
+export const brandingApi = {
+  // → { tenantId, tenantName, tenantIdentifier, isCustomised, theme, assets: { logo, logoDark, logoMark, favicon,
+  // loginBackground }, updatedByName, updatedOnUtc }. `theme` is sparse: null means "as shipped".
+  get: (tenantId) => api.get("/api/branding", { params: { tenantId } }).then(unwrap),
+  // Anonymous: { theme, assets } for the sign-in screen, by tenant identifier.
+  getPublic: (tenant) => anonApi.get("/api/branding/public", { params: { tenant } }).then(unwrap),
+  // Anonymous: { theme, assets } of the firm that sent a client this form link.
+  getForInvite: (inviteCode) =>
+    anonApi.get(`/api/branding/public/forms/${encodeURIComponent(inviteCode)}`).then(unwrap),
+  // payload: the WHOLE theme; a value left null goes back to the stock look.
+  save: (theme, tenantId) => api.put("/api/branding", theme, { params: { tenantId } }).then(unwrap),
+  // Theme and images both. Returns the (now stock) branding.
+  reset: (tenantId) => api.delete("/api/branding", { params: { tenantId } }).then(unwrap),
+  // slot: "logo" | "logoDark" | "logoMark" | "favicon" | "loginBackground". Saved at once, not with the theme.
+  uploadAsset: (slot, file, tenantId) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post(`/api/branding/assets/${slot}`, form, {
+      params: { tenantId }, headers: { "Content-Type": "multipart/form-data" }
+    }).then(unwrap);
+  },
+  removeAsset: (slot, tenantId) =>
+    api.delete(`/api/branding/assets/${slot}`, { params: { tenantId } }).then(unwrap)
 };
 
 // Transactional email templates (WO email templates).
@@ -496,9 +551,16 @@ export const remsApi = {
   handBack: (id) => api.post(`/api/rems/requests/${id}/hand-back`).then(unwrap),
 
   remove: (id) => api.delete(`/api/rems/requests/${id}`).then(envelope),
-  // Client picker: [{ id, name, email, phone, suffix }].
-  clientLookup: (q, entityType) =>
-    api.get("/api/rems/clients/lookup", { params: { q, entityType } }).then(unwrap),
+  // Client picker, across every entity type: [{ id, name, email, phone, suffix, firstName, lastName,
+  // corporateName, isOrganisation, entityType }]. `excludingRemsId` is the request being edited.
+  clientLookup: (q, excludingRemsId) =>
+    api.get("/api/rems/clients/lookup", { params: { q, excludingRemsId } }).then(unwrap),
+  // One client on file, in the picker's shape.
+  client: (id, excludingRemsId) =>
+    api.get(`/api/rems/clients/${id}`, { params: { excludingRemsId } }).then(unwrap),
+  // Whether a NEW client's details already belong to one on file: { byName, byEmail }, each a picker
+  // row or null. params: { name?, email?, remsId? }.
+  clientOnFile: (params) => api.get("/api/rems/clients/on-file", { params }).then(unwrap),
   // Users in the active tenant, by role: [{ id, name, email }].
   admins: (role) => api.get("/api/rems/admins", { params: role ? { role } : undefined }).then(unwrap),
   // The clients across the requests the caller may see under a scope, for the Client filter: [{ id, name }].

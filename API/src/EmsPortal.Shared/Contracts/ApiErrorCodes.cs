@@ -12,6 +12,14 @@ public static class ApiErrorCodes
     public const string TenantNotFound = "TENANT_NOT_FOUND";
     public const string TenantArchived = "TENANT_ARCHIVED";
 
+    // Maconomy integration
+    /// <summary>The tenant has no Maconomy connection, or it is switched off.</summary>
+    public const string MaconomyNotConfigured = "MACONOMY_NOT_CONFIGURED";
+    /// <summary>Maconomy refused the stored credentials, or a token it had just issued.</summary>
+    public const string MaconomyAuthFailed = "MACONOMY_AUTH_FAILED";
+    /// <summary>Maconomy could not be reached, timed out, or answered an error.</summary>
+    public const string MaconomyUnavailable = "MACONOMY_UNAVAILABLE";
+
     // Permission Groups
     public const string DuplicateGroupName = "DUPLICATE_GROUP_NAME";
     public const string PermissionCeilingExceeded = "PERMISSION_CEILING_EXCEEDED";

@@ -257,10 +257,12 @@ public static class DefaultOptionSets
         }, LockSeededValues: true),
         // The client's trade. Unlike the entity type — which decides which questions the client's
         // intake form asks and is therefore frozen once that form goes out — this is an internal
-        // classification only, so it stays editable for as long as the setup does. One flat list rather
-        // than one filtered by the entity type: the two do not partition cleanly (a hospital is Health
-        // Care whether it is Commercial or Not-for-Profit), and a tenant adding a trade should not have to
-        // say which entity types may see it.
+        // classification only, so it stays editable for as long as the setup does. One list, which the
+        // picker narrows to the trades the chosen entity type is in (REMS_INDUSTRIES_BY_ENTITY_TYPE in
+        // useRemsMeta.js) rather than one list per entity type: the two do not partition cleanly (a
+        // hospital is Health Care whether it is Commercial or Not-for-Profit), and a tenant adding a trade
+        // should not have to say which entity types may see it. Within each entity type's set the order
+        // below is THF's.
         new Definition(EntityType.Rems, "REMS.Industry", "REMS Industry", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("affordable_housing", "Affordable Housing", 1),
@@ -282,29 +284,26 @@ public static class DefaultOptionSets
             new ItemDefinition("local_government", "Local Government", 17),
             new ItemDefinition("federal_government", "Federal Government", 18),
             new ItemDefinition("educational_institutions", "Educational Institutions", 19),
-            // The four insurance trades, with no "Insurance -" on the front: the Industry list is narrowed
-            // by the entity type beside it, which already says Insurance. The VALUES keep the prefix — they
-            // are the codes engagements are recorded against.
-            new ItemDefinition("insurance_property_casualty", "Property and Casualty", 20),
-            new ItemDefinition("insurance_life", "Life", 21),
-            new ItemDefinition("insurance_other", "Other", 22),
-            new ItemDefinition("trade_associations", "Trade Associations", 23),
-            new ItemDefinition("charitable_organizations_foundations", "Charitable Organizations or Foundations", 24),
-            new ItemDefinition("other_not_for_profit", "Other Not-for-Profit", 25),
-            // Kept alongside the three tiers above it: not every government client is filed as state,
-            // local or federal, and the unqualified value is what those are recorded under.
-            new ItemDefinition("government", "Government", 26),
-            new ItemDefinition("individual", "Individual", 27),
-            new ItemDefinition("distribution", "Distribution", 28),
-            // Appended rather than slotted in beside the other three Insurance trades at 20-22. The
-            // backfill that adds this to each existing tenant's copy takes MAX(DisplayOrder) + 1, so
-            // renumbering here would put the item in one place for a new tenant and another for everybody
-            // already running. The list is not alphabetical in any case — Health Care sits at 12.
-            // "Healthcare", one word — the entity type beside it says Insurance, and this is deliberately
-            // not the same string as "Health Care" above, which is the trade a hospital is in whether it
-            // is Commercial or Not-for-Profit. The two never meet in a picker (the entity type narrows the
-            // list to one or the other), only in the option-set admin.
-            new ItemDefinition("insurance_health", "Healthcare", 29),
+            // The four insurance trades, with no "Insurance -" on the front: the entity type beside the
+            // picker already says Insurance. The VALUES keep the prefix — they are the codes engagements
+            // are recorded against — and "Health" is deliberately not the "Health Care" above, which is
+            // the trade a hospital is in. The two only ever meet in the option-set admin.
+            new ItemDefinition("insurance_health", "Health", 20),
+            new ItemDefinition("insurance_property_casualty", "Property and Casualty", 21),
+            new ItemDefinition("insurance_life", "Life", 22),
+            new ItemDefinition("insurance_other", "Other", 23),
+            new ItemDefinition("trade_associations", "Trade Associations", 24),
+            new ItemDefinition("charitable_organizations_foundations", "Charitable Organizations or Foundations", 25),
+            new ItemDefinition("other_not_for_profit", "Other Not-for-Profit", 26),
+            // RETIRED, not removed: a government client is filed as state, local or federal, and this
+            // unqualified value is only what a few were recorded under before that was settled. Hidden
+            // keeps those reading correctly; a firm that wants it back turns it on in Administration →
+            // Option Sets, and the picker offers it under Government.
+            new ItemDefinition("government", "Government", 27, IsActive: false),
+            new ItemDefinition("individual", "Individual", 28),
+            new ItemDefinition("distribution", "Distribution", 29),
+            // The one trade a Trust and Estate entity is in.
+            new ItemDefinition("trust_estate", "Trust/Estate", 30),
         }),
         new Definition(EntityType.Rems, "REMSMarketing_MarketingMethods.MarketingMethodId", "REMS Marketing Methods", OptionItemSortMode.Custom, new[]
         {
@@ -349,18 +348,16 @@ public static class DefaultOptionSets
             // approval as client work. Carries no conditional detail: the audit and tax cards key off the
             // "audit" and "tax" codes specifically, so an Admin engagement asks for neither a signed CAF
             // nor a fiscal year end.
-            //
-            // RETIRED for the same reason and in the same way as Audit above — hidden, not deleted. An
-            // engagement is a piece of CLIENT work, and the firm's own internal jobs stopped being booked
-            // through this setup; the ones already booked keep their department.
-            new ItemDefinition("admin", "Admin", 6, IsActive: false),
+            // Retired for a while, as Audit above still is; offered again since September 2026, alongside
+            // the Non-Chargeable Internal service line it pairs with.
+            new ItemDefinition("admin", "Admin", 6),
         // Everything conditional on the engagement setup keys off these codes by name — the signed CAF on
         // audit and assurance, the fiscal year end on tax, the purchase order on gcs, the billing pair on
         // cas, and the approval prerequisites behind all of them (RemsEngagementCodes). So the seeded six
         // cannot be deleted or re-coded. A department a firm adds is its own, and asks nothing conditional.
         }, LockSeededValues: true),
-        // How a GCS engagement is staffed, which with the bill rate beside it is how the work is priced.
-        // One level per engagement — a single rate for the whole piece of work, not a rate card.
+        // How a GCS engagement is staffed. The setup lists every level here with a bill rate beside it —
+        // the engagement's rate card — and a level left blank is one the engagement is not staffed at.
         new Definition(EntityType.Rems, "REMS.PersonnelLevel", "REMS Personnel Level", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("principal", "Principal", 1),
@@ -371,33 +368,55 @@ public static class DefaultOptionSets
             new ItemDefinition("program_admin_support", "Program and Administrative Support", 6),
         }),
         // The service actually being sold. A classification field: what the firm is engaged to do, for
-        // reporting and for the billing/marketing view. The Internal-* values are the firm's own work,
-        // booked as engagements so the same setup and approval route covers them.
+        // reporting and for the billing/marketing view. Non-Chargeable Internal is the firm's own work,
+        // booked as an engagement so the same setup and approval route covers it. The picker narrows the
+        // list to the lines the chosen department offers (REMS_SERVICE_LINES_BY_DEPARTMENT in
+        // useRemsMeta.js); a line a firm adds is offered under every department.
         new Definition(EntityType.Rems, "REMS.ServiceLine", "REMS Service Line", OptionItemSortMode.Custom, new[]
         {
-            new ItemDefinition("attest_services", "Attest Services", 1),
+            new ItemDefinition("attest_services", "Assurance Services", 1),
             new ItemDefinition("tax_compliance", "Tax Compliance", 2),
             new ItemDefinition("client_accounting_services", "Client Accounting Services", 3),
-            new ItemDefinition("outsourced_cfo", "Outsourced CFO", 4),
-            new ItemDefinition("consulting", "Consulting", 5),
-            new ItemDefinition("business_valuation", "Business Valuation", 6),
-            new ItemDefinition("it_services", "IT Services", 7),
-            new ItemDefinition("plan_administration", "Plan Administration", 8),
-            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 9),
-            new ItemDefinition("payroll_services", "Payroll Services", 10),
-            new ItemDefinition("peer_review", "Peer Review", 11),
-            new ItemDefinition("soc", "SOC", 12, Description:
+            new ItemDefinition("consulting", "Consulting", 4),
+            // RETIRED: on THF's department table Business Valuation and Peer Review are JOB TEMPLATES
+            // (under Tax › Consulting and Assurance › Assurance Services), not lines of their own, so no
+            // department offers them. Hidden rather than removed in case an engagement records one.
+            new ItemDefinition("business_valuation", "Business Valuation", 5, IsActive: false),
+            new ItemDefinition("it_services", "IT Services", 6),
+            new ItemDefinition("plan_administration", "Plan Administration", 7),
+            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 8),
+            new ItemDefinition("peer_review", "Peer Review", 9, IsActive: false),
+            new ItemDefinition("soc", "SOC", 10, Description:
                 "System and Organization Controls reporting (SOC 1 / SOC 2)."),
-            new ItemDefinition("employee_benefits", "Employee Benefits", 13),
-            new ItemDefinition("estate_planning", "Estate Planning", 14),
-            new ItemDefinition("litigation_support", "Litigation Support", 15),
-            new ItemDefinition("forensic_accounting", "Forensic Accounting", 16),
-            new ItemDefinition("internal_accounting", "Internal-Accounting", 17),
-            new ItemDefinition("internal_billing", "Internal-Billing", 18),
-            new ItemDefinition("internal_operations", "Internal-Operations", 19),
-            new ItemDefinition("internal_marketing", "Internal-Marketing", 20),
-            new ItemDefinition("internal_it", "Internal-IT", 21),
-            new ItemDefinition("internal_miscellaneous", "Internal-Miscellaneous", 22),
+            new ItemDefinition("employee_benefits", "Employee Benefits", 11),
+            new ItemDefinition("estate_planning", "Estate Planning", 12),
+            new ItemDefinition("litigation_support", "Litigation Support", 13),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 14),
+            new ItemDefinition("non_chargeable_internal", "Non-Chargeable Internal", 15),
+        }),
+        // The job template the engagement is set up from: the kind of work, finer than the service line
+        // and the department beside it. Classification only, so nothing branches on it. The list as THF
+        // supplied it, in its order; the picker narrows it to the templates THF's table pairs with the
+        // chosen department and service line (REMS_JOB_TEMPLATES_BY_SERVICE_LINE in useRemsMeta.js).
+        new Definition(EntityType.Rems, "REMS.JobTemplate", "REMS Job Template", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("tax_compliance", "Tax Compliance", 1),
+            new ItemDefinition("consulting_engagement", "Consulting Engagement", 2),
+            new ItemDefinition("mergers_acquisitions", "Mergers and Acquisitions", 3),
+            new ItemDefinition("pension_administration_tax_compliance", "Pension Administration and Tax Compliance", 4),
+            new ItemDefinition("business_valuation", "Business Valuation", 5),
+            new ItemDefinition("agreed_upon_procedures", "Agreed Upon Procedures", 6),
+            new ItemDefinition("audit", "Audit", 7),
+            new ItemDefinition("examination", "Examination", 8),
+            new ItemDefinition("compilation", "Compilation", 9),
+            new ItemDefinition("review", "Review", 10),
+            new ItemDefinition("peer_review", "Peer Review", 11),
+            new ItemDefinition("information_technology_services", "Information Technology Services", 12),
+            new ItemDefinition("soc", "SOC", 13),
+            new ItemDefinition("litigation", "Litigation", 14),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 15),
+            new ItemDefinition("governmental_consulting_services", "Governmental Consulting Services", 16),
+            new ItemDefinition("client_accounting_services", "Client Accounting Services", 17),
         }),
         // Engagement tax forms (WO-114): the checklist values referenced by foreign key from
         // REMSEngagementTaxForm.TaxFormId on a tax engagement's tax detail.

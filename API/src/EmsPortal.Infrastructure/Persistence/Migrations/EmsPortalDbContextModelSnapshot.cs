@@ -793,6 +793,87 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.ToTable("FieldModifiedLogs", (string)null);
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.MaconomyConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ContainerId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DefaultLimit")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeletedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EncryptedPassword")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EncryptedReconnectToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("InstanceCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastLoginError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("LastLoginErrorUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReconnectTokenIssuedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasFilter("[Deleted] = 0");
+
+                    b.ToTable("MaconomyConnections", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MaconomyConnections_DefaultLimit", "[DefaultLimit] >= 1");
+                        });
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.Media", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2254,6 +2335,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("IndustryId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("JobTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("REMSId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2291,6 +2375,8 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.HasIndex("EngagementExecutiveId");
 
                     b.HasIndex("IndustryId");
+
+                    b.HasIndex("JobTemplateId");
 
                     b.HasIndex("REMSId");
 
@@ -2480,10 +2566,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<decimal?>("BillRatePerHour")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<DateOnly?>("ContractEndDate")
                         .HasColumnType("date");
 
@@ -2512,9 +2594,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<string>("OriginalTerm")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
-
-                    b.Property<Guid?>("PersonnelLevelId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal?>("PurchaseOrderAmount")
                         .HasPrecision(18, 2)
@@ -2551,8 +2630,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PersonnelLevelId");
-
                     b.HasIndex("PurchaseOrderMediaId");
 
                     b.HasIndex("REMSEngagementId");
@@ -2565,7 +2642,7 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.ToTable("REMSEngagementGovernmentDetail", null, t =>
                         {
-                            t.HasCheckConstraint("CK_REMSEngagementGovernmentDetail_PoAmounts", "([PurchaseOrderAmount] IS NULL OR [PurchaseOrderAmount] >= 0) AND ([BillRatePerHour] IS NULL OR [BillRatePerHour] >= 0)");
+                            t.HasCheckConstraint("CK_REMSEngagementGovernmentDetail_PurchaseOrderAmount", "[PurchaseOrderAmount] IS NULL OR [PurchaseOrderAmount] >= 0");
                         });
                 });
 
@@ -2615,6 +2692,61 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasFilter("[Deleted] = 0");
 
                     b.ToTable("REMSEngagementMarketingMethod", (string)null);
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementPersonnelRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("BillRatePerHour")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeletedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("PersonnelLevelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("REMSEngagementGovernmentDetailId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonnelLevelId");
+
+                    b.HasIndex("REMSEngagementGovernmentDetailId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "REMSEngagementGovernmentDetailId", "PersonnelLevelId")
+                        .IsUnique()
+                        .HasFilter("[Deleted] = 0");
+
+                    b.ToTable("REMSEngagementPersonnelRate", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_REMSEngagementPersonnelRate_BillRatePerHour", "[BillRatePerHour] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementTaxDetail", b =>
@@ -3810,6 +3942,71 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.ToTable("Tenants", (string)null);
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.TenantBranding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeletedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("FaviconMediaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LoginBackgroundMediaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LogoDarkMediaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LogoMarkMediaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LogoMediaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ThemeJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FaviconMediaId");
+
+                    b.HasIndex("LoginBackgroundMediaId");
+
+                    b.HasIndex("LogoDarkMediaId");
+
+                    b.HasIndex("LogoMarkMediaId");
+
+                    b.HasIndex("LogoMediaId");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasFilter("[Deleted] = 0");
+
+                    b.ToTable("TenantBrandings", (string)null);
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.TenantRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4252,6 +4449,15 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.MaconomyConnection", b =>
+                {
+                    b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.OptionSet", b =>
                 {
                     b.HasOne("EmsPortal.Domain.Entities.OptionSet", null)
@@ -4596,6 +4802,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("IndustryId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "JobTemplate")
+                        .WithMany()
+                        .HasForeignKey("JobTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EmsPortal.Domain.Entities.REMS", "Rems")
                         .WithMany()
                         .HasForeignKey("REMSId")
@@ -4618,6 +4829,8 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("Department");
 
                     b.Navigation("Industry");
+
+                    b.Navigation("JobTemplate");
 
                     b.Navigation("Rems");
 
@@ -4698,11 +4911,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementGovernmentDetail", b =>
                 {
-                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "PersonnelLevel")
-                        .WithMany()
-                        .HasForeignKey("PersonnelLevelId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("EmsPortal.Domain.Entities.Media", "PurchaseOrderMedia")
                         .WithMany()
                         .HasForeignKey("PurchaseOrderMediaId")
@@ -4721,8 +4929,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Engagement");
-
-                    b.Navigation("PersonnelLevel");
 
                     b.Navigation("PurchaseOrderMedia");
                 });
@@ -4750,6 +4956,31 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("Engagement");
 
                     b.Navigation("MarketingMethod");
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementPersonnelRate", b =>
+                {
+                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "PersonnelLevel")
+                        .WithMany()
+                        .HasForeignKey("PersonnelLevelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EmsPortal.Domain.Entities.REMSEngagementGovernmentDetail", "GovernmentDetail")
+                        .WithMany("PersonnelRates")
+                        .HasForeignKey("REMSEngagementGovernmentDetailId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("GovernmentDetail");
+
+                    b.Navigation("PersonnelLevel");
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementTaxDetail", b =>
@@ -5064,6 +5295,40 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("StickyNote");
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.TenantBranding", b =>
+                {
+                    b.HasOne("EmsPortal.Domain.Entities.Media", null)
+                        .WithMany()
+                        .HasForeignKey("FaviconMediaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.Media", null)
+                        .WithMany()
+                        .HasForeignKey("LoginBackgroundMediaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.Media", null)
+                        .WithMany()
+                        .HasForeignKey("LogoDarkMediaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.Media", null)
+                        .WithMany()
+                        .HasForeignKey("LogoMarkMediaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.Media", null)
+                        .WithMany()
+                        .HasForeignKey("LogoMediaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.User", b =>
                 {
                     b.HasOne("EmsPortal.Domain.Entities.Person", "Person")
@@ -5210,6 +5475,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("CommissionSplits");
 
                     b.Navigation("MarketingMethods");
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementGovernmentDetail", b =>
+                {
+                    b.Navigation("PersonnelRates");
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementTaxDetail", b =>
