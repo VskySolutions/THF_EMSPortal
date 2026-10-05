@@ -113,7 +113,9 @@ public sealed record RemsClientFormItem(
     Guid? CreatedById,
     DateTime CreatedOnUtc,
     Guid? UpdatedById,
-    DateTime UpdatedOnUtc);
+    DateTime UpdatedOnUtc,
+    /// <summary>Set when the client is a Maconomy customer, whose name is read from Maconomy rather than the database.</summary>
+    string? MaconomyCustomerNumber = null);
 
 /// <summary>
 /// Data access for the REMS customer-facing form and its drafts, submissions and email events

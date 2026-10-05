@@ -44,7 +44,12 @@
     "TimeoutSeconds": 15,
     "TokenLifetimeMinutes": 15,
     "TokenRefreshMarginSeconds": 60,
-    "SearchCacheSeconds": 30
+    "SearchCacheSeconds": 30,
+    "CustomerCacheSeconds": 600,
+    "NumbersPerCall": 100,
+    "FailureCooldownSeconds": 60,
+    "PreloadAllCustomers": false,
+    "PreloadMaxRows": 50000
   },
   "Rems": {
     "ApprovalPolicy": {

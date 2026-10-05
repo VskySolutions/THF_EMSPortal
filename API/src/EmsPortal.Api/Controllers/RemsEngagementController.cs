@@ -1,4 +1,5 @@
 using EmsPortal.Api.Approval;
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
@@ -19,6 +20,7 @@ namespace EmsPortal.Api.Controllers;
 /// client/entity/engagement workspace, the audit/government/tax conditional details.
 /// </summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("api/rems")]
 [Produces("application/json")]
 [Tags("REMS Engagement Workspace")]
@@ -287,7 +289,9 @@ public sealed class RemsEngagementController : ControllerBase
 
         // Not the Admin's to change: the email is the address the invite went to, and the version pins the
         // shape the stored JSON is read back in.
-        payload.Email = rems.CustomerEmail;
+        // For a Maconomy customer while Maconomy cannot be read, the address already on the submission.
+        payload.Email = rems.CustomerEmail
+            ?? RemsFormPayloadJson.TryDeserialize(submission.SubmittedPayload)?.Email;
         payload.Version = 1;
 
         var validation = new RemsFormPayloadValidator().Validate(payload, form.EntityType!.Value);

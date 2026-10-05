@@ -1,3 +1,4 @@
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
@@ -19,6 +20,7 @@ namespace EmsPortal.Api.Controllers;
 /// how far each of those related clients has got.
 /// </summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("api/rems/related-entities")]
 [Produces("application/json")]
 [Tags("REMS Related Entities")]

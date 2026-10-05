@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EmsPortal.Api.Approval;
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
@@ -18,6 +19,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>REMS approval workflow backend (WO-114 Part C).</summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("api/rems")]
 [Produces("application/json")]
 [Tags("REMS Approval")]

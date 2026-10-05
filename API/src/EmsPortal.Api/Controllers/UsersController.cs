@@ -165,6 +165,14 @@ public sealed class UsersController : ControllerBase
                 ApiErrorCodes.DuplicateIdentifier, "Person is already a user.", person.PersonCode));
         }
 
+        // A login needs a name and an email on the record, and this one holds a customer number alone.
+        if (person.IsMaconomyClient)
+        {
+            return Conflict(ApiResponseFactory.Error(
+                ApiErrorCodes.ValidationFailed, "This client is a Maconomy customer.",
+                "A Maconomy customer's record holds no details of its own, so it cannot be made a user."));
+        }
+
         var email = string.IsNullOrWhiteSpace(request.Email) ? person.PrimaryEmail : request.Email;
         if (string.IsNullOrWhiteSpace(email))
         {

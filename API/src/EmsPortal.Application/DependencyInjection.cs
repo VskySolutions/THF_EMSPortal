@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyConnectionService, Integrations.Maconomy.MaconomyConnectionService>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomySessionManager, Integrations.Maconomy.MaconomySessionManager>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCustomerService, Integrations.Maconomy.MaconomyCustomerService>();
+        // One for the process: it is the in-memory copy of what Maconomy says about the tenant's clients.
+        services.AddSingleton<Abstractions.Integrations.Maconomy.IMaconomyClientDirectory, Integrations.Maconomy.MaconomyClientDirectory>();
 
         // Email templates: management + rendering.
         services.AddScoped<Abstractions.Email.IEmailTemplateService, Email.EmailTemplateService>();

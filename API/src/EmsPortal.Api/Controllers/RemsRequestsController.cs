@@ -1,7 +1,9 @@
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
+using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Common;
@@ -22,6 +24,7 @@ namespace EmsPortal.Api.Controllers;
 /// assign/delete actions on a REMS request.
 /// </summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("api/rems/requests")]
 [Produces("application/json")]
 [Tags("REMS Requests")]
@@ -36,6 +39,7 @@ public sealed class RemsRequestsController : ControllerBase
     private const string CodeNotDeletable = "REMS_REQUEST_NOT_DELETABLE";
     private const string CodeDuplicateEmail = "REMS_DUPLICATE_CLIENT_EMAIL";
     private const string CodeClientLocked = "REMS_CLIENT_LOCKED";
+    private const string CodeMaconomyCustomerNotFound = "REMS_MACONOMY_CUSTOMER_NOT_FOUND";
 
     /// <summary>How many clients one search returns. The picker says so when it is reached.</summary>
     private const int ClientLookupLimit = 20;
@@ -51,6 +55,7 @@ public sealed class RemsRequestsController : ControllerBase
     private readonly IActivityEventWriter _activity;
     private readonly INotificationDispatcher _notifications;
     private readonly IOptionCodeResolver _codes;
+    private readonly IMaconomyClientDirectory _maconomy;
     /// <summary>Where the SPA is served from — the front half of the client's public form link.</summary>
     private readonly string _baseUrl;
 
@@ -66,6 +71,7 @@ public sealed class RemsRequestsController : ControllerBase
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
         IOptionCodeResolver codes,
+        IMaconomyClientDirectory maconomy,
         IOptions<AppOptions> appOptions)
     {
         _rems = rems;
@@ -79,6 +85,7 @@ public sealed class RemsRequestsController : ControllerBase
         _activity = activity;
         _notifications = notifications;
         _codes = codes;
+        _maconomy = maconomy;
         _baseUrl = appOptions.Value.BaseUrl;
     }
 
@@ -254,29 +261,48 @@ public sealed class RemsRequestsController : ControllerBase
                 ApiResponseFactory.Forbidden("No active tenant/user context."));
         }
 
-        // A supplied client reference must resolve to a client.
-        if (await RejectUnknownClientReferenceAsync(request.ExistingClientReferenceId, cancellationToken) is { } badClient)
-        {
-            return badClient;
-        }
-
-        // Same name, same client: a request naming somebody already on file is linked to them instead of being
-        // filed as new.
         var type = request.Type;
-        if (request.ExistingClientReferenceId is null
-            && await FindSoleClientByExactNameAsync(
-                request.ClientName,
-                KindOf(request.ClientCorporateName, request.ClientFirstName, request.ClientLastName),
-                excludingPersonId: null, cancellationToken) is { } matchedClientId)
+
+        // A Maconomy customer is named by number, and is by definition somebody THF already has. Read
+        // before anything is staged: nothing typed about them is checked, because none of it is kept.
+        MaconomyPick? maconomyClient = null;
+        if (Normalize(request.MaconomyCustomerNumber) is { } customerNumber)
         {
-            request.ExistingClientReferenceId = matchedClientId;
+            var (pick, refusal) = await PickMaconomyClientAsync(customerNumber, tenantId, cancellationToken);
+            if (refusal is not null)
+            {
+                return refusal;
+            }
+
+            maconomyClient = pick;
+            request.ExistingClientReferenceId = null;
             if (type == RemsRequestTypes.BrandNewClient) type = RemsRequestTypes.ExistingClient;
         }
-
-        if (await RejectDuplicateClientEmailAsync(
-                request.ExistingClientReferenceId, request.CustomerEmail, null, cancellationToken) is { } emailClash)
+        else
         {
-            return emailClash;
+            // A supplied client reference must resolve to a client.
+            if (await RejectUnknownClientReferenceAsync(request.ExistingClientReferenceId, cancellationToken) is { } badClient)
+            {
+                return badClient;
+            }
+
+            // Same name, same client: a request naming somebody already on file is linked to them instead of
+            // being filed as new.
+            if (request.ExistingClientReferenceId is null
+                && await FindSoleClientByExactNameAsync(
+                    request.ClientName,
+                    KindOf(request.ClientCorporateName, request.ClientFirstName, request.ClientLastName),
+                    excludingPersonId: null, cancellationToken) is { } matchedClientId)
+            {
+                request.ExistingClientReferenceId = matchedClientId;
+                if (type == RemsRequestTypes.BrandNewClient) type = RemsRequestTypes.ExistingClient;
+            }
+
+            if (await RejectDuplicateClientEmailAsync(
+                    request.ExistingClientReferenceId, request.CustomerEmail, null, cancellationToken) is { } emailClash)
+            {
+                return emailClash;
+            }
         }
 
         // Whose request this is.
@@ -315,7 +341,7 @@ public sealed class RemsRequestsController : ControllerBase
                     request.ClientName, request.ClientNameSuffix,
                     request.CustomerEmail, request.CustomerMobileNumber,
                     request.ClientFirstName, request.ClientLastName, request.ClientCorporateName),
-                tenantId, ct);
+                tenantId, ct, maconomyClient);
             await _rems.AddAsync(rems, ct);
 
             // The request's one engagement, created here rather than on client submit.
@@ -373,6 +399,42 @@ public sealed class RemsRequestsController : ControllerBase
 
         // No assignment block here any more.
 
+        // The client as a Maconomy customer. Naming the one the request already has changes nothing and
+        // asks Maconomy nothing, which is what every auto-save of a request for one does.
+        var customerNumber = Normalize(request.MaconomyCustomerNumber);
+        var sameMaconomyClient = customerNumber is not null && string.Equals(
+            rems.ClientPerson?.MaconomyCustomerNumber, customerNumber, StringComparison.OrdinalIgnoreCase);
+        MaconomyPick? maconomyClient = null;
+        if (customerNumber is not null)
+        {
+            if (!sameMaconomyClient)
+            {
+                if (rems.Status!.Value != RemsRequestStatuses.Draft)
+                {
+                    return ClientLocked();
+                }
+
+                var (pick, refusal) = await PickMaconomyClientAsync(customerNumber, rems.TenantId, cancellationToken);
+                if (refusal is not null)
+                {
+                    return refusal;
+                }
+                maconomyClient = pick;
+            }
+
+            // Nothing typed about a Maconomy customer is kept, so nothing typed is read.
+            request.ExistingClientReferenceId = null;
+            request.ClearExistingClientReference = false;
+            request.ClientName = request.ClientFirstName = request.ClientLastName = null;
+            request.ClientCorporateName = request.ClientNameSuffix = null;
+            request.CustomerEmail = request.CustomerMobileNumber = null;
+            // A Maconomy customer is somebody THF already has, whatever the request said before.
+            if ((request.Type ?? rems.Type!.Value) == RemsRequestTypes.BrandNewClient)
+            {
+                request.Type = RemsRequestTypes.ExistingClient;
+            }
+        }
+
         // A supplied client reference must name a client — as on create, and for the same reason: an edit
         // is the other way a reference reaches the request.
         if (await RejectUnknownClientReferenceAsync(request.ExistingClientReferenceId, cancellationToken) is { } badClient)
@@ -387,21 +449,19 @@ public sealed class RemsRequestsController : ControllerBase
         {
             if (rems.Status!.Value != RemsRequestStatuses.Draft)
             {
-                return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
-                    CodeClientLocked,
-                    "The client can no longer be changed.",
-                    "This request's intake form has been sent, so the client it names is fixed."));
+                return ClientLocked();
             }
 
             rems.ExistingClientReferenceId = null;
         }
 
-        // The client as this save leaves them. An omitted field keeps what is already on the person.
+        // The client as this save leaves them. An omitted field keeps what is already on the person —
+        // what their RECORD holds, which for a Maconomy customer is nothing.
         var client = new ClientDetails(
             request.ClientName ?? rems.ClientPerson?.ClientDisplayName,
-            request.ClientNameSuffix ?? rems.ClientNameSuffix,
-            request.CustomerEmail ?? rems.CustomerEmail,
-            request.CustomerMobileNumber ?? rems.CustomerMobileNumber,
+            request.ClientNameSuffix ?? rems.ClientPerson?.Suffix,
+            request.CustomerEmail ?? rems.ClientPerson?.PrimaryEmail,
+            request.CustomerMobileNumber ?? rems.ClientPerson?.MobileNumber,
             request.ClientFirstName ?? rems.ClientPerson?.FirstName,
             request.ClientLastName ?? rems.ClientPerson?.LastName,
             request.ClientCorporateName ?? rems.ClientPerson?.CorporateName);
@@ -450,7 +510,11 @@ public sealed class RemsRequestsController : ControllerBase
 
         // The client IS the person record now, so this is where an edited name, suffix, email or mobile
         // actually lands.
-        rems.ClientPersonId = await ResolveClientPersonAsync(rems, client, rems.TenantId, cancellationToken);
+        if (!sameMaconomyClient)
+        {
+            rems.ClientPersonId = await ResolveClientPersonAsync(
+                rems, client, rems.TenantId, cancellationToken, maconomyClient);
+        }
 
         // Editing never moves a request along any more. A draft leaves draft only by being sent to the
         // client, which is its own action.
@@ -936,6 +1000,88 @@ public sealed class RemsRequestsController : ControllerBase
         return Ok(ApiResponseFactory.Success(onFile, "Checked against the clients on file."));
     }
 
+    /// <summary>
+    /// The Maconomy half of the client search: customers whose name, number, email or telephone contains
+    /// <paramref name="q"/>, in the picker's shape. One a request already names carries that client's id.
+    /// Always answers 200 — a Maconomy that cannot be searched is a note beside the results the portal
+    /// does have, not a failed search.
+    /// </summary>
+    [HttpGet("/api/rems/clients/maconomy")]
+    [RequirePermission(Permissions.RemsRequestsCreate)]
+    [ProducesResponseType<ApiResponse<RemsMaconomyLookup>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MaconomyLookup(
+        [FromQuery] string? q, [FromQuery] Guid? excludingRemsId, CancellationToken cancellationToken)
+    {
+        if (User.GetActiveTenantId() is not { } tenantId)
+        {
+            return Ok(ApiResponseFactory.Success(
+                new RemsMaconomyLookup(RemsMaconomyLookupStatuses.NotConnected, null, false, []), "No active tenant."));
+        }
+
+        try
+        {
+            var found = await _maconomy.SearchAsync(tenantId, q, cancellationToken);
+            var onFile = await _persons.FindClientIdsByMaconomyNumbersAsync(
+                found.Customers.Select(c => c.Number).ToList(), cancellationToken);
+            var filed = await _rems.GetClientEntityTypesAsync(onFile.Values.ToList(), excludingRemsId, cancellationToken);
+            var items = found.Customers
+                .Select(c => onFile.TryGetValue(c.Number, out var personId)
+                    ? ToLookupItem(c, personId, filed.GetValueOrDefault(personId))
+                    : ToLookupItem(c, null, null))
+                .ToList();
+            return Ok(ApiResponseFactory.Success(
+                new RemsMaconomyLookup(RemsMaconomyLookupStatuses.Ok, null, found.More, items),
+                "Maconomy customers retrieved."));
+        }
+        catch (MaconomyException ex)
+        {
+            var notConnected = ex.Failure == MaconomyFailure.NotConfigured;
+            return Ok(ApiResponseFactory.Success(
+                new RemsMaconomyLookup(
+                    notConnected ? RemsMaconomyLookupStatuses.NotConnected : RemsMaconomyLookupStatuses.Unavailable,
+                    notConnected ? null : MaconomyNote(ex), false, []),
+                "Maconomy could not be searched."));
+        }
+    }
+
+    /// <summary>
+    /// One Maconomy customer, read from Maconomy NOW rather than from what is held — what a pick shows,
+    /// and what "Refresh" re-reads after the customer has been corrected in Maconomy.
+    /// </summary>
+    [HttpGet("/api/rems/clients/maconomy/customer")]
+    [RequirePermission(Permissions.RemsRequestsCreate)]
+    [ProducesResponseType<ApiResponse<RemsClientLookupItem>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> MaconomyCustomer(
+        [FromQuery] string? number, [FromQuery] Guid? excludingRemsId, CancellationToken cancellationToken)
+    {
+        if (User.GetActiveTenantId() is not { } tenantId || Normalize(number) is not { } customerNumber)
+        {
+            return NotFound(ApiResponseFactory.NotFound("Maconomy customer not found."));
+        }
+
+        MaconomyClientDetails? customer;
+        try
+        {
+            customer = await _maconomy.ReadAsync(tenantId, customerNumber, cancellationToken);
+        }
+        catch (MaconomyException ex)
+        {
+            return MaconomyRefusal(ex);
+        }
+        if (customer is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound($"Maconomy has no customer {customerNumber}."));
+        }
+
+        var client = await _persons.FindClientByMaconomyNumberAsync(customer.Number, cancellationToken);
+        var filed = client is null
+            ? null
+            : (await _rems.GetClientEntityTypesAsync(new[] { client.Id }, excludingRemsId, cancellationToken))
+                .GetValueOrDefault(client.Id);
+        return Ok(ApiResponseFactory.Success(ToLookupItem(customer, client?.Id, filed), "Maconomy customer retrieved."));
+    }
+
     /// <summary>The tenant's Admin and Super Admin users.</summary>
     [HttpGet("/api/rems/admins")]
     // Gated on READING requests rather than on the assign right: what this feeds is the CSE and
@@ -1055,26 +1201,152 @@ public sealed class RemsRequestsController : ControllerBase
 
     /// <summary>The name in PARTS, not one joined string, so the form never has to guess where it splits.</summary>
     private static RemsClientLookupItem ToLookupItem(Person client, string? lastFiledUnder)
-        => new(
+    {
+        if (client.IsMaconomyClient)
+        {
+            // Read off Maconomy, or the stand-in name alone while it cannot be read.
+            var customer = client.Maconomy
+                ?? new MaconomyClientDetails(client.MaconomyCustomerNumber!, client.ClientName, null, null, null);
+            return ToLookupItem(customer, client.Id, lastFiledUnder);
+        }
+
+        return new(
             client.Id, client.ClientDisplayName, client.PrimaryEmail, client.MobileNumber, client.Suffix,
             client.IsOrganisation ? string.Empty : client.FirstName,
             client.IsOrganisation ? string.Empty : client.LastName,
             client.CorporateName,
             client.IsOrganisation,
             RemsClientEntityType.Of(client, lastFiledUnder));
+    }
+
+    /// <summary>A Maconomy customer in the picker's shape. The name is Maconomy's one string: it has no parts and no suffix.</summary>
+    private static RemsClientLookupItem ToLookupItem(MaconomyClientDetails customer, Guid? personId, string? lastFiledUnder)
+    {
+        var entityType = customer.EntityType ?? lastFiledUnder;
+        return new(
+            personId, customer.Name, customer.Email, customer.Phone, null, string.Empty, string.Empty, null,
+            entityType is not null && !RemsClientEntityType.IsIndividual(entityType),
+            entityType, customer.Number);
+    }
+
+    /// <summary>A Maconomy customer as a request's client: the record that names them, and whether this save is what creates it.</summary>
+    private sealed record MaconomyPick(Person Client, bool IsNew);
+
+    /// <summary>
+    /// The client record for a Maconomy customer: the one already naming them, or a new one holding the
+    /// number and nothing else. Reads the customer from Maconomy, so a number that is not a customer —
+    /// or a Maconomy that cannot say — is refused before anything is written.
+    /// </summary>
+    private async Task<(MaconomyPick? Pick, IActionResult? Refusal)> PickMaconomyClientAsync(
+        string customerNumber, Guid tenantId, CancellationToken cancellationToken)
+    {
+        MaconomyClientDetails? customer;
+        try
+        {
+            customer = await _maconomy.ReadAsync(tenantId, customerNumber, cancellationToken);
+        }
+        catch (MaconomyException ex)
+        {
+            return (null, MaconomyRefusal(ex));
+        }
+        if (customer is null)
+        {
+            return (null, BadRequest(ApiResponseFactory.Error(
+                CodeMaconomyCustomerNotFound, "That customer is not in Maconomy.",
+                $"Maconomy has no customer {customerNumber}. Search for the client again and pick them from the results.")));
+        }
+
+        if (await _persons.FindClientByMaconomyNumberAsync(customer.Number, cancellationToken) is { } onFile)
+        {
+            onFile.Maconomy = customer;
+            return (new MaconomyPick(onFile, IsNew: false), null);
+        }
+
+        var person = new Person
+        {
+            Id = Guid.NewGuid(),
+            PersonCode = "PER-" + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant(),
+            TenantId = tenantId,
+            SourceEntityType = EntityType.Client,
+            IsActive = true,
+            LastProfileUpdatedOn = DateTime.UtcNow,
+            // The number, and nothing Maconomy said about them.
+            MaconomyCustomerNumber = customer.Number,
+            Maconomy = customer,
+        };
+        return (new MaconomyPick(person, IsNew: true), null);
+    }
+
+    /// <summary>Maconomy could not be asked: not set up is a conflict, anything else a bad gateway.</summary>
+    private IActionResult MaconomyRefusal(MaconomyException ex)
+        => ex.Failure == MaconomyFailure.NotConfigured
+            ? Conflict(ApiResponseFactory.Error(
+                ApiErrorCodes.MaconomyNotConfigured, "Maconomy is not connected.", MaconomyNote(ex)))
+            : StatusCode(StatusCodes.Status502BadGateway, ApiResponseFactory.Error(
+                ex.Failure is MaconomyFailure.AuthFailed or MaconomyFailure.TokenRejected
+                    ? ApiErrorCodes.MaconomyAuthFailed
+                    : ApiErrorCodes.MaconomyUnavailable,
+                "Maconomy could not be read.", MaconomyNote(ex)));
+
+    /// <summary>What to tell somebody who is not the administrator: what happened, without the connection's details.</summary>
+    private static string MaconomyNote(MaconomyException ex) => ex.Failure switch
+    {
+        MaconomyFailure.NotConfigured => "Maconomy is not connected for this tenant.",
+        MaconomyFailure.AuthFailed or MaconomyFailure.TokenRejected =>
+            "Maconomy refused the portal's sign-in. An administrator needs to check the connection under Tenant Settings.",
+        _ => "Maconomy could not be reached just now. Try again in a moment.",
+    };
+
+    private IActionResult ClientLocked()
+        => StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
+            CodeClientLocked,
+            "The client can no longer be changed.",
+            "This request's intake form has been sent, so the client it names is fixed."));
 
     /// <summary>
     /// Puts the request's client into the Persons table and returns who they are, so a client entered
     /// once is a record the platform holds rather than three columns on one request.
     /// </summary>
     /// <param name="client"> The client's details AS SUBMITTED. Taken as a parameter rather than read off the request, because the request no longer holds them: its name, suffix, email and mobile are read-throughs onto the very Person this method is about to write, so reading them here would be asking the answer to produce itself. </param>
+    /// <param name="maconomyClient">The Maconomy customer the request now names, when it names one: they are the client, and nothing in <paramref name="client"/> is read.</param>
     private async Task<Guid> ResolveClientPersonAsync(
-        REMS rems, ClientDetails client, Guid tenantId, CancellationToken cancellationToken)
+        REMS rems, ClientDetails client, Guid tenantId, CancellationToken cancellationToken,
+        MaconomyPick? maconomyClient = null)
     {
         var shape = ClientShape.Of(client);
         var ownClient = await FindOwnClientAsync(rems, cancellationToken);
         var ownToRewrite = ownClient is not null
             && await IsOwnToRewriteAsync(rems, ownClient, cancellationToken);
+        var isDraft = rems.Status is null || rems.Status.Value == RemsRequestStatuses.Draft;
+
+        if (maconomyClient is not null)
+        {
+            var customer = maconomyClient.Client;
+            // The record this draft made for somebody else is nobody's now, as when it names a client on file.
+            if (ownToRewrite && ownClient!.Id != customer.Id && isDraft)
+            {
+                _persons.Remove(ownClient);
+            }
+            if (maconomyClient.IsNew)
+            {
+                customer.SourceEntityId = rems.Id;
+                await _persons.AddAsync(customer, cancellationToken);
+            }
+            rems.ExistingClientReferenceId = customer.Id;
+            return customer.Id;
+        }
+
+        // A Maconomy customer's record holds a number and never typed details. A request that has moved
+        // off the one it made files its new client separately.
+        if (ownClient is { IsMaconomyClient: true } && rems.ExistingClientReferenceId != ownClient.Id)
+        {
+            if (ownToRewrite && isDraft)
+            {
+                _persons.Remove(ownClient);
+            }
+            ownClient = null;
+            ownToRewrite = false;
+        }
 
         // Matched an existing client. A reference that no longer resolves (person deleted, or another
         // tenant's) falls through and is treated as a client we do not have.
@@ -1087,6 +1359,12 @@ public sealed class RemsRequestsController : ControllerBase
                 && rems.Status?.Value == RemsRequestStatuses.Draft)
             {
                 _persons.Remove(ownClient);
+            }
+
+            // Maconomy holds this client's details; their record takes nothing a request types.
+            if (matched.IsMaconomyClient)
+            {
+                return matched.Id;
             }
 
             var filled = false;
@@ -1238,8 +1516,10 @@ public sealed class RemsRequestsController : ControllerBase
 
         if (existingClientReferenceId is { } linkedId)
         {
-            // A client on file keeps the email their record holds, so nothing is being given.
+            // A client on file keeps the email their record holds, so nothing is being given. Nor is
+            // anything given to a Maconomy customer, whose email is Maconomy's to hold.
             if (await _persons.GetByIdAsync(linkedId, cancellationToken) is not { } linked
+                || linked.IsMaconomyClient
                 || !string.IsNullOrWhiteSpace(linked.PrimaryEmail))
             {
                 return null;
@@ -1256,7 +1536,7 @@ public sealed class RemsRequestsController : ControllerBase
         return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
             CodeDuplicateEmail,
             "A client is already on file with that email address.",
-            $"“{holder.ClientDisplayName}” is already on file with the email {trimmed}. Search for them in the "
+            $"“{holder.ClientName}” is already on file with the email {trimmed}. Search for them in the "
                 + "Client box and pick them, or give a different address — an email belongs to one client."));
     }
 
@@ -1319,7 +1599,8 @@ public sealed class RemsRequestsController : ControllerBase
             UserRefOf(r.AdminAssignedToId, names), UserRefOf(r.CSEId, names),
             form?.EntityType, ems, submission,
             NameOf(names, r.CreatedById), NameOf(names, r.UpdatedById), r.UpdatedOnUtc,
-            ActionsFor(r, me, privileged));
+            ActionsFor(r, me, privileged),
+            r.ClientPerson?.MaconomyCustomerNumber);
     }
 
     private async Task<RemsRequestDetail> BuildDetailAsync(REMS rems, Guid me, bool privileged, CancellationToken cancellationToken)
@@ -1341,12 +1622,16 @@ public sealed class RemsRequestsController : ControllerBase
         var canSendBackToCse = rems.CSEId is not null
             && await RemsSetupAccess.InitiatorHasCoverAsync(_delegations, rems, cancellationToken);
 
+        // A Maconomy customer's name is one string from Maconomy: it has no parts to give the form.
+        var client = rems.ClientPerson;
+        var whole = client is null || client.IsOrganisation || client.IsMaconomyClient;
+
         return new RemsRequestDetail(
             rems.Id, rems.REMSNumber, rems.Description, rems.ClientDisplayName,
             rems.ClientNameSuffix,
-            rems.ClientPerson?.IsOrganisation == true ? null : rems.ClientPerson?.FirstName,
-            rems.ClientPerson?.IsOrganisation == true ? null : rems.ClientPerson?.LastName,
-            rems.ClientPerson?.CorporateName,
+            whole ? null : client!.FirstName,
+            whole ? null : client!.LastName,
+            client?.CorporateName,
             rems.Type!.Value, rems.Status!.Value, rems.CustomerEmail, rems.CustomerMobileNumber,
             rems.ExistingClientReferenceId, rems.ClientPersonId,
             UserRefOf(rems.AdminAssignedToId, names), UserRefOf(rems.CSEId, names),
@@ -1354,7 +1639,9 @@ public sealed class RemsRequestsController : ControllerBase
             RecordAudit.From(rems, RecordAudit.Names(names)),
             ActionsFor(rems, me, privileged),
             canSendBackToCse,
-            ClientFormLink(form));
+            ClientFormLink(form),
+            client?.MaconomyCustomerNumber,
+            MaconomyUnavailable: client is { IsMaconomyClient: true, Maconomy: null });
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>

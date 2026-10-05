@@ -489,7 +489,10 @@ const blankClient = () => ({
   customerEmail: "",
   customerMobileNumber: "",
   type: "",
-  existingClientReferenceId: null
+  existingClientReferenceId: null,
+  // Set when the client is a Maconomy customer. The name, email and phone above are then Maconomy's,
+  // shown but never sent: the request names the customer by this number alone.
+  maconomyCustomerNumber: null
 });
 const clientForm = reactive(blankClient());
 // The fields the page owns rather than a tab.
@@ -711,7 +714,11 @@ const readyToSend = computed(() =>
   !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.entityType &&
   !!setupForm.industry && commissionAllocated.value);
 const sendBlockedReason = computed(() => {
-  if (!clientForm.customerEmail?.trim()) return "The client has no email address to send the form to.";
+  if (!clientForm.customerEmail?.trim()) {
+    return clientForm.maconomyCustomerNumber
+      ? "Maconomy holds no email address for this customer. Add one in Maconomy, then refresh the client."
+      : "The client has no email address to send the form to.";
+  }
   if (!setupForm.cseUserId) return "Choose a CSE first — it is on the Client Information tab.";
   if (!setupForm.entityType) {
     return "Choose an entity type on the Client Information tab — it decides what the client is asked.";
@@ -940,6 +947,10 @@ const clientRows = computed(() => [
   // Read as one name, the particle after it — the pair is edited as two boxes because they are two
   // different things to store, not because they are two things about the client.
   { label: "Client", value: clientForm.clientName, suffix: clientForm.clientNameSuffix || "" },
+  // Only where there is one: a client typed into the portal has no Maconomy number to show.
+  ...(clientForm.maconomyCustomerNumber
+    ? [{ label: "Maconomy Customer", value: clientForm.maconomyCustomerNumber }]
+    : []),
   { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Client Email Address", value: clientForm.customerEmail },
   { label: "Client Phone Number", value: clientForm.customerMobileNumber },
@@ -1089,6 +1100,7 @@ const seedForms = (detail, ws) => {
   clientForm.customerMobileNumber = detail.customerMobileNumber || "";
   clientForm.type = detail.type || "";
   clientForm.existingClientReferenceId = detail.existingClientReferenceId || null;
+  clientForm.maconomyCustomerNumber = detail.maconomyCustomerNumber || null;
   setupForm.cseUserId = detail.cse?.id || pendingSetupPick?.cseUserId || null;
   setupForm.entityType =
     ws?.entityType || detail.entityType || pendingSetupPick?.entityType || null;
@@ -1117,7 +1129,7 @@ const refreshEngagement = async () => {
 // Whether a client has been settled on: one on file, or a new one being described. The tab says which
 // while it is open; a request read without it open is judged by the name it carries.
 const clientChosen = () => {
-  if (clientForm.existingClientReferenceId) return true;
+  if (clientForm.existingClientReferenceId || clientForm.maconomyCustomerNumber) return true;
   const fields = clientFieldsRef.value;
   return fields ? !!fields.addingNew : !!clientForm.clientName?.trim();
 };
@@ -1127,6 +1139,11 @@ const clientChosen = () => {
 const clientProblem = () => {
   if (!clientChosen()) return "Search for the client, or add a new one.";
   if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
+  // A Maconomy customer's name and email are Maconomy's to hold: nothing here is asked for or checked.
+  // One with no email can still be filed as a draft; sending is what waits for the address.
+  if (clientForm.maconomyCustomerNumber) {
+    return clientForm.type ? "" : "Choose how this referral relates to THF's records.";
+  }
   // Each of the two, because a surname on its own composes into a name that would otherwise pass.
   if (isIndividualEntityType(setupForm.entityType)) {
     if (!clientForm.clientFirstName?.trim() || !clientForm.clientLastName?.trim()) {
@@ -1161,7 +1178,16 @@ const createProblem = () => clientProblem() || setupProblem();
 
 // No `description`: "Message from Partner" is not on the form, and leaving the field out of the payload is
 // what preserves it — the endpoint reads an omitted field as "leave this alone".
-const clientPayload = () => ({
+const clientPayload = () => (clientForm.maconomyCustomerNumber ? maconomyClientPayload() : typedClientPayload());
+
+// A Maconomy customer is named by number and nothing else: what is on screen about them was read from
+// Maconomy, and sending it back would be asking the portal to keep a copy.
+const maconomyClientPayload = () => ({
+  type: clientForm.type,
+  maconomyCustomerNumber: clientForm.maconomyCustomerNumber
+});
+
+const typedClientPayload = () => ({
   type: clientForm.type,
   clientName: clientForm.clientName,
   // The PARTS, so the server does not have to guess where a name splits.
@@ -1210,8 +1236,9 @@ const {
       const payload = clientPayload();
       request.value = await remsApi.update(remsId.value, {
         ...payload,
-        // A null reference reads as "leave the link alone", so taking it off is said out loud.
-        clearExistingClientReference: !payload.existingClientReferenceId
+        // A null reference reads as "leave the link alone", so taking it off is said out loud. A Maconomy
+        // customer is linked by number, with no reference to take off.
+        clearExistingClientReference: !payload.existingClientReferenceId && !payload.maconomyCustomerNumber
       });
       clientBaseline = JSON.stringify(payload);
     }

@@ -31,6 +31,16 @@ public interface IPersonRepository
     Task<Person?> FindClientByEmailAsync(
         string email, Guid? excludingPersonId, CancellationToken cancellationToken = default);
 
+    /// <summary>The client that is this Maconomy customer, in the active tenant.</summary>
+    Task<Person?> FindClientByMaconomyNumberAsync(string number, CancellationToken cancellationToken = default);
+
+    /// <summary>Which of these Maconomy customers are already clients in the active tenant: customer number → person id.</summary>
+    Task<IReadOnlyDictionary<string, Guid>> FindClientIdsByMaconomyNumbersAsync(
+        IReadOnlyCollection<string> numbers, CancellationToken cancellationToken = default);
+
+    /// <summary>Every Maconomy customer number the tenant's people hold, whatever tenant is active.</summary>
+    Task<IReadOnlyList<string>> ListMaconomyCustomerNumbersAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
     /// <summary>Lightweight projection for the user-create Person dropdown (id, name, email, user-link flag).</summary>
     Task<IReadOnlyList<(Person Person, bool IsUser)>> ListSelectableAsync(
         Guid? tenantId = null, CancellationToken cancellationToken = default);

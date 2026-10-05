@@ -12,10 +12,15 @@ public sealed record MaconomyFilterResult(IReadOnlyList<IReadOnlyDictionary<stri
 /// <summary>
 /// One customer as a dropdown option: "number - name (specification 6 name)" to read, the number to store,
 /// the specification 6 name on its own, null when blank, the REMS entity type it stands for, null when
-/// it stands for none, and the customer's email address and telephone, each null when blank.
+/// it stands for none, the customer's email address and telephone, each null when blank, and the name
+/// on its own.
 /// </summary>
 public sealed record MaconomyCustomerOption(
-    string Text, string Value, string? Specification6Name, string? EntityType, string? EmailAddress, string? PhoneNumber);
+    string Text, string Value, string? Specification6Name, string? EntityType, string? EmailAddress, string? PhoneNumber,
+    string Name);
+
+/// <summary>A search's rows, and whether they are all there are — fewer than the cap asked for.</summary>
+public sealed record MaconomyCustomerSearch(IReadOnlyList<MaconomyCustomerOption> Customers, bool Complete);
 
 /// <summary>What a fresh login produced: when the token was issued, and when it stops being used.</summary>
 public sealed record MaconomyLoginResult(DateTime IssuedOnUtc, DateTime ExpiresOnUtc);

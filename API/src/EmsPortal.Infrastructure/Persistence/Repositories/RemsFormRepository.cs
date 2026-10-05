@@ -10,10 +10,12 @@ namespace EmsPortal.Infrastructure.Persistence.Repositories;
 internal sealed class RemsFormRepository : IRemsFormRepository
 {
     private readonly EmsPortalDbContext _dbContext;
+    private readonly MaconomyClientReader _maconomy;
 
-    public RemsFormRepository(EmsPortalDbContext dbContext)
+    public RemsFormRepository(EmsPortalDbContext dbContext, MaconomyClientReader maconomy)
     {
         _dbContext = dbContext;
+        _maconomy = maconomy;
     }
 
     public Task<REMSForm?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -66,11 +68,14 @@ internal sealed class RemsFormRepository : IRemsFormRepository
             var t = query.Search.Trim();
             // Against the client's name as the list SHOWS it — "Smith John Jr." — and against each half
             // of it on its own, because a reader types whichever they have.
+            var maconomy = _maconomy.NumbersByName(t);
             rems = rems.Where(r =>
                 r.REMSNumber.Contains(t)
                 || r.ClientPerson!.ClientDisplayName.Contains(t)
                 || r.ClientPerson!.FirstName.Contains(t)
-                || r.ClientPerson!.LastName.Contains(t));
+                || r.ClientPerson!.LastName.Contains(t)
+                || (r.ClientPerson!.MaconomyCustomerNumber != null
+                    && maconomy.Contains(r.ClientPerson!.MaconomyCustomerNumber)));
         }
         if (withRequestStatus && !string.IsNullOrWhiteSpace(query.RequestStatus))
         {
@@ -169,11 +174,15 @@ internal sealed class RemsFormRepository : IRemsFormRepository
         var forms = _dbContext.RemsForms.AsQueryable();
         var clients = await _dbContext.Rems
             .Where(r => r.Status!.Value != draft && r.ClientPersonId != null && forms.Any(f => f.REMSId == r.Id))
-            .Select(r => new { Id = r.ClientPersonId!.Value, Name = r.ClientPerson!.ClientDisplayName })
+            .Select(r => new
+            {
+                Id = r.ClientPersonId!.Value,
+                Name = r.ClientPerson!.ClientDisplayName,
+                Maconomy = r.ClientPerson!.MaconomyCustomerNumber,
+            })
             .Distinct()
-            .OrderBy(c => c.Name)
             .ToListAsync(cancellationToken);
-        return clients.Select(c => new RemsClientChoice(c.Id, c.Name)).ToList();
+        return _maconomy.Choices(clients.Select(c => (c.Id, c.Name, c.Maconomy)));
     }
 
     public async Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(
@@ -211,9 +220,29 @@ internal sealed class RemsFormRepository : IRemsFormRepository
             .Add("createdOnUtc", x => x.Rems.CreatedOnUtc)
             .Add("updatedOnUtc", x => x.Rems.UpdatedOnUtc, x => x.Rems.REMSNumber);
 
-        var items = await sorts.Apply(rows, query.Sort.SortBy, query.Sort.Descending)
-            .Skip((query.Page - 1) * query.Limit)
-            .Take(query.Limit)
+        // A Maconomy client's name is not in the database, so with any on the list its Client order is
+        // worked out in memory over the whole filtered set and only that page is then read.
+        IReadOnlyList<Guid>? order = null;
+        var page = rows;
+        if (string.Equals(query.Sort.SortBy, "clientName", StringComparison.OrdinalIgnoreCase)
+            && await rows.AnyAsync(x => x.Rems.ClientPerson!.MaconomyCustomerNumber != null, cancellationToken))
+        {
+            var keys = await rows
+                .Select(x => new ClientSortKey<string>(
+                    x.Rems.Id, x.Rems.ClientPerson!.ClientDisplayName,
+                    x.Rems.ClientPerson!.MaconomyCustomerNumber, x.Rems.REMSNumber))
+                .ToListAsync(cancellationToken);
+            var ids = order = _maconomy.PageByName(keys, query.Sort.Descending, query.Page, query.Limit);
+            page = rows.Where(x => ids.Contains(x.Rems.Id));
+        }
+        else
+        {
+            page = sorts.Apply(rows, query.Sort.SortBy, query.Sort.Descending)
+                .Skip((query.Page - 1) * query.Limit)
+                .Take(query.Limit);
+        }
+
+        var read = await page
             .Select(x => new RemsClientFormItem(
                 x.Rems.Id,
                 x.Rems.REMSNumber,
@@ -231,8 +260,15 @@ internal sealed class RemsFormRepository : IRemsFormRepository
                 x.Rems.CreatedById,
                 x.Rems.CreatedOnUtc,
                 x.Rems.UpdatedById,
-                x.Rems.UpdatedOnUtc))
+                x.Rems.UpdatedOnUtc,
+                x.Rems.ClientPerson!.MaconomyCustomerNumber))
             .ToListAsync(cancellationToken);
+
+        var items = (order is null ? read : order.Join(read, id => id, i => i.RemsId, (_, i) => i))
+            .Select(i => i.MaconomyCustomerNumber is null
+                ? i
+                : i with { ClientName = _maconomy.Name(i.MaconomyCustomerNumber, i.ClientName) })
+            .ToList();
 
         return (items, total);
     }
@@ -339,11 +375,14 @@ internal sealed class RemsFormRepository : IRemsFormRepository
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var t = query.Search.Trim();
+            var maconomy = _maconomy.NumbersByName(t);
             forms = forms.Where(f =>
                 f.Rems!.REMSNumber.Contains(t)
                 || f.Rems!.ClientPerson!.ClientDisplayName.Contains(t)
                 || f.Rems!.ClientPerson!.FirstName.Contains(t)
-                || f.Rems!.ClientPerson!.LastName.Contains(t));
+                || f.Rems!.ClientPerson!.LastName.Contains(t)
+                || (f.Rems!.ClientPerson!.MaconomyCustomerNumber != null
+                    && maconomy.Contains(f.Rems!.ClientPerson!.MaconomyCustomerNumber)));
         }
         if (!string.IsNullOrWhiteSpace(query.RequestStatus))
         {
@@ -370,6 +409,7 @@ internal sealed class RemsFormRepository : IRemsFormRepository
                 f.Rems!.REMSNumber,
                 // The client's name as it reads, composed by the database on Persons.ClientDisplayName.
                 ClientName = f.Rems!.ClientPerson!.ClientDisplayName,
+                Maconomy = f.Rems!.ClientPerson!.MaconomyCustomerNumber,
                 EngagementType = f.Rems!.Type!.Value,
                 RequestStatus = f.Rems!.Status!.Value,
                 f.Status,
@@ -392,7 +432,7 @@ internal sealed class RemsFormRepository : IRemsFormRepository
             .Select(x => new RemsInboxItem(
                 x.REMSId,
                 x.REMSNumber,
-                x.ClientName,
+                _maconomy.Name(x.Maconomy, x.ClientName),
                 x.EngagementType,
                 x.RequestStatus,
                 x.Status,

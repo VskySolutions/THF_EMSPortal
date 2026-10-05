@@ -86,7 +86,7 @@ public class REMS : AuditableEntity
     /// notification and email says it the same way and SQL can sort and search on it.
     /// </summary>
     [NotMapped]
-    public string ClientDisplayName => ClientPerson?.ClientDisplayName ?? string.Empty;
+    public string ClientDisplayName => ClientPerson?.ClientName ?? string.Empty;
 
     /// <summary>The generational particle on the client's name — Jr., Sr., II, III, IV — or null.</summary>
     [NotMapped]
@@ -134,11 +134,11 @@ public class REMS : AuditableEntity
 
     /// <summary>Customer email used to reach out; required together-or-with mobile at app level.</summary>
     [NotMapped]
-    public string? CustomerEmail => ClientPerson?.PrimaryEmail;
+    public string? CustomerEmail => ClientPerson?.ClientEmail;
 
     /// <summary>Customer mobile number; required together-or-with email at app level.</summary>
     [NotMapped]
-    public string? CustomerMobileNumber => ClientPerson?.MobileNumber;
+    public string? CustomerMobileNumber => ClientPerson?.ClientPhone;
 
     /// <summary>
     /// The shareholder or CSE this request was raised FOR, when a delegate raised it on their behalf.

@@ -58,6 +58,8 @@ public sealed class MaconomySessionManager : IMaconomySessionManager
         await gate.WaitAsync(cancellationToken);
         try
         {
+            // An admin testing the connection is asking for a real attempt, whatever the last one did.
+            _cache.Remove(PauseKey(connection.TenantId));
             var entry = await LoginCoreAsync(connection, cancellationToken);
             return new MaconomyLoginResult(entry.IssuedOnUtc, ExpiresOn(entry.IssuedOnUtc));
         }
@@ -72,10 +74,16 @@ public sealed class MaconomySessionManager : IMaconomySessionManager
         Func<string, CancellationToken, Task<T>> call,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfPaused(connection.TenantId);
         var token = await EnsureTokenAsync(connection, rejected: null, cancellationToken);
         try
         {
             return await call(token, cancellationToken);
+        }
+        catch (MaconomyException ex) when (IsOutage(ex))
+        {
+            Pause(connection.TenantId, ex);
+            throw;
         }
         catch (MaconomyException ex) when (ex.Failure == MaconomyFailure.TokenRejected)
         {
@@ -92,7 +100,9 @@ public sealed class MaconomySessionManager : IMaconomySessionManager
                 const string message = "Maconomy refused a reconnect token it had just issued. Check the user's access in Maconomy.";
                 ForgetToken(connection);
                 await RecordFailureAsync(connection, message, cancellationToken);
-                throw new MaconomyException(MaconomyFailure.AuthFailed, message, again);
+                var refused = new MaconomyException(MaconomyFailure.AuthFailed, message, again);
+                Pause(connection.TenantId, refused);
+                throw refused;
             }
         }
     }
@@ -100,6 +110,7 @@ public sealed class MaconomySessionManager : IMaconomySessionManager
     public void ForgetToken(MaconomyConnection connection)
     {
         _cache.Remove(CacheKey(connection.TenantId));
+        _cache.Remove(PauseKey(connection.TenantId));
         connection.EncryptedReconnectToken = null;
         connection.ReconnectTokenIssuedOnUtc = null;
     }
@@ -161,6 +172,10 @@ public sealed class MaconomySessionManager : IMaconomySessionManager
                 ForgetToken(connection);
             }
             await RecordFailureAsync(connection, ex.Message, cancellationToken);
+            if (ex.Failure == MaconomyFailure.AuthFailed || IsOutage(ex))
+            {
+                Pause(connection.TenantId, ex);
+            }
             throw;
         }
 
@@ -185,9 +200,38 @@ public sealed class MaconomySessionManager : IMaconomySessionManager
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    // A refused login repeated on every search is how a service account gets locked, and an unreachable
+    // Maconomy makes each caller wait out the full timeout. Both are left alone for a short while.
+    private void Pause(Guid tenantId, MaconomyException failure)
+    {
+        if (_options.FailureCooldownSeconds > 0)
+        {
+            _cache.Set(
+                PauseKey(tenantId), new PauseEntry(failure.Failure, failure.Message),
+                TimeSpan.FromSeconds(_options.FailureCooldownSeconds));
+        }
+    }
+
+    private void ThrowIfPaused(Guid tenantId)
+    {
+        if (_cache.TryGetValue(PauseKey(tenantId), out PauseEntry? pause) && pause is not null)
+        {
+            throw new MaconomyException(pause.Failure, pause.Message);
+        }
+    }
+
+    /// <summary>Maconomy not answering at all, as opposed to answering with something the call has no use for.</summary>
+    private static bool IsOutage(MaconomyException ex)
+        => ex.Failure == MaconomyFailure.Unavailable
+            && ex.InnerException is HttpRequestException or TaskCanceledException;
+
     private static SemaphoreSlim GateFor(Guid tenantId) => Locks.GetOrAdd(tenantId, _ => new SemaphoreSlim(1, 1));
 
     private static string CacheKey(Guid tenantId) => $"maconomy:token:{tenantId:N}";
 
+    private static string PauseKey(Guid tenantId) => $"maconomy:pause:{tenantId:N}";
+
     private sealed record TokenEntry(string Token, DateTime IssuedOnUtc);
+
+    private sealed record PauseEntry(MaconomyFailure Failure, string Message);
 }

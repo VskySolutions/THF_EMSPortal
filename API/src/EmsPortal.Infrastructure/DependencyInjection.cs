@@ -53,7 +53,9 @@ public static class DependencyInjection
             options.UseSqlServer(
                     configuration.GetConnectionString(ConfigurationSections.SqlServerConnection),
                     sql => sql.MigrationsAssembly(typeof(EmsPortalDbContext).Assembly.FullName))
-                .AddInterceptors(sp.GetRequiredService<Persistence.ModifiedLog.FieldChangeInterceptor>()));
+                .AddInterceptors(
+                    sp.GetRequiredService<Persistence.ModifiedLog.FieldChangeInterceptor>(),
+                    sp.GetRequiredService<Integrations.Maconomy.MaconomyClientInterceptor>()));
 
         services.AddPersistence();
 
@@ -113,6 +115,7 @@ public static class DependencyInjection
         services.AddScoped<Jobs.StickyNoteExpiryJob>();
 
         // REMS (WO-110) repositories and per-tenant request-number generation.
+        services.AddScoped<MaconomyClientReader>();
         services.AddScoped<IRemsRepository, RemsRepository>();
         services.AddScoped<IRemsFormRepository, RemsFormRepository>();
         services.AddScoped<IRemsClientRepository, RemsClientRepository>();
@@ -157,6 +160,7 @@ public static class DependencyInjection
             .ConfigureHttpClient((sp, client) => client.Timeout = TimeSpan.FromSeconds(
                 Math.Max(1, sp.GetRequiredService<IOptions<MaconomyOptions>>().Value.TimeoutSeconds)));
         services.AddSingleton<IMaconomyGateway, Integrations.Maconomy.MaconomyGateway>();
+        services.AddSingleton<Integrations.Maconomy.MaconomyClientInterceptor>();
         return services;
     }
 

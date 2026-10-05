@@ -1546,6 +1546,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LastProfileUpdatedOn")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("MaconomyCustomerNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("MaritalStatus")
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
@@ -1627,6 +1631,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("SourceEntityType", "SourceEntityId");
+
+                    b.HasIndex("TenantId", "MaconomyCustomerNumber")
+                        .IsUnique()
+                        .HasFilter("[MaconomyCustomerNumber] IS NOT NULL AND [Deleted] = 0");
 
                     b.HasIndex("TenantId", "PartyType", "LastName");
 

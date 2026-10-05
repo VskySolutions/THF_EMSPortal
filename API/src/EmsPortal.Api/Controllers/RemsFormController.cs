@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Application.Abstractions.Email;
+using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.UniversalFeatures;
@@ -19,6 +21,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>REMS EMS-form build/send + email-log backend (WO-112).</summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("api/rems/requests")]
 [Produces("application/json")]
 [Tags("REMS EMS Form")]
@@ -39,6 +42,8 @@ public sealed class RemsFormController : ControllerBase
     private const string CodeEntityTypeLocked = "REMS_ENTITY_TYPE_LOCKED";
     private const string CodeEntityTypeOffRecord = "REMS_ENTITY_TYPE_OFF_RECORD";
     private const string CodeFormAlreadySubmitted = "REMS_FORM_ALREADY_SUBMITTED";
+    private const string CodeClientEmailUnconfirmed = "REMS_CLIENT_EMAIL_UNCONFIRMED";
+    private const string CodeClientEmailInvalid = "REMS_CLIENT_EMAIL_INVALID";
 
     private readonly IRemsRepository _rems;
     /// <summary>Only to answer whether an initiator has cover arranged — see RemsSetupAccess.CanWork.</summary>
@@ -53,6 +58,7 @@ public sealed class RemsFormController : ControllerBase
     private readonly IEmailTemplateService _templates;
     private readonly ITenantRepository _tenants;
     private readonly IOptionCodeResolver _codes;
+    private readonly IMaconomyClientDirectory _maconomy;
     private readonly string _baseUrl;
 
     public RemsFormController(
@@ -68,6 +74,7 @@ public sealed class RemsFormController : ControllerBase
         IEmailTemplateService templates,
         ITenantRepository tenants,
         IOptionCodeResolver codes,
+        IMaconomyClientDirectory maconomy,
         IOptions<AppOptions> appOptions)
     {
         _rems = rems;
@@ -82,6 +89,7 @@ public sealed class RemsFormController : ControllerBase
         _templates = templates;
         _tenants = tenants;
         _codes = codes;
+        _maconomy = maconomy;
         _baseUrl = appOptions.Value.BaseUrl;
     }
 
@@ -294,12 +302,11 @@ public sealed class RemsFormController : ControllerBase
                 "The form must be saved with a CSE and an entity type before it can be sent.");
         }
         // The client must have an email to receive the link (AC-REMS-008.2).
-        var email = Normalize(rems.CustomerEmail);
-        if (email is null)
+        if (await ClientEmailBlockedAsync(rems, cancellationToken) is { } noAddress)
         {
-            return FormConflict(CodeClientEmailMissing,
-                "The client has no email address on file; add one before sending.");
+            return FormConflict(noAddress.Code, noAddress.Reason);
         }
+        var email = Normalize(rems.CustomerEmail)!;
 
         // Commission is optional; where anyone is named, the split has to be settled before the client is written to.
         var engagement = await _engagements.GetByRemsIdAsync(remsId, cancellationToken);
@@ -379,7 +386,7 @@ public sealed class RemsFormController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsFormPreview>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ReminderPreview(Guid remsId, CancellationToken cancellationToken)
     {
-        var context = await LoadRemindableAsync(remsId, cancellationToken);
+        var context = await LoadRemindableAsync(remsId, confirmAddress: false, cancellationToken);
         if (context.Failure is not null)
         {
             return context.Failure;
@@ -411,7 +418,7 @@ public sealed class RemsFormController : ControllerBase
                 ApiResponseFactory.Forbidden("No active tenant/user context."));
         }
 
-        var context = await LoadRemindableAsync(remsId, cancellationToken);
+        var context = await LoadRemindableAsync(remsId, confirmAddress: true, cancellationToken);
         if (context.Failure is not null)
         {
             return context.Failure;
@@ -456,7 +463,7 @@ public sealed class RemsFormController : ControllerBase
 
     /// <summary>Resolves a request whose client can legitimately be reminded, or the error explaining why not.</summary>
     private async Task<(REMS? Rems, REMSForm? Form, IActionResult? Failure)> LoadRemindableAsync(
-        Guid remsId, CancellationToken cancellationToken)
+        Guid remsId, bool confirmAddress, CancellationToken cancellationToken)
     {
         var rems = await _rems.GetByIdAsync(remsId, cancellationToken);
         if (rems is null)
@@ -474,8 +481,58 @@ public sealed class RemsFormController : ControllerBase
         {
             return (null, null, FormConflict(blocked.Code, blocked.Reason));
         }
+        // Only a real send confirms the address with Maconomy; the preview shows what is held.
+        if (confirmAddress && await ClientEmailBlockedAsync(rems, cancellationToken) is { } noAddress)
+        {
+            return (null, null, FormConflict(noAddress.Code, noAddress.Reason));
+        }
 
         return (rems, form, null);
+    }
+
+    /// <summary>
+    /// Why the client cannot be written to right now, or null when they can. A Maconomy customer's
+    /// address is read from Maconomy at this moment, so the email goes where Maconomy says today.
+    /// </summary>
+    private async Task<(string Code, string Reason)?> ClientEmailBlockedAsync(REMS rems, CancellationToken cancellationToken)
+    {
+        if (rems.ClientPerson is not { IsMaconomyClient: true } client)
+        {
+            return Normalize(rems.CustomerEmail) is null
+                ? (CodeClientEmailMissing, "The client has no email address on file; add one before sending.")
+                : null;
+        }
+
+        var number = client.MaconomyCustomerNumber!;
+        try
+        {
+            if (await _maconomy.ReadAsync(rems.TenantId, number, cancellationToken) is not { } live)
+            {
+                return (CodeClientEmailUnconfirmed,
+                    $"Maconomy no longer has a customer {number}, so there is no address to send to.");
+            }
+            client.Maconomy = live;
+        }
+        catch (MaconomyException)
+        {
+            // What is held and recent will do; anything older is not what an email should go out on.
+            if (client.Maconomy is null || !_maconomy.IsFresh(rems.TenantId))
+            {
+                return (CodeClientEmailUnconfirmed,
+                    "Maconomy could not be reached, so the client's email address could not be confirmed. Try again in a moment.");
+            }
+        }
+
+        var email = Normalize(client.ClientEmail);
+        if (email is null)
+        {
+            return (CodeClientEmailMissing,
+                $"Maconomy holds no email address for customer {number}. Add one in Maconomy, then send again.");
+        }
+        return System.Net.Mail.MailAddress.TryCreate(email, out _) && email.IndexOfAny([' ', ',', ';']) < 0
+            ? null
+            : (CodeClientEmailInvalid,
+                $"The email address Maconomy holds for customer {number} is not one valid address. Correct it in Maconomy, then send again.");
     }
 
     /// <summary>Why this request's client cannot be reminded right now, or null when they can.</summary>
@@ -499,7 +556,14 @@ public sealed class RemsFormController : ControllerBase
         }
         if (Normalize(rems.CustomerEmail) is null)
         {
-            return (CodeClientEmailMissing, "The client has no email address on file; add one before sending.");
+            return rems.ClientPerson switch
+            {
+                // Not known while Maconomy cannot be read; the send itself asks Maconomy and says so.
+                { IsMaconomyClient: true, Maconomy: null } => null,
+                { IsMaconomyClient: true } => (CodeClientEmailMissing,
+                    "Maconomy holds no email address for this customer. Add one in Maconomy before sending."),
+                _ => (CodeClientEmailMissing, "The client has no email address on file; add one before sending."),
+            };
         }
 
         return null;
@@ -802,13 +866,22 @@ public sealed class RemsFormController : ControllerBase
         {
             return string.Equals(held, entityType, StringComparison.Ordinal)
                 ? null
-                : $"“{client.ClientDisplayName}” is already on file under a different entity type. A request "
-                    + "for a client on file is filed under the entity type their record holds.";
+                : client.IsMaconomyClient
+                    ? $"“{client.ClientName}” is held in Maconomy under a different entity type. A request for a "
+                        + "Maconomy customer is filed under the entity type Maconomy gives them."
+                    : $"“{client.ClientName}” is already on file under a different entity type. A request "
+                        + "for a client on file is filed under the entity type their record holds.";
+        }
+
+        // A Maconomy customer Maconomy gives no type: whichever the initiator chooses.
+        if (client.IsMaconomyClient)
+        {
+            return null;
         }
 
         // An organisation no form has classified yet: any type but a person's.
         return RemsClientEntityType.IsIndividual(entityType)
-            ? $"“{client.ClientDisplayName}” is on file as an organisation, so it cannot be filed as an Individual."
+            ? $"“{client.ClientName}” is on file as an organisation, so it cannot be filed as an Individual."
             : null;
     }
 
