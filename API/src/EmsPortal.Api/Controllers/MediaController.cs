@@ -11,6 +11,12 @@ using DomainMedia = EmsPortal.Domain.Entities.Media;
 using EntityTypeEnum = EmsPortal.Domain.Enums.EntityType;
 using MediaTypeEnum = EmsPortal.Domain.Enums.MediaType;
 using MediaCategoryEnum = EmsPortal.Domain.Enums.MediaCategory;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
+using Microsoft.AspNetCore.Http.Timeouts;
+using EmsPortal.Api.Filters;
+using EmsPortal.Shared.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -23,7 +29,7 @@ namespace EmsPortal.Api.Controllers;
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
 public sealed class MediaController : ControllerBase
 {
-    private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+    private readonly UploadLimits _uploads;
 
     private readonly IMediaRepository _media;
     private readonly IUnitOfWork _unitOfWork;
@@ -36,9 +42,11 @@ public sealed class MediaController : ControllerBase
         IUnitOfWork unitOfWork,
         IFileStorage fileStorage,
         IUploadRecordKeyResolver recordKeys,
-        IPersonRepository persons)
+        IPersonRepository persons,
+        IOptions<LimitsOptions> limits)
     {
         _media = media;
+        _uploads = limits.Value.Uploads;
         _unitOfWork = unitOfWork;
         _fileStorage = fileStorage;
         _recordKeys = recordKeys;
@@ -48,7 +56,9 @@ public sealed class MediaController : ControllerBase
     /// <summary>Uploads a file.</summary>
     [HttpPost("/api/media")]
     [Authorize]
-    [RequestSizeLimit(MaxFileSizeBytes)]
+    [UploadSizeLimit(UploadKind.File)]
+    [EnableRateLimiting(RateLimitPolicies.Upload)]
+    [RequestTimeout(RequestTimeoutPolicies.LongRunning)]
     [ProducesResponseType<ApiResponse<MediaResponse>>(StatusCodes.Status201Created)]
     public async Task<IActionResult> Upload(
         [FromForm] IFormFile? file,
@@ -61,9 +71,9 @@ public sealed class MediaController : ControllerBase
         {
             return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "A non-empty file is required."));
         }
-        if (file.Length > MaxFileSizeBytes)
+        if (file.Length > _uploads.MaxFileBytes)
         {
-            return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "File exceeds the 10 MB limit."));
+            return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", $"File exceeds the {_uploads.MaxFileMb} MB limit."));
         }
 
         var category = Enum.TryParse<MediaCategoryEnum>(mediaCategory, ignoreCase: true, out var cat) ? cat : MediaCategoryEnum.Profile;
@@ -127,6 +137,7 @@ public sealed class MediaController : ControllerBase
     }
 
     [HttpGet("/api/media/{id:guid}/content")]
+    [EnableRateLimiting(RateLimitPolicies.PublicContent)]
     [AllowAnonymous]
     public async Task<IActionResult> Content(Guid id, CancellationToken cancellationToken)
     {

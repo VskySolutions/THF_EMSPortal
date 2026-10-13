@@ -37,6 +37,7 @@ internal sealed class SmtpAccountRepository : ISmtpAccountRepository
             .OrderByDescending(a => a.IsActive)
             .ThenByDescending(a => a.UpdatedOnUtc)
             .ThenByDescending(a => a.CreatedOnUtc)
+            .Take(_dbContext.MaxRows)
             .ToListAsync(cancellationToken);
     }
 

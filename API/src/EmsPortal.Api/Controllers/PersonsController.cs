@@ -123,9 +123,6 @@ public sealed class PersonsController : ControllerBase
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         // Super Admins may scope to any tenant; everyone else is pinned to their active tenant by the
         // ambient query filter (a client-supplied tenantId is ignored for non-Super-Admins).
         Guid? scopeTenant = User.IsSuperAdmin() && tenantId is { } tid ? tid : null;

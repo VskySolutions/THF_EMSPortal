@@ -275,9 +275,6 @@ public sealed class UsersController : ControllerBase
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         // Everyone sees only the ACTIVE tenant's users — a Super Admin included.
         var activeTenantId = User.GetActiveTenantId();
         var tenantFilter = tenantId is { } requestedTenantId && User.HasPermission(Permissions.TenantsWrite)

@@ -10,6 +10,8 @@ using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -251,6 +253,7 @@ public sealed class SmtpAccountController : ControllerBase
     {
         var (resolvedTenant, error) = await ResolveTargetTenantAsync(tenantId, cancellationToken);
         if (error is not null)
+    [EnableRateLimiting(RateLimitPolicies.Email)]
         {
             return error;
         }

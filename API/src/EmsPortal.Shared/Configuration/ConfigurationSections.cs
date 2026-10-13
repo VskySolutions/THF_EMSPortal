@@ -36,4 +36,7 @@ public static class ConfigurationSections
 
     /// <summary>Platform-wide caps for the Maconomy integration; the connections themselves are per tenant, in the database.</summary>
     public const string Maconomy = "Maconomy";
+
+    /// <summary>Rate limits and the page-size, bulk, upload and timeout ceilings, all editable after a publish.</summary>
+    public const string Limits = "Limits";
 }

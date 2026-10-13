@@ -16,6 +16,8 @@ using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -129,8 +131,6 @@ public sealed class RemsRequestsController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
 
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
         var privileged = IsPrivileged();
 
         var options = new RemsRequestListOptions(
@@ -715,6 +715,7 @@ public sealed class RemsRequestsController : ControllerBase
     /// mandatory reason.
     /// </summary>
     [HttpPost("{id:guid}/send-back")]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<RemsRequestDetail>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SendBack(Guid id, [FromBody] SendBackRemsRequestRequest request, CancellationToken cancellationToken)
@@ -1007,6 +1008,7 @@ public sealed class RemsRequestsController : ControllerBase
     /// does have, not a failed search.
     /// </summary>
     [HttpGet("/api/rems/clients/maconomy")]
+    [EnableRateLimiting(RateLimitPolicies.MaconomySearch)]
     [RequirePermission(Permissions.RemsRequestsCreate)]
     [ProducesResponseType<ApiResponse<RemsMaconomyLookup>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> MaconomyLookup(
@@ -1049,6 +1051,7 @@ public sealed class RemsRequestsController : ControllerBase
     /// and what "Refresh" re-reads after the customer has been corrected in Maconomy.
     /// </summary>
     [HttpGet("/api/rems/clients/maconomy/customer")]
+    [EnableRateLimiting(RateLimitPolicies.MaconomySearch)]
     [RequirePermission(Permissions.RemsRequestsCreate)]
     [ProducesResponseType<ApiResponse<RemsClientLookupItem>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status502BadGateway)]

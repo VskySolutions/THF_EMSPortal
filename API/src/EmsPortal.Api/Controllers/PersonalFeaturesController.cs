@@ -7,6 +7,8 @@ using EmsPortal.Domain.Enums;
 using EmsPortal.Shared.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http.Timeouts;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -192,6 +194,7 @@ public sealed class PersonalFeaturesController : ControllerBase
     // ---- PDF export ----
 
     [HttpPost("pdf-export")]
+    [RequestTimeout(RequestTimeoutPolicies.LongRunning)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ExportPdf([FromBody] PdfExportRequest request, CancellationToken cancellationToken)
     {

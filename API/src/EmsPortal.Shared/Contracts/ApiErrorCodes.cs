@@ -31,5 +31,10 @@ public static class ApiErrorCodes
     /// <summary>An action would push a group's usage past its capacity limit (add rejected, AC-PG-013.2).</summary>
     public const string CapacityLimitReached = "CAPACITY_LIMIT_REACHED";
 
+    /// <summary>The caller went over a rate limit; the Retry-After header says how long to wait.</summary>
+    public const string TooManyRequests = "TOO_MANY_REQUESTS";
+    /// <summary>The request ran past the server's time limit and was cut off.</summary>
+    public const string RequestTimeout = "REQUEST_TIMEOUT";
+
     public const string InternalError = "INTERNAL_ERROR";
 }

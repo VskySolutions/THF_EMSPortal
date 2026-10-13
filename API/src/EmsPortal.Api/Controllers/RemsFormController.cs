@@ -16,6 +16,8 @@ using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -265,6 +267,7 @@ public sealed class RemsFormController : ControllerBase
 
     /// <summary>Send the form-link email to the client (AC-REMS-008).</summary>
     [HttpPost("{remsId:guid}/form/send")]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [RequirePermission(Permissions.RemsFormsSend)]
     [ProducesResponseType<ApiResponse<RemsFormBuildScreen>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Send(Guid remsId, [FromBody] SendRemsFormRequest? request, CancellationToken cancellationToken)
@@ -407,6 +410,7 @@ public sealed class RemsFormController : ControllerBase
 
     /// <summary>Re-send the form link to a client who has not submitted yet.</summary>
     [HttpPost("{remsId:guid}/form/reminder")]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [RequirePermission(Permissions.RemsFormsSend)]
     [ProducesResponseType<ApiResponse<RemsFormBuildScreen>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SendReminder(
@@ -662,9 +666,6 @@ public sealed class RemsFormController : ControllerBase
         [FromQuery] string? requestStatus = null,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         RemsFormStatus? state = Enum.TryParse<RemsFormStatus>(formState, ignoreCase: true, out var parsed) ? parsed : null;
 
         var (items, total) = await _forms.ListInboxAsync(

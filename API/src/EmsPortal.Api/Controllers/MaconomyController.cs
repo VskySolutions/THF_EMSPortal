@@ -8,6 +8,8 @@ using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -176,6 +178,7 @@ public sealed class MaconomyController : ControllerBase
     /// to the tenant's setting and is capped platform-wide. Logs in by itself when it has to.
     /// </summary>
     [HttpGet("customers")]
+    [EnableRateLimiting(RateLimitPolicies.MaconomySearch)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaconomyCustomerOptionResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status502BadGateway)]

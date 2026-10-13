@@ -33,7 +33,7 @@ internal sealed class TagRepository : ITagRepository
         }
 
         // Most-recently-touched first, with name as the tie-break so equal timestamps stay predictable.
-        return await query.OrderByDescending(t => t.UpdatedOnUtc).ThenBy(t => t.Name).ToListAsync(cancellationToken);
+        return await query.OrderByDescending(t => t.UpdatedOnUtc).ThenBy(t => t.Name).Take(_dbContext.MaxRows).ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyDictionary<Guid, int>> GetUsageCountsAsync(CancellationToken cancellationToken = default)

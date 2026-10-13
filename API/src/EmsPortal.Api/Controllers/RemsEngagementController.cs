@@ -127,9 +127,6 @@ public sealed class RemsEngagementController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
 
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         var slice = string.Equals(assignment?.Trim(), "mine", StringComparison.OrdinalIgnoreCase)
             ? RemsClientFormAssignment.Mine
             : RemsClientFormAssignment.All;

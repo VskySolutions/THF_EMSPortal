@@ -23,7 +23,7 @@ internal sealed class UserGroupRepository : IUserGroupRepository
         }
 
         // Most-recently-touched first, with name as the tie-break so equal timestamps stay predictable.
-        return await query.OrderByDescending(g => g.UpdatedOnUtc).ThenBy(g => g.Name).ToListAsync(cancellationToken);
+        return await query.OrderByDescending(g => g.UpdatedOnUtc).ThenBy(g => g.Name).Take(_dbContext.MaxRows).ToListAsync(cancellationToken);
     }
 
     public Task<UserGroup?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

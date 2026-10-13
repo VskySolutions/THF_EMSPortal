@@ -89,9 +89,6 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         var (items, total) = await _rems.ListRelatedEntitiesAsync(
             new RemsRelatedEntityQuery(
                 search, entityType, relatedStatus, new SortRequest(sortBy, descending), page, limit,

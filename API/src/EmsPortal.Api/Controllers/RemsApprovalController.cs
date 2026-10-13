@@ -14,6 +14,8 @@ using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -227,6 +229,7 @@ public sealed class RemsApprovalController : ControllerBase
 
     /// <summary>Route the engagement for approval (AC-REMS-018/019).</summary>
     [HttpPost("engagements/{id:guid}/approval/send")]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [RequirePermission(Permissions.RemsApprovalsSend)]
     [ProducesResponseType<ApiResponse<RemsApproverList>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Send(Guid id, CancellationToken cancellationToken)
@@ -462,9 +465,6 @@ public sealed class RemsApprovalController : ControllerBase
         {
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
-
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
 
         // An unparseable role/status is treated as "no filter" rather than an error: these arrive from a
         // picker, and a stale value should show everything, not fail the page.

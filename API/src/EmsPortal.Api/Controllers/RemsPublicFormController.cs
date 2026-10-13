@@ -16,6 +16,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -23,6 +25,7 @@ namespace EmsPortal.Api.Controllers;
 [ApiController]
 [Route("api/rems/public/forms")]
 [AllowAnonymous]
+[EnableRateLimiting(RateLimitPolicies.PublicFormRead)]
 [Produces("application/json")]
 [Tags("REMS Public Form")]
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
@@ -213,6 +216,7 @@ public sealed class RemsPublicFormController : ControllerBase
     /// read-only review presentation.
     /// </summary>
     [HttpPost("{inviteCode}/review")]
+    [EnableRateLimiting(RateLimitPolicies.PublicFormWrite)]
     [ProducesResponseType<ApiResponse<RemsReviewModel>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Review(
         string inviteCode,
@@ -244,6 +248,7 @@ public sealed class RemsPublicFormController : ControllerBase
 
     /// <summary>Transactionally submit the form (WO-113).</summary>
     [HttpPost("{inviteCode}/submit")]
+    [EnableRateLimiting(RateLimitPolicies.PublicFormWrite)]
     [ProducesResponseType<ApiResponse<RemsPublicFormResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Submit(
         string inviteCode,
@@ -296,6 +301,7 @@ public sealed class RemsPublicFormController : ControllerBase
     /// only.
     /// </summary>
     [HttpPost("{inviteCode}/cancel")]
+    [EnableRateLimiting(RateLimitPolicies.PublicFormWrite)]
     [ProducesResponseType<ApiResponse<RemsPublicCancelResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Cancel(string inviteCode, CancellationToken cancellationToken)
     {

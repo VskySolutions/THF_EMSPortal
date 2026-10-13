@@ -108,9 +108,6 @@ public sealed class TenantsController : ControllerBase
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         var all = await _tenants.ListAsync(cancellationToken);
         IEnumerable<Tenant> filteredSet = includeArchived ? all : all.Where(t => t.Status != TenantStatus.Archived);
 

@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.Configure<RemsApprovalPolicyOptions>(configuration.GetSection(ConfigurationSections.RemsApprovalPolicy));
         services.Configure<MicrosoftSsoOptions>(configuration.GetSection(ConfigurationSections.MicrosoftSso));
         services.Configure<MaconomyOptions>(configuration.GetSection(ConfigurationSections.Maconomy));
+        services.Configure<LimitsOptions>(configuration.GetSection(ConfigurationSections.Limits));
 
         services.AddSecurity();
         services.AddEmail();

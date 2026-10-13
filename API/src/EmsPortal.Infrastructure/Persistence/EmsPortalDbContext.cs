@@ -1,8 +1,10 @@
 using EmsPortal.Application.Abstractions.Security;
 using EmsPortal.Application.Abstractions.Tenancy;
 using EmsPortal.Domain.Entities;
+using EmsPortal.Shared.Configuration;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Infrastructure.Persistence;
 
@@ -26,12 +28,17 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public EmsPortalDbContext(
         DbContextOptions<EmsPortalDbContext> options,
         ITenantContext tenantContext,
-        IActorAccessor actorAccessor)
+        IActorAccessor actorAccessor,
+        IOptions<LimitsOptions> limits)
         : base(options)
     {
         _tenantContext = tenantContext;
         _actorAccessor = actorAccessor;
+        MaxRows = limits.Value.Paging.MaxPageSize < 1 ? 1 : limits.Value.Paging.MaxPageSize;
     }
+
+    /// <summary>The most rows a whole-list read returns (Limits:Paging:MaxPageSize). Paged reads are clamped to it on the way in.</summary>
+    public int MaxRows { get; }
 
     public DbSet<AuditTrailEntry> AuditTrail => Set<AuditTrailEntry>();
 
