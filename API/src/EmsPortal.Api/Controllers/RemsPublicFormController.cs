@@ -908,7 +908,9 @@ public sealed class RemsPublicFormController : ControllerBase
         else if (RemsFormPayloadValidator.IsBusinessGroup(entityType))
         {
             yield return (roles.PrimaryContact, nameof(RemsContactRole.PrimaryClientContact), true);
-            yield return (roles.FinancialContact, nameof(RemsContactRole.FinancialContact), true);
+            // Owed by every business but a commercial one, which may give a financial contact or not.
+            yield return (roles.FinancialContact, nameof(RemsContactRole.FinancialContact),
+                entityType != RemsFormPayloadValidator.Commercial);
             // Trust and Estate only. Yielded for the whole family — a null role stages nothing, and an
             // answer given before the entity type changed is still an answer (as with the retired roles).
             yield return (roles.TrustEstateContact, nameof(RemsContactRole.TrustEstateContact), false);
@@ -919,7 +921,8 @@ public sealed class RemsPublicFormController : ControllerBase
         }
         else if (entityType == RemsFormPayloadValidator.Government)
         {
-            yield return (roles.FinanceDirector, nameof(RemsContactRole.FinanceDirector), true);
+            // Neither is owed; a government body gives whichever it has.
+            yield return (roles.FinanceDirector, nameof(RemsContactRole.FinanceDirector), false);
             yield return (roles.OtherContact, nameof(RemsContactRole.OtherContact), false);
             yield return (roles.BillingContact, nameof(RemsContactRole.BillingContact), false);   // retired
         }

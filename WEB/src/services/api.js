@@ -235,7 +235,11 @@ export const smtpAccountApi = {
   activate: (id, tenantId) => api.put(`/api/admin/smtp-accounts/${id}/activate`, null, { params: { tenantId } }).then(unwrap),
   // body: { recipientEmail } → { success, sentAtUtc?, serverResponse?, errorCategory?, errorDetail? }
   test: (id, recipientEmail, tenantId) =>
-    api.post(`/api/admin/smtp-accounts/${id}/test`, { recipientEmail }, { params: { tenantId } }).then(unwrap)
+    api.post(`/api/admin/smtp-accounts/${id}/test`, { recipientEmail }, { params: { tenantId } }).then(unwrap),
+  // The tenant-wide switch over every notification email. → { notificationsEnabled, updatedByName, updatedOnUtc }
+  settings: (tenantId) => api.get("/api/admin/email-settings", { params: { tenantId } }).then(unwrap),
+  // payload: { notificationsEnabled }. Live at once; test sends are unaffected.
+  saveSettings: (payload, tenantId) => api.put("/api/admin/email-settings", payload, { params: { tenantId } }).then(unwrap)
 };
 
 // The tenant's Maconomy connection and the customer lookup it powers. `tenantId` is the Super Admin's
@@ -618,8 +622,7 @@ export const remsApi = {
   // Take the signed client-acceptance form off the engagement. The link goes; the stored file itself is
   // left where it is. Idempotent — an engagement carrying none answers 200, not 404.
   removeCaf: (id) => api.delete(`/api/rems/engagements/${id}/audit/client-acceptance-form`).then(unwrap),
-  // payload: { clientFiscalYearEnd?, adminFeesApply?, adminFeesAmount? } — the Assurance half of the attest
-  // detail the CAF above shares. Answering adminFeesApply=false clears the amount server-side.
+  // payload: { clientFiscalYearEnd? } — the Assurance half of the attest detail the CAF above shares.
   updateAuditDetail: (id, payload) => api.put(`/api/rems/engagements/${id}/audit`, payload).then(unwrap),
   // payload.
   updateGovernment: (id, payload) => api.put(`/api/rems/engagements/${id}/government`, payload).then(unwrap),

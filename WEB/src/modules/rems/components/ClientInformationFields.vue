@@ -80,7 +80,7 @@
                 <q-item-section side>
                   <div class="cif-tags">
                     <span class="cif-source" :class="{ 'cif-source--maconomy': !!client.maconomyCustomerNumber }">
-                      {{ client.maconomyCustomerNumber ? "Maconomy" : "System" }}
+                      {{ client.maconomyCustomerNumber ? "Maconomy" : "EMS Portal" }}
                     </span>
                     <app-option-badge v-if="client.entityType" :option="entityTypeOption(client.entityType)" />
                     <span v-else class="text-caption text-grey-6">Not recorded</span>

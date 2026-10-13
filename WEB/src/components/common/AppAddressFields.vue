@@ -90,6 +90,15 @@
         :rules="contactRequired ? [requiredRule('Email Address is required')] : []"
         :error="!!errorFor('email')" :error-message="errorFor('email')"
       />
+      <!-- The addressee's phone, where the host asks for one. Its own required flag: a host can want the
+           name and email without the phone, or the whole set. -->
+      <div v-if="contactPhone" :class="[col('phone'), contactOrder]">
+        <app-phone-input
+          v-model="address.phone" label="Phone Number" :required="contactPhoneRequired"
+          :dense="dense" :disable="disable" :readonly="readonly"
+        />
+        <div v-if="errorFor('phone')" class="text-negative text-caption q-mt-xs">{{ errorFor('phone') }}</div>
+      </div>
     </template>
 
     <!-- Opt-in extras kept for the records that already capture them (profile / person). -->
@@ -113,6 +122,7 @@ import { nameRules } from "utils/personName";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
 import AppNameSuffixField from "components/common/AppNameSuffixField.vue";
+import AppPhoneInput from "components/common/AppPhoneInput.vue";
 
 const address = defineModel({ type: Object, required: true });
 
@@ -135,6 +145,10 @@ const props = defineProps({
   contactFirst: { type: Boolean, default: false },
   // The addressee's boxes are mandatory, the suffix aside.
   contactRequired: { type: Boolean, default: false },
+  // Also ask the addressee's phone number, and whether it is mandatory. Apart from contactRequired: the
+  // name and email are owed more often than the phone is.
+  contactPhone: { type: Boolean, default: false },
+  contactPhoneRequired: { type: Boolean, default: false },
   // Grid widths, per field, keyed by the canonical field names above — the one thing a host may change
   // about this field-set's LAYOUT. Anything not named keeps the default below.
   cols: { type: Object, default: () => ({}) },
@@ -156,7 +170,8 @@ const DEFAULT_COLS = {
   firstName: "col-12 col-sm-6",
   lastName: "col-8 col-sm-4",
   suffix: "col-4 col-sm-2",
-  email: "col-12 col-sm-6"
+  email: "col-12 col-sm-6",
+  phone: "col-12 col-sm-6"
 };
 
 const col = (field) => props.cols[field] || DEFAULT_COLS[field];
@@ -291,6 +306,9 @@ const validate = () => {
     REQUIRED_CONTACT_FIELDS.forEach(([field, message]) => {
       if (!String(address.value[field] ?? "").trim()) localErrors[field] = message;
     });
+  }
+  if (props.contact && props.contactPhone && props.contactPhoneRequired && !String(address.value.phone ?? "").trim()) {
+    localErrors.phone = "Phone Number is required";
   }
   const postalOk = validatePostal();
   return postalOk && Object.keys(localErrors).length === 0;

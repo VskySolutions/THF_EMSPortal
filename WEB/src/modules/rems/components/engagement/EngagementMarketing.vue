@@ -99,12 +99,11 @@ const filteredGroups = computed(() => {
     .filter((g) => g.items.length);
 });
 
-// Called by the page's save.
+// Called by the page's save. An empty selection is never written: at least one method is required, and the
+// message says so instead of the section quietly saving nothing.
 const saveMarketing = async (engagementId) => {
   if (selected.value.length === 0) {
-    return (props.engagement.marketingMethodIds || []).length
-      ? "Marketing needs at least one tag — the saved tags are unchanged."
-      : null;
+    return "Marketing needs at least one method — choose one from any group to save this section.";
   }
   await remsApi.updateMarketing(engagementId, selected.value);
   return null;

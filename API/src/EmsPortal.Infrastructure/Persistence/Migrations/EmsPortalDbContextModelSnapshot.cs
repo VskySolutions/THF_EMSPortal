@@ -2458,13 +2458,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<decimal?>("AdminFeesAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<bool?>("AdminFeesApply")
-                        .HasColumnType("bit");
-
                     b.Property<Guid?>("ClientAcceptanceFormMediaId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2507,10 +2500,7 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[Deleted] = 0");
 
-                    b.ToTable("REMSEngagementAuditDetail", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_REMSEngagementAuditDetail_AdminFeesAmount", "[AdminFeesAmount] IS NULL OR [AdminFeesAmount] >= 0");
-                        });
+                    b.ToTable("REMSEngagementAuditDetail", (string)null);
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.REMSEngagementCommissionSplit", b =>
@@ -4015,6 +4005,45 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantBrandings", (string)null);
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.TenantEmailSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeletedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("NotificationsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasFilter("[Deleted] = 0");
+
+                    b.ToTable("TenantEmailSettings", (string)null);
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.TenantRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5330,6 +5359,15 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("LogoMediaId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.TenantEmailSettings", b =>
+                {
                     b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

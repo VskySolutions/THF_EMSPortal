@@ -165,9 +165,7 @@ public sealed record RemsAuditDetailView(
     Guid Id,
     Guid? ClientAcceptanceFormMediaId,
     string? FileName,
-    DateOnly? ClientFiscalYearEnd,
-    bool? AdminFeesApply,
-    decimal? AdminFeesAmount);
+    DateOnly? ClientFiscalYearEnd);
 
 /// <summary>
 /// Government audit detail — contract number, Florida 1% flag and the copied contract/PO dates —
@@ -320,12 +318,10 @@ public sealed class LinkPurchaseOrderRequest
     public Guid MediaId { get; set; }
 }
 
-/// <summary>Set the ASSURANCE detail: the client's fiscal year end and the administrative fees.</summary>
+/// <summary>Set the ASSURANCE detail: the client's fiscal year end.</summary>
 public sealed class UpdateRemsAuditDetailRequest
 {
     public DateOnly? ClientFiscalYearEnd { get; set; }
-    public bool? AdminFeesApply { get; set; }
-    public decimal? AdminFeesAmount { get; set; }
 }
 
 /// <summary>Set the government-audit contract detail (AC-REMS-014.13) and the GCS purchase order.</summary>

@@ -830,7 +830,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Government audit detail updated."));
     }
 
-    /// <summary>Set the ASSURANCE detail: the client's fiscal year end and the administrative fees.</summary>
+    /// <summary>Set the ASSURANCE detail: the client's fiscal year end.</summary>
     [HttpPut("engagements/{id:guid}/audit")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -859,10 +859,6 @@ public sealed class RemsEngagementController : ControllerBase
         }
 
         detail.ClientFiscalYearEnd = request.ClientFiscalYearEnd;
-        detail.AdminFeesApply = request.AdminFeesApply;
-        // An amount without a "yes" beside it is an amount nobody is charging. Answering "no" clears it
-        // rather than leaving a figure behind that no screen shows and every report would still sum.
-        detail.AdminFeesAmount = request.AdminFeesApply == true ? request.AdminFeesAmount : null;
 
         await LogEngagementUpdatedAsync(engagement, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

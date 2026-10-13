@@ -35,6 +35,20 @@ public sealed class RemsFormPayloadValidator
     public static bool IsBusinessGroup(string? entityType)
         => entityType is not null && BusinessGroups.Contains(entityType);
 
+    /// <summary>
+    /// The entity types whose contacts must carry a phone number as well as a name and an email: a trust
+    /// or estate on every contact it gives, a government body on any it chooses to give. Mirrored by
+    /// <c>contactPhoneRequired</c> in <c>WEB/src/modules/rems/remsContactRoles.js</c>.
+    /// </summary>
+    public static bool RequiresContactPhone(string? entityType)
+        => entityType is TrustEstate or Government;
+
+    /// <summary>
+    /// Which business-family contacts are required. The family shares its questions, not its rules: a
+    /// commercial client owes only a primary contact, the rest a financial one too.
+    /// </summary>
+    private static bool RequiresFinancialContact(string entityType) => entityType != Commercial;
+
     public ValidationResult Validate(RemsFormPayloadV1? payload, string entityType)
     {
         var failures = new List<ValidationFailure>();
@@ -84,9 +98,11 @@ public sealed class RemsFormPayloadValidator
                 "Billing information is required — give a name, an email address and an address for the invoice."));
         }
 
+        // A trust or estate gives a phone number for whoever its invoice is addressed to; nobody else has to.
+        var billingPhone = entityType == TrustEstate;
         for (var i = 0; i < payload.BillingAddresses.Count; i++)
         {
-            ValidateBillingAddress(failures, $"billingAddresses[{i}]", payload.BillingAddresses[i]);
+            ValidateBillingAddress(failures, $"billingAddresses[{i}]", payload.BillingAddresses[i], billingPhone);
         }
 
         // Optional like the rest of the spouse block, but checked when given — a mistyped address is
@@ -125,22 +141,34 @@ public sealed class RemsFormPayloadValidator
         }
         else if (IsBusinessGroup(entityType))
         {
-            if (string.IsNullOrWhiteSpace(payload.Ein))
+            // The EIN is asked but no longer required of anyone (since October 2026).
+            var phone = RequiresContactPhone(entityType);
+
+            // A trust or estate must be reachable by phone, not only at the locked email.
+            if (entityType == TrustEstate)
             {
-                failures.Add(new ValidationFailure("ein", "EIN is required for a business."));
+                RequireField(failures, "mobileNumber", payload.MobileNumber, "Phone number is required.");
             }
 
-            RequireRole(failures, "roles.primaryContact", roles.PrimaryContact);
-            RequireRole(failures, "roles.financialContact", roles.FinancialContact);
-            OptionalRole(failures, "roles.otherContact", roles.OtherContact);
+            RequireRole(failures, "roles.primaryContact", roles.PrimaryContact, phone);
+            if (RequiresFinancialContact(entityType))
+            {
+                RequireRole(failures, "roles.financialContact", roles.FinancialContact, phone);
+            }
+            else
+            {
+                OptionalRole(failures, "roles.financialContact", roles.FinancialContact, phone);
+            }
+            OptionalRole(failures, "roles.otherContact", roles.OtherContact, phone);
             // Trust and Estate only, and optional — but still shape-checked. Unconditional like the
             // retired roles: an answer already given survives a change of entity type.
-            OptionalRole(failures, "roles.trustEstateContact", roles.TrustEstateContact);
+            OptionalRole(failures, "roles.trustEstateContact", roles.TrustEstateContact, phone);
         }
         else if (entityType == Government)
         {
-            RequireRole(failures, "roles.financeDirector", roles.FinanceDirector);
-            OptionalRole(failures, "roles.otherContact", roles.OtherContact);
+            // Neither contact is owed, but one that is started has to be finished, phone included.
+            OptionalRole(failures, "roles.financeDirector", roles.FinanceDirector, requirePhone: true);
+            OptionalRole(failures, "roles.otherContact", roles.OtherContact, requirePhone: true);
         }
         else
         {
@@ -211,7 +239,7 @@ public sealed class RemsFormPayloadValidator
 
     /// <summary>A billing block the client has started.</summary>
     private static void ValidateBillingAddress(
-        List<ValidationFailure> failures, string prefix, RemsAddressPayload? address)
+        List<ValidationFailure> failures, string prefix, RemsAddressPayload? address, bool requirePhone)
     {
         if (address is null || !address.HasAnyContent)
         {
@@ -233,6 +261,11 @@ public sealed class RemsFormPayloadValidator
         else if (!IsEmail(address.Email))
         {
             failures.Add(new ValidationFailure($"{prefix}.email", "Email is not a valid email address."));
+        }
+
+        if (requirePhone)
+        {
+            RequireField(failures, $"{prefix}.phone", address.Phone, "Phone number is required.");
         }
     }
 
@@ -268,33 +301,45 @@ public sealed class RemsFormPayloadValidator
         RequireName(failures, $"{prefix}.billingLastName", individual.BillingLastName, "Billing last name");
     }
 
-    /// <summary>A required role must carry a first name, a last name and a valid email; the phone is optional.</summary>
-    private static void RequireRole(List<ValidationFailure> failures, string prefix, RemsRolePayload? role)
+    /// <summary>
+    /// A required role must carry a first name, a last name and a valid email, and a phone number where
+    /// the entity type asks for one (<see cref="RequiresContactPhone"/>).
+    /// </summary>
+    private static void RequireRole(
+        List<ValidationFailure> failures, string prefix, RemsRolePayload? role, bool requirePhone = false)
     {
         if (role is null || !role.HasAny)
         {
-            failures.Add(new ValidationFailure(prefix, "This contact is required (name and email)."));
+            failures.Add(new ValidationFailure(
+                prefix, requirePhone ? "This contact is required (name, email and phone)." : "This contact is required (name and email)."));
             return;
         }
 
-        ValidateRoleFields(failures, prefix, role);
+        ValidateRoleFields(failures, prefix, role, requirePhone);
     }
 
     /// <summary>
     /// An optional role is unvalidated when omitted, but must be complete once the client starts
     /// filling it in.
     /// </summary>
-    private static void OptionalRole(List<ValidationFailure> failures, string prefix, RemsRolePayload? role)
+    private static void OptionalRole(
+        List<ValidationFailure> failures, string prefix, RemsRolePayload? role, bool requirePhone = false)
     {
         if (role is not null && role.HasAny)
         {
-            ValidateRoleFields(failures, prefix, role);
+            ValidateRoleFields(failures, prefix, role, requirePhone);
         }
     }
 
-    /// <summary>A contact is a first name, a last name and a valid email.</summary>
-    private static void ValidateRoleFields(List<ValidationFailure> failures, string prefix, RemsRolePayload role)
+    /// <summary>A contact is a first name, a last name and a valid email — and a phone, where asked.</summary>
+    private static void ValidateRoleFields(
+        List<ValidationFailure> failures, string prefix, RemsRolePayload role, bool requirePhone)
     {
+        if (requirePhone)
+        {
+            RequireField(failures, $"{prefix}.phone", role.Phone, "Phone number is required.");
+        }
+
         var preSplit = string.IsNullOrWhiteSpace(role.FirstName)
             && string.IsNullOrWhiteSpace(role.LastName)
             && !string.IsNullOrWhiteSpace(role.Name);

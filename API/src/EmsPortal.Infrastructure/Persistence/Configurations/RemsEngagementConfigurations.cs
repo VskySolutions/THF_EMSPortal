@@ -67,17 +67,8 @@ internal sealed class RemsEngagementAuditDetailConfiguration : IEntityTypeConfig
 {
     public void Configure(EntityTypeBuilder<REMSEngagementAuditDetail> builder)
     {
-        builder.ToTable("REMSEngagementAuditDetail", t =>
-        {
-            // Assurance's administrative fees. A negative charge is not a fee, and the browser and the API
-            // both refuse one — this is the floor under both.
-            t.HasCheckConstraint(
-                "CK_REMSEngagementAuditDetail_AdminFeesAmount",
-                "[AdminFeesAmount] IS NULL OR [AdminFeesAmount] >= 0");
-        });
+        builder.ToTable("REMSEngagementAuditDetail");
         builder.HasKey(d => d.Id);
-
-        builder.Property(d => d.AdminFeesAmount).HasPrecision(18, 2);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(d => d.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(d => d.TenantId);

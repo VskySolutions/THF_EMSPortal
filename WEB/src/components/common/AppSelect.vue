@@ -172,8 +172,22 @@ const hasHeaders = computed(() => props.options.some((o) => o && o.header === tr
 const visibleOptions = computed(() => {
   const needle = searchable.value ? search.value.trim().toLowerCase() : "";
   if (needle === "") return props.options;
-  return props.options.filter((opt) =>
-    optionText(opt).toLowerCase().includes(needle) || isSelectedOption(opt));
+  const matches = (opt) => optionText(opt).toLowerCase().includes(needle) || isSelectedOption(opt);
+  if (!hasHeaders.value) return props.options.filter(matches);
+
+  // A heading is not itself a match; it stays only while something under it does.
+  const visible = [];
+  let pending = null;
+  for (const opt of props.options) {
+    if (opt && opt.header === true) {
+      pending = opt;
+    } else if (matches(opt)) {
+      if (pending) visible.push(pending);
+      pending = null;
+      visible.push(opt);
+    }
+  }
+  return visible;
 });
 
 // Keep the control accessible now that the visible label is external — and still named when there is no

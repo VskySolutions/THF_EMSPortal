@@ -80,6 +80,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SmtpAccount> SmtpAccounts => Set<SmtpAccount>();
     public DbSet<MaconomyConnection> MaconomyConnections => Set<MaconomyConnection>();
     public DbSet<TenantBranding> TenantBrandings => Set<TenantBranding>();
+    public DbSet<TenantEmailSettings> TenantEmailSettings => Set<TenantEmailSettings>();
 
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
 
@@ -162,6 +163,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<SmtpAccount>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<MaconomyConnection>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<TenantBranding>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<TenantEmailSettings>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Universal Features (Phase 14): every UF table is tenant-scoped + soft-deletable, so it
         // carries the combined ambient-tenant + soft-delete filter. FieldModifiedLog is the lone
@@ -333,6 +335,9 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                     break;
                 case TenantBranding tenantBranding when tenantBranding.TenantId == Guid.Empty:
                     tenantBranding.TenantId = _tenantContext.TenantId;
+                    break;
+                case TenantEmailSettings tenantEmailSettings when tenantEmailSettings.TenantId == Guid.Empty:
+                    tenantEmailSettings.TenantId = _tenantContext.TenantId;
                     break;
 
                 // ---- Universal Features (Phase 14) ----

@@ -44,7 +44,9 @@
             <template #append><q-icon name="o_lock" size="18px" color="grey-6" /></template>
           </app-text-field>
           <div class="col-12 col-sm-6">
-            <app-phone-input v-model="payload.mobileNumber" label="Phone Number" />
+            <!-- Owed by a trust or estate, which must be reachable beyond the locked email. -->
+            <app-phone-input v-model="payload.mobileNumber" label="Phone Number" :required="clientPhoneRequired" />
+            <div v-if="errors.mobileNumber" class="text-negative text-caption q-mt-xs">{{ errors.mobileNumber }}</div>
           </div>
           <!-- Each option's description is its own tooltip, maintained by staff in Administration →
                Option Sets. -->
@@ -70,9 +72,9 @@
 
           <!-- No spouse fields here. -->
 
-          <!-- Business (and Trust and Estate, which is asked the same things): EIN -->
+          <!-- Business (and Trust and Estate, which is asked the same things): EIN. Asked, not required. -->
           <app-text-field
-            v-if="isBusiness" v-model="payload.ein" label="EIN" required class="col-12 col-sm-6"
+            v-if="isBusiness" v-model="payload.ein" label="EIN" class="col-12 col-sm-6"
             :error="!!errors.ein" :error-message="errors.ein"
           />
         </div>
@@ -179,9 +181,11 @@
             </div>
             <!-- Bound through the payload rather than through the `billingAddresses` computed above: the
                  computed is for reading. -->
+            <!-- The addressee's phone is asked of everyone and owed by a trust or estate. -->
             <app-address-fields
               v-model="payload.billingAddresses[i]" required
-              contact contact-first contact-required contact-label="" gutter="sm" :cols="BILLING_COLS"
+              contact contact-first contact-required contact-phone :contact-phone-required="billingPhoneRequired"
+              contact-label="" gutter="sm" :cols="BILLING_COLS"
               :errors="addressErrors(errors, `billingAddresses[${i}]`)"
             />
           </div>
@@ -256,16 +260,14 @@
     <q-card v-if="contactRoleDefs.length" flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Contacts
-        <div class="text-caption text-grey-7 text-weight-regular">
-          Required contacts need a first name, a last name and an email. Phone is optional.
-        </div>
+        <div class="text-caption text-grey-7 text-weight-regular">{{ contactsHint }}</div>
       </q-card-section>
       <q-separator />
       <q-card-section class="column q-gutter-sm">
         <role-contact-fields
           v-for="def in contactRoleDefs" :key="def.key"
           v-model="payload.roles[def.key]"
-          :label="def.label" :hint="def.hint" :required="def.required"
+          :label="def.label" :hint="def.hint" :required="def.required" :phone-required="def.phoneRequired"
           :prefix="`roles.${def.key}`" :errors="errors"
         />
       </q-card-section>
@@ -338,8 +340,8 @@ import { computed } from "vue";
 import { isBusinessEntityType } from "modules/rems/useRemsMeta";
 import { addressErrors, addressHasAny } from "modules/rems/remsAddress";
 import {
-  copyIntakeAddress, intakeRoleDefs, newBillingAddress, newRelatedEntity, relatedEntityHasData,
-  MAX_BILLING_ADDRESSES
+  copyIntakeAddress, intakeRoleDefs, intakeClientPhoneRequired, intakeBillingPhoneRequired,
+  newBillingAddress, newRelatedEntity, relatedEntityHasData, MAX_BILLING_ADDRESSES
 } from "modules/rems/useRemsIntakeForm";
 
 import { nameRules } from "utils/personName";
@@ -394,18 +396,23 @@ const ADDRESS_COLS = {
   postalCode: "col-12 col-sm-4 col-md-3"
 };
 
-// The billing block adds the four boxes saying who the invoice is for, and they LEAD it.
+// The billing block adds the five boxes saying who the invoice is for, and they LEAD it.
 const BILLING_COLS = {
   ...ADDRESS_COLS,
   firstName: "col-12 col-sm-6 col-md-3",
   lastName: "col-8 col-sm-4 col-md-3",
   suffix: "col-4 col-sm-2 col-md-2",
-  email: "col-12 col-md-4"
+  email: "col-12 col-md-4",
+  phone: "col-12 col-sm-6 col-md-4"
 };
 
 const isIndividual = computed(() => props.entityType === "individual");
 const isBusiness = computed(() => isBusinessEntityType(props.entityType));
 const isGovernment = computed(() => props.entityType === "government");
+
+// Where a phone number is owed and not merely asked: the client's own, and the billing addressee's.
+const clientPhoneRequired = computed(() => intakeClientPhoneRequired(props.entityType));
+const billingPhoneRequired = computed(() => intakeBillingPhoneRequired(props.entityType));
 
 // ISO dates compare as strings. A blank at either end is not an answer to check yet.
 const notBefore = (start, what) => (v) =>
@@ -422,6 +429,18 @@ const referralDetailPlaceholder = computed(() => {
 
 // Every role this entity type is asked. Empty for an individual, which is what hides the whole card.
 const contactRoleDefs = computed(() => intakeRoleDefs(props.entityType));
+
+// What a contact has to carry here, said once over the card rather than once per block.
+const contactsHint = computed(() => {
+  const defs = contactRoleDefs.value;
+  const phone = defs.some((d) => d.phoneRequired);
+  const anyRequired = defs.some((d) => d.required);
+  const fields = phone ? "a first name, a last name, an email and a phone number" : "a first name, a last name and an email";
+  if (!anyRequired) return `Every contact here is optional. One you start needs ${fields}.`;
+  return phone
+    ? `Required contacts need ${fields}; so does any optional one you start.`
+    : `Required contacts need ${fields}. Phone is optional.`;
+});
 
 // Where the client is invoiced. Read defensively: a payload seeded from a draft saved before this list
 // existed simply has none, and a missing key must render an empty section rather than throw on the way in.

@@ -6,9 +6,10 @@ import {
 import {
   ALL_ROLE_KEYS, GROUP_ROLES, groupKey, normalizeRoles, roleDefsFor
 } from "modules/rems/remsContactRoles";
-// Only the group predicate, which is a plain frozen list. useRemsMeta reaches for the auth store inside
-// its composable, never at import time — this form renders on an anonymous page and must not wake one.
-import { isBusinessEntityType } from "modules/rems/useRemsMeta";
+// Only the group predicate (a plain frozen list) and a code constant. useRemsMeta reaches for the auth
+// store inside its composable, never at import time — this form renders on an anonymous page and must
+// not wake one.
+import { isBusinessEntityType, REMS_ENTITY_TYPE_TRUST_ESTATE } from "modules/rems/useRemsMeta";
 import { nameIssue } from "utils/personName";
 
 // The client intake form's DATA, in one place — its shape, how a stored payload is read into it, how it
@@ -103,9 +104,16 @@ const roleAny = (r) =>
 
 // A payload written before the name was two boxes carries `name` alone.
 const rolePreSplit = (r) => !filled(r?.firstName) && !filled(r?.lastName) && filled(r?.name);
-// Phone is captured when known but never required — a contact is a name and a valid email.
-const roleComplete = (r) =>
-  (rolePreSplit(r) || (filled(r?.firstName) && filled(r?.lastName))) && emailOk(r?.email);
+// A contact is a name and a valid email — and a phone number where the entity type asks for one (see
+// contactPhoneRequired in remsContactRoles).
+const roleComplete = (r, phoneRequired = false) =>
+  (rolePreSplit(r) || (filled(r?.firstName) && filled(r?.lastName))) && emailOk(r?.email) &&
+  (!phoneRequired || filled(r?.phone));
+
+/** A trust or estate must be reachable by phone itself, and gives a phone for whoever its invoice is
+    addressed to. Mirrors RemsFormPayloadValidator. */
+export const intakeClientPhoneRequired = (entityType) => entityType === REMS_ENTITY_TYPE_TRUST_ESTATE;
+export const intakeBillingPhoneRequired = (entityType) => entityType === REMS_ENTITY_TYPE_TRUST_ESTATE;
 
 /** A draft saved before the name was split keeps its single `name` until somebody edits the two boxes. */
 function fillRole (target, src) {
@@ -437,11 +445,8 @@ export function intakeRoleSetKey (entityType) {
   return groupKey(entityType, isBusinessEntityType(entityType));
 }
 
-/** Every role this entity type is asked, as [{ key, label, hint, required }]. */
-export const intakeRoleDefs = (entityType) => {
-  const key = intakeRoleSetKey(entityType);
-  return key ? roleDefsFor(key) : [];
-};
+/** Every role this entity type is asked, as [{ key, label, hint, required, phoneRequired }]. */
+export const intakeRoleDefs = (entityType) => roleDefsFor(entityType);
 
 /** What still has to be filled in. */
 export function intakeIssues (payload, entityType) {
@@ -458,6 +463,9 @@ export function intakeIssues (payload, entityType) {
   } else if (!filled(payload.clientName)) {
     out.push("Client / entity name is required.");
   }
+  if (intakeClientPhoneRequired(entityType) && !filled(payload.mobileNumber)) {
+    out.push("Phone number is required.");
+  }
 
   const addressIssue = "needs country, state, city, address line 1 and zip code.";
   if (!addressComplete(payload.physicalAddress)) out.push(`Physical address ${addressIssue}`);
@@ -473,6 +481,7 @@ export function intakeIssues (payload, entityType) {
   if (!started.length) {
     out.push("Billing information is required — give a name, an email and an address for the invoice.");
   }
+  const billingPhone = intakeBillingPhoneRequired(entityType);
   billing.forEach((row, i) => {
     if (!addressHasAnyContent(row)) return;
     const label = (billing.length > 1) ? `Billing information ${i + 1}` : "Billing information";
@@ -483,6 +492,7 @@ export function intakeIssues (payload, entityType) {
     } else if (!emailOk(row.email)) {
       out.push(`${label} has an invalid email address.`);
     }
+    if (billingPhone && !filled(row.phone)) out.push(`${label} needs a phone number.`);
     if (!addressComplete(row)) out.push(`${label} ${addressIssue}`);
     pushIf(out, nameIssue(row.firstName, `${label} first name`));
     pushIf(out, nameIssue(row.lastName, `${label} last name`));
@@ -517,17 +527,18 @@ export function intakeIssues (payload, entityType) {
     });
   }
 
-  if (isBusinessEntityType(entityType) && !filled(payload.ein)) {
-    out.push("EIN is required for a business.");
-  }
+  // The EIN is asked of a business but no longer required of one (since October 2026).
 
   // Driven off the same role definitions the cards are rendered from.
-  intakeRoleDefs(entityType).forEach(({ key, label, required }) => {
+  intakeRoleDefs(entityType).forEach(({ key, label, required, phoneRequired }) => {
     const role = payload.roles[key];
+    const needs = phoneRequired
+      ? "a first name, a last name, a valid email and a phone number"
+      : "a first name, a last name and a valid email";
     if (required) {
-      if (!roleComplete(role)) out.push(`${label} needs a first name, a last name and a valid email.`);
-    } else if (roleAny(role) && !roleComplete(role)) {
-      out.push(`${label} is partly filled — complete the name and email, or clear it.`);
+      if (!roleComplete(role, phoneRequired)) out.push(`${label} needs ${needs}.`);
+    } else if (roleAny(role) && !roleComplete(role, phoneRequired)) {
+      out.push(`${label} is partly filled — give it ${needs}, or clear it.`);
     }
     // Whatever HAS been typed into the two name boxes has to be a name, required contact or not.
     pushIf(out, nameIssue(role?.firstName, `${label} first name`));

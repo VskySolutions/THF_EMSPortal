@@ -1041,12 +1041,12 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     /// <summary>
-    /// Validates the pre-approval requirements: the core setup; a marketing tag; a commission split
-    /// that adds up to 100% where there is one at all.
+    /// Validates the pre-approval requirements: the core setup and whatever the chosen department is
+    /// asked; a marketing tag; a commission split that adds up to 100% where there is one at all.
     /// </summary>
     private async Task<IActionResult?> ValidateApprovalPrerequisitesAsync(REMSEngagement engagement, CancellationToken cancellationToken)
     {
-        // The engagement's core placement + team + realization are mandatory. The workspace enforces this
+        // The engagement's core placement + team + realization are mandatory. The workspace marks these
         // on its Setup step too; this is the backstop for anything reaching the API another way.
         var missing = new List<string>();
         if (string.IsNullOrWhiteSpace(engagement.Department?.Value)) missing.Add("Department");
@@ -1055,6 +1055,45 @@ public sealed class RemsApprovalController : ControllerBase
         if (engagement.EngagementExecutiveId is null) missing.Add("Engagement Executive");
         if (engagement.BillingManagerId is null) missing.Add("Billing Manager");
         if (engagement.RealizationPercentage is null) missing.Add("% Realization");
+
+        // What each department is asked on top of that (EngagementSetupForm.vue marks the same boxes).
+        // Tax and CAS price the first year; Assurance prices the engagement. CAS says how it bills.
+        var department = engagement.Department?.Value;
+        if (RemsEngagementCodes.IsTax(department) || RemsEngagementCodes.IsCas(department))
+        {
+            if (engagement.FirstYearFeeEstimate is null) missing.Add("First-Year Fee Estimate");
+        }
+        if (RemsEngagementCodes.IsCas(department))
+        {
+            if (engagement.BillingPeriodId is null) missing.Add("Billing Frequency");
+            if (string.IsNullOrWhiteSpace(engagement.BillingProcessDescription)) missing.Add("Description of Billing Process");
+        }
+        if (RemsEngagementCodes.IsAssurance(department))
+        {
+            if (engagement.EngagementFee is null) missing.Add("Engagement Fee");
+        }
+
+        // Audit AND Assurance keep the client-acceptance form on the same row; Assurance adds the client's
+        // year end to it.
+        var audit = RemsEngagementCodes.RequiresClientAcceptanceForm(department)
+            ? await _engagements.GetAuditDetailAsync(engagement.Id, cancellationToken)
+            : null;
+        if (RemsEngagementCodes.IsAssurance(department))
+        {
+            if (audit?.ClientFiscalYearEnd is null) missing.Add("Fiscal Year End of Client");
+        }
+
+        // Tax: the whole fiscal-year card — the year end, the two due dates that follow from it, and at
+        // least one form on the checklist.
+        if (RemsEngagementCodes.IsTax(department))
+        {
+            var tax = await _engagements.GetTaxDetailAsync(engagement.Id, cancellationToken);
+            if (tax?.FiscalYearEnd is null) missing.Add("Fiscal Year End");
+            if (tax?.OriginalDueDate is null) missing.Add("Original Due Date");
+            if (tax?.FirstExtensionDueDate is null) missing.Add("First Extension Due Date");
+            if (tax is null || !tax.TaxForms.Any(f => !f.Deleted)) missing.Add("at least one Tax Form");
+        }
+
         if (missing.Count > 0)
         {
             return ConflictResult(CodeSetupIncomplete, $"Complete the engagement setup first — missing: {string.Join(", ", missing)}.");
@@ -1078,14 +1117,10 @@ public sealed class RemsApprovalController : ControllerBase
 
         // Audit AND Assurance: the client-acceptance form is the same compliance artifact under both, and a
         // card that shows it without anything enforcing it is a card people learn to scroll past.
-        if (RemsEngagementCodes.RequiresClientAcceptanceForm(engagement.Department?.Value))
+        if (RemsEngagementCodes.RequiresClientAcceptanceForm(department) && audit?.ClientAcceptanceFormMediaId is null)
         {
-            var audit = await _engagements.GetAuditDetailAsync(engagement.Id, cancellationToken);
-            if (audit?.ClientAcceptanceFormMediaId is null)
-            {
-                return ConflictResult(CodeCafRequired,
-                    $"A signed client-acceptance form is required for {(RemsEngagementCodes.IsAssurance(engagement.Department?.Value) ? "an assurance" : "an audit")} engagement.");
-            }
+            return ConflictResult(CodeCafRequired,
+                $"A signed client-acceptance form is required for {(RemsEngagementCodes.IsAssurance(department) ? "an assurance" : "an audit")} engagement.");
         }
 
         // The entity type lives on the request's FORM record, not on the engagement, so it takes a read of
@@ -1287,7 +1322,7 @@ public sealed class RemsApprovalController : ControllerBase
                 : null;
             auditView = new RemsApprovalAuditDetailView(
                 audit.Id, audit.ClientAcceptanceFormMediaId, media?.OriginalFileName, media?.PublicUrl,
-                audit.ClientFiscalYearEnd, audit.AdminFeesApply, audit.AdminFeesAmount);
+                audit.ClientFiscalYearEnd);
         }
 
         RemsApprovalTaxDetailView? taxView = null;

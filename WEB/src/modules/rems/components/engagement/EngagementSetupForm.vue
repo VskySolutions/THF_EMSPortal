@@ -48,17 +48,18 @@
         />
 
         <!-- ── What it is worth ─────────────────────────────────────────────────────────────────── -->
-        <!-- Two fee questions, and an engagement is asked exactly one of them. -->
+        <!-- Two fee questions, and an engagement is asked exactly one of them. The estimate is owed by Tax
+             and CAS and merely asked of the rest; the engagement fee is Assurance's alone, and owed. -->
         <app-text-field
           v-if="showFeeEstimate"
           v-model="core.firstYearFeeEstimate" label="First-Year Fee Estimate" type="number"
-          class="col-12 col-sm-6" :readonly="!editable" :rules="feeRules"
+          :required="feeEstimateRequired" class="col-12 col-sm-6" :readonly="!editable" :rules="feeRules"
         >
           <template #prepend><span class="text-grey-7">$</span></template>
         </app-text-field>
         <app-text-field
           v-if="showEngagementFee"
-          v-model="core.engagementFee" label="Engagement Fee" type="number"
+          v-model="core.engagementFee" label="Engagement Fee" type="number" required
           class="col-12 col-sm-6" :readonly="!editable" :rules="engagementFeeRules"
         >
           <template #prepend><span class="text-grey-7">$</span></template>
@@ -71,15 +72,15 @@
         </app-text-field>
 
         <!-- ── How it is billed ─────────────────────────────────────────────────────────────────── -->
-        <!-- CAS only. -->
+        <!-- CAS only, and both owed. -->
         <template v-if="showBilling">
           <app-select
-            v-model="core.billingPeriod" :options="billingPeriodOptions" label="Billing Frequency"
-            class="col-12 col-sm-4" :readonly="!editable"
+            v-model="core.billingPeriod" :options="billingPeriodOptions" label="Billing Frequency" required
+            class="col-12 col-sm-4" :readonly="!editable" :rules="[requiredRule('a Billing Frequency')]"
             info="From the REMS Billing Frequency option list (Administration → Option Sets)."
           />
           <app-text-field
-            v-model="core.billingProcessDescription" label="Description of Billing Process"
+            v-model="core.billingProcessDescription" label="Description of Billing Process" required
             class="col-12 col-sm-8" :readonly="!editable" autogrow
             placeholder="e.g. three progress bills against the fixed fee, the balance on delivery"
             :rules="billingDescriptionRules"
@@ -128,27 +129,14 @@
             @remove="removeCaf"
           />
 
-          <!-- Assurance only. -->
+          <!-- Assurance only. The year end is owed. -->
           <template v-if="showAssurance">
             <q-separator class="q-my-md" />
             <div class="row q-col-gutter-md">
               <app-date-field
-                v-model="audit.clientFiscalYearEnd" label="Fiscal Year End of Client"
-                class="col-12 col-sm-4" :readonly="!editable"
+                v-model="audit.clientFiscalYearEnd" label="Fiscal Year End of Client" required
+                class="col-12 col-sm-4" :readonly="!editable" :rules="[requiredValue('the fiscal year end of the client')]"
               />
-              <div class="col-12 col-sm-4 column justify-center">
-                <q-checkbox
-                  v-model="audit.adminFeesApply" :disable="!editable"
-                  label="Admin fees apply"
-                />
-              </div>
-              <app-text-field
-                v-if="audit.adminFeesApply"
-                v-model="audit.adminFeesAmount" label="Admin Fees" type="number"
-                class="col-12 col-sm-4" :readonly="!editable" :rules="adminFeesRules"
-              >
-                <template #prepend><span class="text-grey-7">$</span></template>
-              </app-text-field>
             </div>
           </template>
         </q-card-section>
@@ -298,22 +286,29 @@
         <q-separator />
         <q-card-section>
           <!-- The two due dates follow from the fiscal year end — the 15th of the fourth month after it,
-               and six months past that — and are then EDITABLE. They were read-only until now. -->
+               and six months past that — and are then EDITABLE. All three are owed, as is at least one
+               form below: the whole card is what a Tax engagement is set up from. -->
           <div class="row q-col-gutter-md">
             <app-date-field
-              v-model="tax.fiscalYearEnd" label="Fiscal Year End" class="col-12 col-sm-4" :readonly="!editable"
+              v-model="tax.fiscalYearEnd" label="Fiscal Year End" required class="col-12 col-sm-4"
+              :readonly="!editable" :rules="[requiredValue('the fiscal year end')]"
             />
             <app-date-field
-              v-model="tax.originalDueDate" label="Original Due Date" class="col-12 col-sm-4"
-              :readonly="!editable" :hint="dueDateHint"
+              v-model="tax.originalDueDate" label="Original Due Date" required class="col-12 col-sm-4"
+              :readonly="!editable" :hint="dueDateHint" :rules="[requiredValue('the original due date')]"
             />
             <app-date-field
-              v-model="tax.firstExtensionDueDate" label="First Extension Due Date" class="col-12 col-sm-4"
-              :readonly="!editable"
+              v-model="tax.firstExtensionDueDate" label="First Extension Due Date" required class="col-12 col-sm-4"
+              :readonly="!editable" :rules="[requiredValue('the first extension due date')]"
             />
           </div>
 
-          <div class="section-subhead">Tax Forms</div>
+          <div class="section-subhead">Tax Forms <span class="text-negative">*</span></div>
+          <!-- Beside the list, not in its place: the list has to stay on screen for the caption to be
+               answerable. -->
+          <div v-if="!taxFormUnavailable && !tax.taxFormIds.length" class="text-caption text-negative q-mb-xs">
+            Select at least one tax form.
+          </div>
           <div v-if="taxFormUnavailable" class="text-caption text-grey-6">
             The tax-form list could not be loaded for your account.
           </div>
@@ -444,9 +439,7 @@ const gov = ref(buildGov(props.engagement.government));
 // The Assurance half of the attest detail. The CAF beside it is not here — it arrives as an upload and is
 // linked by an endpoint of its own, which Audit engagements use too.
 const buildAudit = (a) => ({
-  clientFiscalYearEnd: a?.clientFiscalYearEnd || "",
-  adminFeesApply: a?.adminFeesApply ?? false,
-  adminFeesAmount: a?.adminFeesAmount ?? ""
+  clientFiscalYearEnd: a?.clientFiscalYearEnd || ""
 });
 const audit = ref(buildAudit(props.engagement.audit));
 
@@ -733,9 +726,13 @@ const removePurchaseOrder = async () => {
   }
 };
 
-// Service Line, Department, the engagement team and % Realization are mandatory (they are also the
-// backend's send-for-approval prerequisites), so Save & Next cannot pass with any of them blank.
+// Service Line, Department, the engagement team and % Realization are mandatory, and so is what the chosen
+// department asks: the first-year fee estimate on Tax and CAS, the billing pair on CAS, the engagement fee,
+// the client's year end on Assurance, the whole fiscal-year card on Tax. The boxes are
+// marked and ruled here; the page still auto-saves whatever is typed, and the send-for-approval check on
+// the server (RemsApprovalController) is what refuses an engagement with any of them blank.
 const requiredRule = (what) => (v) => (v !== null && v !== undefined && v !== "") || `Select ${what}`;
+const requiredValue = (what) => (v) => (v !== null && v !== undefined && v !== "") || `Enter ${what}`;
 // The same rule for the Service Line, with two differences. With no department there is nothing to choose
 // it under, so an empty box is not at fault: the hint says what to choose first, and the department's own
 // rule blocks the save. And when the department just emptied it, the message says so — "Select a Service
@@ -744,11 +741,14 @@ const serviceLineRule = (v) =>
   requiredRule("a Service Line")(v) === true || !core.value.department || serviceLineCleared.value ||
   "Select a Service Line";
 
-// Money: blank is "not known yet", a negative is wrong however early it is typed. One rule, five boxes.
+// Money: blank is "not known yet", a negative is wrong however early it is typed. One rule, four boxes.
 const amountRule = (v) => v === "" || v === null || v === undefined || Number(v) >= 0 || "Enter a valid amount";
-const feeRules = [amountRule];
-const engagementFeeRules = [amountRule];
-const adminFeesRules = [amountRule];
+// The estimate is owed by Tax and CAS; the other departments that show it may leave it blank.
+const feeEstimateRequired = computed(() => isTaxDepartment(department.value) || isCasDepartment(department.value));
+const feeRules = computed(() =>
+  (feeEstimateRequired.value ? [requiredValue("the First-Year Fee Estimate"), amountRule] : [amountRule]));
+// Shown only where it is owed: the engagement fee on Assurance.
+const engagementFeeRules = [requiredValue("the Engagement Fee"), amountRule];
 const purchaseOrderAmountRules = [amountRule];
 const billRateRules = [amountRule];
 // A purchase order's own reference, and it is a REFERENCE — letters, digits, and the separators a PO
@@ -794,8 +794,10 @@ const setupProblem = () => {
   return "";
 };
 // A description of how the client is billed, not a treatise. Mirrors the column and the API validator.
+// Owed, because the box is only shown on CAS, where it is.
 const BILLING_DESCRIPTION_MAX = 1000;
 const billingDescriptionRules = [
+  requiredValue("how the client is billed"),
   (v) => (v ?? "").length <= BILLING_DESCRIPTION_MAX ||
     `Keep the billing process to ${BILLING_DESCRIPTION_MAX} characters or fewer.`
 ];
@@ -864,9 +866,7 @@ const saveSetup = async (engagementId, remsId = null) => {
   }
   if (showAssurance.value) {
     view = await remsApi.updateAuditDetail(engagementId, {
-      clientFiscalYearEnd: audit.value.clientFiscalYearEnd || null,
-      adminFeesApply: audit.value.adminFeesApply,
-      adminFeesAmount: toNum(audit.value.adminFeesAmount)
+      clientFiscalYearEnd: audit.value.clientFiscalYearEnd || null
     });
   }
   if (showTax.value) {
@@ -916,7 +916,6 @@ const validateFormats = () => {
   return (!showFeeEstimate.value || positive(core.value.firstYearFeeEstimate)) &&
     (!showEngagementFee.value || positive(core.value.engagementFee)) &&
     inRange(core.value.realizationPercentage, 0, 100) &&
-    (!showAssurance.value || positive(audit.value.adminFeesAmount)) &&
     (!showGcs.value || (positive(gov.value.purchaseOrderAmount) && Object.values(gov.value.personnelRates).every(positive))) &&
     (!showBilling.value || (core.value.billingProcessDescription ?? "").length <= BILLING_DESCRIPTION_MAX);
 };

@@ -103,6 +103,9 @@
 
             <!-- Typography -->
             <q-tab-panel name="typography">
+              <p class="text-body2 text-grey-8">
+                Every Google Fonts family is on offer, grouped by style. Type in either box to search.
+              </p>
               <div class="row q-col-gutter-md">
                 <app-select
                   v-model="draft.typography.bodyFont" :options="FONT_OPTIONS" label="Body font" class="col-12 col-sm-6"

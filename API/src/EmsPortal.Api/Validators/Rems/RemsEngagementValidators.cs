@@ -75,17 +75,6 @@ public sealed class LinkPurchaseOrderRequestValidator : AbstractValidator<LinkPu
     }
 }
 
-/// <summary>Validates an Assurance detail update: the administrative fee cannot be negative.</summary>
-public sealed class UpdateRemsAuditDetailRequestValidator : AbstractValidator<UpdateRemsAuditDetailRequest>
-{
-    public UpdateRemsAuditDetailRequestValidator()
-    {
-        RuleFor(x => x.AdminFeesAmount)
-            .GreaterThanOrEqualTo(0).WithMessage("adminFeesAmount must be zero or greater.")
-            .When(x => x.AdminFeesAmount.HasValue);
-    }
-}
-
 /// <summary>Validates a government-audit detail update (WO-114) and the GCS purchase order on the same row.</summary>
 public sealed class UpdateRemsGovernmentDetailRequestValidator : AbstractValidator<UpdateRemsGovernmentDetailRequest>
 {

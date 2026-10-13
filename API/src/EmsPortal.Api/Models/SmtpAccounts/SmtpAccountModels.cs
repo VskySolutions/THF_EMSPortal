@@ -37,6 +37,12 @@ public sealed class TestSmtpRequest
     public string RecipientEmail { get; set; } = string.Empty;
 }
 
+/// <summary>Turn the tenant's notification emails on or off, all of them at once.</summary>
+public sealed class UpdateEmailSettingsRequest
+{
+    public bool NotificationsEnabled { get; set; }
+}
+
 // ---- Responses ----
 
 /// <summary>
@@ -61,6 +67,12 @@ public sealed record SmtpAccountSummaryResponse(
 
 /// <summary>The outcome of a set-active operation.</summary>
 public sealed record SmtpActivationResponse(Guid ActivatedId, Guid? DeactivatedId);
+
+/// <summary>
+/// The tenant's email settings. The audit pair says who last threw the switch; both are null while the
+/// tenant has never touched it, which also means notifications are on.
+/// </summary>
+public sealed record EmailSettingsResponse(bool NotificationsEnabled, string? UpdatedByName, DateTime? UpdatedOnUtc);
 
 /// <summary>The outcome of a test send.</summary>
 public sealed record SmtpTestResultResponse(

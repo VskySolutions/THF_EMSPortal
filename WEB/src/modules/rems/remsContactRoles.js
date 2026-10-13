@@ -1,6 +1,8 @@
 // The client-intake contact roles, in ONE place.
 import { NAME_SUFFIXES } from "utils/personName";
-import { REMS_ENTITY_TYPE_TRUST_ESTATE } from "modules/rems/useRemsMeta";
+// Plain constants and a frozen-list predicate only: this file is read on the anonymous client form, which
+// must not wake the auth store that the rest of useRemsMeta reaches for.
+import { REMS_ENTITY_TYPE_TRUST_ESTATE, isBusinessEntityType } from "modules/rems/useRemsMeta";
 
 // / The label each role is asked and read under.
 export const CONTACT_ROLE_LABELS = {
@@ -50,14 +52,29 @@ export const GROUP_ROLES = {
   government: ["financeDirector", "otherContact"]
 };
 
-/// Which of them must be filled in. Mirrors RemsFormPayloadValidator. The Trust and Estate contact is
-/// deliberately not among them.
+/// Which of them must be filled in. Mirrors RemsFormPayloadValidator. Keyed by ENTITY TYPE where one
+/// differs from its family, with "business" the family's default — see requiredRolesFor. The Trust and
+/// Estate contact is deliberately not among them, and a government body owes none at all.
 export const REQUIRED_ROLES = {
   individual: [],
   business: ["primaryContact", "financialContact"],
+  // A commercial client owes only its primary contact.
+  commercial: ["primaryContact"],
   [REMS_ENTITY_TYPE_TRUST_ESTATE]: ["primaryContact", "financialContact"],
-  government: ["financeDirector"]
+  government: []
 };
+
+/** The roles an entity type owes: its own entry where it has one, otherwise its family's. */
+export const requiredRolesFor = (entityType) => {
+  if (REQUIRED_ROLES[entityType]) return REQUIRED_ROLES[entityType];
+  return isBusinessEntityType(entityType) ? REQUIRED_ROLES.business : [];
+};
+
+/// The entity types whose contacts must carry a phone number as well as a name and an email: a trust or
+/// estate on every contact it gives, a government body on any it chooses to give. Mirrors
+/// RemsFormPayloadValidator.RequiresContactPhone.
+const PHONE_REQUIRED_ENTITY_TYPES = [REMS_ENTITY_TYPE_TRUST_ESTATE, "government"];
+export const contactPhoneRequired = (entityType) => PHONE_REQUIRED_ENTITY_TYPES.includes(entityType);
 
 // / The payload keys these roles used to be stored under.
 export const LEGACY_ROLE_ALIASES = {
@@ -116,16 +133,18 @@ export const groupKey = (entityType, isBusiness) => {
   return isBusiness ? "business" : entityType;
 };
 
-/** The roles to render for a group, as [{ key, label, hint. */
-export const roleDefsFor = (key, extraKeys = []) => {
-  const order = GROUP_ROLES[key] || [];
-  const required = REQUIRED_ROLES[key] || [];
+/** The roles to render for an entity type, as [{ key, label, hint, required, phoneRequired }]. */
+export const roleDefsFor = (entityType, extraKeys = []) => {
+  const order = GROUP_ROLES[groupKey(entityType, isBusinessEntityType(entityType))] || [];
+  const required = requiredRolesFor(entityType);
+  const phoneRequired = contactPhoneRequired(entityType);
   const extras = extraKeys.filter((k) => !order.includes(k));
   return [...order, ...extras].map((roleKey) => ({
     key: roleKey,
     label: CONTACT_ROLE_LABELS[roleKey] || roleKey,
     hint: CONTACT_ROLE_HINTS[roleKey] || "",
-    required: required.includes(roleKey)
+    required: required.includes(roleKey),
+    phoneRequired
   }));
 };
 

@@ -12,12 +12,8 @@
     @restore-draft="restoreDraft"
   >
     <q-form ref="formRef" greedy>
-      <app-select
-        v-if="canChooseTenant" v-model="form.tenantId" :options="tenantOptions" label="Tenant *"
-        :loading="loadingTenants" :clearable="false" class="q-mb-md" :readonly="!!accountId"
-        :rules="[(v) => !!v || 'Tenant is required']"
-      />
-
+      <!-- No tenant picker: the account belongs to the tenant in view, chosen in the header like every
+           other tenant-scoped screen. -->
       <app-text-field
         v-model="form.accountName" label="Account Name *" class="q-mb-md"
         :error="!!accountNameError" :error-message="accountNameError"
@@ -92,7 +88,8 @@ import AppPasswordField from "components/common/AppPasswordField.vue";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  // Super admin's chosen list scope; the new account is created for this tenant.
+  // The tenant in view (the header's scope control). A new account is created for it, and an existing one
+  // is read and written under it; with none chosen the server scopes to the caller's own tenant.
   tenantId: { type: String, default: null },
   // When set, the drawer edits the existing account; otherwise it creates a new one.
   accountId: { type: String, default: null }
@@ -100,7 +97,7 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "saved"]);
 
 const notify = useNotify();
-const { canChooseTenant, activeTenantId, tenantOptions, loadingTenants, loadTenants } = useTenantOptions();
+const { canChooseTenant } = useTenantOptions();
 const { encryptionOptions, authOptions } = useSmtpOptions();
 
 const open = computed({
@@ -111,7 +108,6 @@ const open = computed({
 // Creation defaults: auto-negotiated encryption + Login auth; the port is left blank so its
 // "common ports" placeholder is visible.
 const blankForm = () => ({
-  tenantId: null,
   accountName: "",
   host: "",
   port: null,
@@ -140,7 +136,6 @@ const restoreDraft = (saved) => {
 const loadAccount = async (id) => {
   try {
     const a = await smtpAccountApi.get(id, scopeTenantId());
-    form.tenantId = a.tenantId ?? null;
     form.accountName = a.accountName;
     form.host = a.host;
     form.port = a.port;
@@ -162,10 +157,6 @@ const scopeTenantId = () => (canChooseTenant.value && props.tenantId ? props.ten
 watch(() => props.modelValue, async (isOpen) => {
   if (!isOpen) return;
   resetForm();
-  if (canChooseTenant.value) {
-    await loadTenants();
-    form.tenantId = props.tenantId || activeTenantId.value;
-  }
   if (props.accountId) {
     await loadAccount(props.accountId);
   }
@@ -201,7 +192,8 @@ const onSubmit = async ({ clearDraft } = {}) => {
       await smtpAccountApi.update(props.accountId, payload, scopeTenantId());
       notify.success("Email account updated.");
     } else {
-      if (canChooseTenant.value && form.tenantId) payload.tenantId = form.tenantId;
+      // The tenant in view, where a Super Admin has chosen one; otherwise the server uses the caller's.
+      if (scopeTenantId()) payload.tenantId = scopeTenantId();
       await smtpAccountApi.create(payload);
       notify.success("Email account created.");
     }
