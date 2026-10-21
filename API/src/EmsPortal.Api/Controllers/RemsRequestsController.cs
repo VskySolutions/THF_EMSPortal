@@ -1229,7 +1229,7 @@ public sealed class RemsRequestsController : ControllerBase
         return new(
             personId, customer.Name, customer.Email, customer.Phone, null, string.Empty, string.Empty, null,
             entityType is not null && !RemsClientEntityType.IsIndividual(entityType),
-            entityType, customer.Number);
+            entityType, customer.Number, customer.Industry);
     }
 
     /// <summary>A Maconomy customer as a request's client: the record that names them, and whether this save is what creates it.</summary>

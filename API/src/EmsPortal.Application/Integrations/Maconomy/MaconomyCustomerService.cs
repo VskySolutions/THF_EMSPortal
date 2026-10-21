@@ -25,10 +25,10 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     private const int MaxWords = 6;
     private static readonly char[] WordBreaks = { ' ', ',' };
 
-    // Only what is shown: every extra field is more for Maconomy to send on each call.
+    // Only what is shown or filled in: every extra field is more for Maconomy to send on each call.
     private static readonly string[] Fields =
     {
-        "customernumber", "name1", "specification6name", "electronicmailaddress", "telephone",
+        "customernumber", "name1", "specification6name", "specification1name", "electronicmailaddress", "telephone",
     };
 
     // The restriction is written in Maconomy's query language with the search text inside a quoted
@@ -177,6 +177,56 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         _ => null,
     };
 
+    // Specification 1 is the customer's industry. THF numbers the values 17 to 38; the portal fills the
+    // picker with the REMS.Industry code each stands for. Matched by the number when the value starts
+    // with one ("17", "17-Manufacturing"), by the label otherwise.
+    private static readonly (string Number, string Label, string Code)[] Industries =
+    {
+        ("17", "Manufacturing", "manufacturing"),
+        ("18", "Professional Service Firms", "professional_service_firms"),
+        ("19", "Real Estate", "real_estate"),
+        ("20", "Retail", "retail"),
+        ("21", "Health Care", "health_care"),
+        ("22", "Oil & Gas Distribution", "oil_gas_distribution"),
+        ("23", "Wholesale", "wholesale"),
+        ("24", "Technology", "technology"),
+        ("25", "State government", "state_government"),
+        ("26", "Local government", "local_government"),
+        ("27", "Federal government", "federal_government"),
+        ("28", "Educational Institutions", "educational_institutions"),
+        ("29", "Insurance - Health", "insurance_health"),
+        ("30", "Insurance - Property and Casualty", "insurance_property_casualty"),
+        ("31", "Insurance - Life", "insurance_life"),
+        ("32", "Insurance - Other", "insurance_other"),
+        ("33", "Trade associations", "trade_associations"),
+        ("34", "Charitable organizations or Foundations", "charitable_organizations_foundations"),
+        ("35", "Other Not-for-Profit", "other_not_for_profit"),
+        ("36", "Individual", "individual"),
+        ("37", "Distribution", "distribution"),
+        ("38", "Trust / Estate", "trust_estate"),
+    };
+
+    /// <summary>The REMS.Industry code a specification 1 value stands for, or null when it stands for none.</summary>
+    public static string? IndustryOf(string? specification1)
+    {
+        var text = (specification1 ?? string.Empty).Trim();
+        if (text.Length == 0)
+        {
+            return null;
+        }
+        var number = new string(text.TakeWhile(char.IsDigit).ToArray());
+        if (number.Length > 0)
+        {
+            return Industries.FirstOrDefault(i => i.Number == number).Code;
+        }
+        var key = Letters(text);
+        return Industries.FirstOrDefault(i => Letters(i.Label) == key).Code;
+    }
+
+    // Letters and digits alone, lower-cased: "Insurance - Health" and "insurance health" are one value.
+    private static string Letters(string value)
+        => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
     private async Task<MaconomyConnection> RequireConnectionAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var connection = await _connections.GetByTenantAsync(tenantId, cancellationToken)
@@ -257,7 +307,8 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         }
         return new MaconomyCustomerOption(
             text, number, specification6Name.Length > 0 ? specification6Name : null, entityType?.Code,
-            Optional(record, "electronicmailaddress"), Optional(record, "telephone"), name);
+            Optional(record, "electronicmailaddress"), Optional(record, "telephone"), name,
+            IndustryOf(Value(record, "specification1name")));
     }
 
     private static MaconomyClientDetails ToDetails(IReadOnlyDictionary<string, string?> record)
@@ -266,7 +317,8 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
             Value(record, "name1"),
             EntityTypeOf(Value(record, "specification6name"))?.Code,
             Optional(record, "electronicmailaddress"),
-            Optional(record, "telephone"));
+            Optional(record, "telephone"),
+            IndustryOf(Value(record, "specification1name")));
 
     private static string Value(IReadOnlyDictionary<string, string?> record, string field)
         => record.TryGetValue(field, out var value) ? (value ?? string.Empty).Trim() : string.Empty;

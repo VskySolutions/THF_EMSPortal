@@ -299,7 +299,7 @@
                      against it, so on a brand-new request the create IS the step forward. -->
                 <q-btn
                   v-if="isNew" unelevated no-caps dense color="primary" icon-right="o_arrow_right"
-                  label="Save as Draft &amp; Next" class="q-px-md" :loading="saving" @click="createDraft"
+                  label="Save and Continue" class="q-px-md" :loading="saving" @click="createDraft"
                 />
 
                 <!-- Filled while stepping on is the thing to do here, outlined where it shares the corner

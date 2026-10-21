@@ -80,7 +80,7 @@
                 <q-item-section side>
                   <div class="cif-tags">
                     <span class="cif-source" :class="{ 'cif-source--maconomy': !!client.maconomyCustomerNumber }">
-                      {{ client.maconomyCustomerNumber ? "Maconomy" : "EMS Portal" }}
+                      {{ client.maconomyCustomerNumber ? "Maconomy" : "Unapproved" }}
                     </span>
                     <app-option-badge v-if="client.entityType" :option="entityTypeOption(client.entityType)" />
                     <span v-else class="text-caption text-grey-6">Not recorded</span>
@@ -106,16 +106,6 @@
                 <q-item-section class="text-caption text-grey-7">
                   More clients match than are shown — keep typing to narrow it down.
                 </q-item-section>
-              </q-item>
-              <!-- The way out of a search that did not find them. -->
-              <q-item
-                clickable :active="activeIndex === clientOptions.length"
-                active-class="bg-grey-2" @mousedown.prevent @click="startNewClient"
-              >
-                <q-item-section avatar>
-                  <q-icon name="o_person_add" size="18px" color="primary" />
-                </q-item-section>
-                <q-item-section class="text-primary">{{ addNewLabel }}</q-item-section>
               </q-item>
             </q-list>
           </q-menu>
@@ -324,7 +314,7 @@
            kinds of government and nothing else. -->
       <app-select
         :model-value="industry" :options="offeredIndustries" label="Industry" required
-        class="col-12 col-sm-6 col-md-4" :readonly="setupReadonly"
+        class="col-12 col-sm-6 col-md-4" :readonly="industryReadonly"
         :hint="industryHint" :info="industryInfo"
         :error="attempted && !!entityType && !industry"
         error-message="Choose the trade this client is in."
@@ -618,6 +608,11 @@ const offeredEntityTypes = computed(() => {
 const offeredIndustries = computed(() =>
   remsIndustryOptions(props.industryOptions, props.entityType, props.industry));
 
+// Maconomy's industry, once it is the one on the form, is Maconomy's to change — as the entity type is.
+const industryFromMaconomy = computed(() =>
+  isMaconomyClient.value && !!linkedClient.value?.industry && linkedClient.value.industry === props.industry);
+const industryReadonly = computed(() => props.setupReadonly || industryFromMaconomy.value);
+
 // Said on the field, because a list that has just gone from twenty-nine values to three looks broken
 // unless something says why.
 const industryInfo = computed(() => (props.entityType
@@ -631,6 +626,7 @@ const industryInfo = computed(() => (props.entityType
 // with no explanation reads as data lost rather than as an answer that stopped applying.
 const industryCleared = ref("");
 const industryHint = computed(() => {
+  if (industryFromMaconomy.value && !props.setupReadonly) return "From Maconomy.";
   if (industryCleared.value || props.entityType) return industryCleared.value;
   return clientSettled.value
     ? "Choose an Entity Type first — it decides which trades are offered."
@@ -654,6 +650,16 @@ const applyEntityType = (value) => {
 const onIndustryPicked = (value) => {
   industryCleared.value = "";
   emit("update:industry", value);
+};
+
+// Maconomy holds the customer's industry in specification 1, sent here as a REMS.Industry code. It is
+// taken when it is a trade this tenant offers under the entity type; otherwise the field is left as it was.
+const applyMaconomyIndustry = (customer, entityType) => {
+  const code = customer?.industry;
+  if (!code || code === props.industry) return;
+  if (!props.industryOptions.some((o) => o.value === code)) return;
+  if (!remsIndustryFitsEntityType(entityType || null, code)) return;
+  onIndustryPicked(code);
 };
 
 // ---- The name ----
@@ -975,11 +981,6 @@ const noMatchNote = computed(() => (lookupFailed.value
   ? "The search is not available right now — try again in a moment."
   : `No client matches “${clientQuery.value.trim()}”.`));
 
-const addNewLabel = computed(() => {
-  const term = clientQuery.value.trim();
-  return term ? `Add “${term}” as a new client` : "Add a new client";
-});
-
 // ---- The request's Type, which follows the client ----
 const autoType = (code) => (props.typeOptions.some((o) => o.value === code) ? code : "");
 
@@ -1050,6 +1051,7 @@ const pickClient = (client) => {
     composeClientName(client.isOrganisation ? "organisation" : "individual");
   }
   applyEntityType(client.entityType);
+  if (client.maconomyCustomerNumber) applyMaconomyIndustry(client, client.entityType);
   clientMenu.value = false;
   activeIndex.value = -1;
 };
@@ -1100,12 +1102,15 @@ const refreshFromMaconomy = async () => {
   try {
     const customer = await remsApi.maconomyCustomer(number, props.saved?.id);
     if (maconomyNumber.value !== number) return;
+    // Whether the industry on the form was Maconomy's, judged before the re-read replaces what it said.
+    const industryWasMaconomys = industryFromMaconomy.value;
     linkedClient.value = { ...customer, id: customer.id || linkedClient.value.id || null };
     clientQuery.value = customer.name || "";
     maconomyUnread.value = false;
     showMaconomyDetails(customer);
     // Maconomy's entity type stands while the form can still take one.
     if (customer.entityType && customer.entityType !== props.entityType) applyEntityType(customer.entityType);
+    if (!props.industry || industryWasMaconomys) applyMaconomyIndustry(customer, customer.entityType || props.entityType);
     notify.success("Read from Maconomy.");
   } catch (err) {
     notify.error(getApiErrorMessage(err, "Maconomy could not be read just now."));
@@ -1229,20 +1234,20 @@ const onClientBlur = () => {
   linkExactMatchIfSettled();
 };
 
-// The rows, and the "add a new client" row after them.
+// The rows.
 const moveActive = (delta) => {
   if (!clientMenu.value) {
     openMenuIfResults();
     return;
   }
-  const count = clientOptions.value.length + 1;
+  const count = clientOptions.value.length;
+  if (!count) return;
   activeIndex.value = (activeIndex.value + delta + count) % count;
 };
 
 const onClientEnter = () => {
   if (!clientMenu.value || activeIndex.value < 0) return;
-  if (activeIndex.value === clientOptions.value.length) startNewClient();
-  else pickClient(clientOptions.value[activeIndex.value]);
+  pickClient(clientOptions.value[activeIndex.value]);
 };
 
 // A request opened already linked knows its client only by id. Their record is what says which fields

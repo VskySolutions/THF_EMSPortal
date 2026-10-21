@@ -249,7 +249,9 @@ public sealed record RemsClientLookupItem(
     /// </summary>
     string? EntityType,
     /// <summary>Set for a Maconomy customer: everything above was read from Maconomy by this number.</summary>
-    string? MaconomyCustomerNumber = null);
+    string? MaconomyCustomerNumber = null,
+    /// <summary>The REMS.Industry code Maconomy's specification 1 stands for, so the picker can fill the industry in. Null otherwise.</summary>
+    string? Industry = null);
 
 /// <summary>The Maconomy half of the client search.</summary>
 public sealed record RemsMaconomyLookup(

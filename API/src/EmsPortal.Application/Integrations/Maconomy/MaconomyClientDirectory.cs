@@ -192,7 +192,7 @@ public sealed class MaconomyClientDirectory : IMaconomyClientDirectory
             .SearchAsync(tenantId, text, limit: null, cancellationToken);
         return new MaconomyClientSearch(
             live.Customers
-                .Select(o => new MaconomyClientDetails(o.Value, o.Name, o.EntityType, o.EmailAddress, o.PhoneNumber))
+                .Select(o => new MaconomyClientDetails(o.Value, o.Name, o.EntityType, o.EmailAddress, o.PhoneNumber, o.Industry))
                 .ToList(),
             More: !live.Complete);
     }

@@ -32,18 +32,21 @@ what happened rather than a copy of the customer:
 
 ## 2. How it works
 
-**Search.** The Client box asks two places at once and shows one list. Each row carries a `System` or
-`Maconomy` tag; a Maconomy row also shows the customer number.
+**Search.** The Client box asks two places at once and shows one list. Each row carries an `Unapproved` tag
+(a client the portal holds, not yet in Maconomy) or a `Maconomy` tag; a Maconomy row also shows the customer
+number.
 
 ```
- [org]    Acme Trading LLC                         System     Commercial
+ [org]    Acme Trading LLC                         Unapproved Commercial
           accounts@acme.example
  [org]    ACME HOLDINGS, LLC                       Maconomy   Commercial
           10023B · ap@acme.example
  [person] DOE, JOHN & JANE                         Maconomy   Individual
           10450 · no email
- + Add "acme" as a new client
 ```
+
+A client the search does not find is added with the **New client** button beside the box; the list itself
+offers no "add as new" row.
 
 - `GET /api/rems/clients/lookup?q=` — clients the portal holds (unchanged; Maconomy clients are not in it).
 - `GET /api/rems/clients/maconomy?q=` — Maconomy customers, by name, number, email or telephone. The name
@@ -70,7 +73,9 @@ in memory over the whole filtered set before the page is read (`MaconomyClientRe
 
 **On the form.** A Maconomy client's name, email and phone are read-only, with **Refresh from Maconomy**
 to re-read them at once. The entity type comes from Maconomy's specification 6 and is locked; a customer
-with none has it chosen by hand.
+with none has it chosen by hand. The industry is filled from specification 1 (THF's values 17–38, mapped to the
+REMS.Industry codes) when the tenant's list offers that trade under the entity type; otherwise it is left
+for the initiator to choose.
 
 **Sending.** Send and Remind read the customer from Maconomy at that moment, so the email goes to the
 address Maconomy holds today. No address, or one that is not a single valid address, is refused with a
