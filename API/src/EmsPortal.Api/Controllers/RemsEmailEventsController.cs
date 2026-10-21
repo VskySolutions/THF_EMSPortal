@@ -9,6 +9,8 @@ using EmsPortal.Shared.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -19,6 +21,7 @@ namespace EmsPortal.Api.Controllers;
 [ApiController]
 [Route("api/rems/email-events")]
 [AllowAnonymous]
+[EnableRateLimiting(RateLimitPolicies.PublicContent)]
 [Produces("application/json")]
 [Tags("REMS Email Events")]
 public sealed class RemsEmailEventsController : ControllerBase

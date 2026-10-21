@@ -77,7 +77,7 @@ internal static class RemsWorkspaceMapper
             ? null
             : new RemsAuditDetailView(
                 audit.Id, audit.ClientAcceptanceFormMediaId, audit.ClientAcceptanceFormMedia?.OriginalFileName,
-                audit.ClientFiscalYearEnd, audit.AdminFeesApply, audit.AdminFeesAmount);
+                audit.ClientFiscalYearEnd);
         var govView = government is null
             ? null
             : new RemsGovernmentDetailView(

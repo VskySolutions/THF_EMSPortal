@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.Configure<RemsApprovalPolicyOptions>(configuration.GetSection(ConfigurationSections.RemsApprovalPolicy));
         services.Configure<MicrosoftSsoOptions>(configuration.GetSection(ConfigurationSections.MicrosoftSso));
         services.Configure<MaconomyOptions>(configuration.GetSection(ConfigurationSections.Maconomy));
+        services.Configure<LimitsOptions>(configuration.GetSection(ConfigurationSections.Limits));
 
         services.AddSecurity();
         services.AddEmail();
@@ -53,7 +54,9 @@ public static class DependencyInjection
             options.UseSqlServer(
                     configuration.GetConnectionString(ConfigurationSections.SqlServerConnection),
                     sql => sql.MigrationsAssembly(typeof(EmsPortalDbContext).Assembly.FullName))
-                .AddInterceptors(sp.GetRequiredService<Persistence.ModifiedLog.FieldChangeInterceptor>()));
+                .AddInterceptors(
+                    sp.GetRequiredService<Persistence.ModifiedLog.FieldChangeInterceptor>(),
+                    sp.GetRequiredService<Integrations.Maconomy.MaconomyClientInterceptor>()));
 
         services.AddPersistence();
 
@@ -90,6 +93,7 @@ public static class DependencyInjection
         services.AddScoped<ISmtpAccountRepository, SmtpAccountRepository>();
         services.AddScoped<IMaconomyConnectionRepository, MaconomyConnectionRepository>();
         services.AddScoped<ITenantBrandingRepository, TenantBrandingRepository>();
+        services.AddScoped<ITenantEmailSettingsRepository, TenantEmailSettingsRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
         services.AddScoped<IOptionSetRepository, OptionSetRepository>();
 
@@ -113,6 +117,7 @@ public static class DependencyInjection
         services.AddScoped<Jobs.StickyNoteExpiryJob>();
 
         // REMS (WO-110) repositories and per-tenant request-number generation.
+        services.AddScoped<MaconomyClientReader>();
         services.AddScoped<IRemsRepository, RemsRepository>();
         services.AddScoped<IRemsFormRepository, RemsFormRepository>();
         services.AddScoped<IRemsClientRepository, RemsClientRepository>();
@@ -157,6 +162,7 @@ public static class DependencyInjection
             .ConfigureHttpClient((sp, client) => client.Timeout = TimeSpan.FromSeconds(
                 Math.Max(1, sp.GetRequiredService<IOptions<MaconomyOptions>>().Value.TimeoutSeconds)));
         services.AddSingleton<IMaconomyGateway, Integrations.Maconomy.MaconomyGateway>();
+        services.AddSingleton<Integrations.Maconomy.MaconomyClientInterceptor>();
         return services;
     }
 

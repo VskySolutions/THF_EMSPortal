@@ -105,6 +105,8 @@ internal sealed class RemsEmailDeliveryFailureSink : IEmailDeliveryFailureSink
         {
             EmailDeliveryFailureReason.NoActiveSmtpAccount =>
                 "No active SMTP account is configured for this tenant, so the email was never attempted.",
+            EmailDeliveryFailureReason.NotificationsDisabled =>
+                "Email notifications are turned off for this tenant, so the email was never attempted.",
             EmailDeliveryFailureReason.TemplateUnavailable =>
                 "The email template could not be rendered.",
             EmailDeliveryFailureReason.SmtpSendFailed =>

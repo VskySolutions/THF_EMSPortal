@@ -9,10 +9,12 @@ namespace EmsPortal.Infrastructure.Persistence.Repositories;
 internal sealed class RemsRepository : IRemsRepository
 {
     private readonly EmsPortalDbContext _dbContext;
+    private readonly MaconomyClientReader _maconomy;
 
-    public RemsRepository(EmsPortalDbContext dbContext)
+    public RemsRepository(EmsPortalDbContext dbContext, MaconomyClientReader maconomy)
     {
         _dbContext = dbContext;
+        _maconomy = maconomy;
     }
 
     public Task<REMS?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -79,6 +81,30 @@ internal sealed class RemsRepository : IRemsRepository
             .Add("createdOnUtc", r => r.CreatedOnUtc)
             .Add("updatedOnUtc", r => r.UpdatedOnUtc, r => r.CreatedOnUtc);
 
+        // A Maconomy client's name, email and phone are not in the database, so with any on the list
+        // those three orders are worked out in memory over the whole filtered set and only that page read.
+        if (ClientColumnOf(options.Sort.SortBy) is { } column
+            && await query.AnyAsync(r => r.ClientPerson!.MaconomyCustomerNumber != null, cancellationToken))
+        {
+            var keys = await query
+                .Select(r => new ClientSortKey<string>(
+                    r.Id,
+                    column == ClientColumn.Email ? r.ClientPerson!.PrimaryEmail
+                        : column == ClientColumn.Phone ? r.ClientPerson!.MobileNumber
+                        : r.ClientPerson!.ClientDisplayName,
+                    r.ClientPerson!.MaconomyCustomerNumber,
+                    r.REMSNumber))
+                .ToListAsync(cancellationToken);
+            var ids = column switch
+            {
+                ClientColumn.Email => _maconomy.PageByEmail(keys, options.Sort.Descending, options.Page, options.Limit),
+                ClientColumn.Phone => _maconomy.PageByPhone(keys, options.Sort.Descending, options.Page, options.Limit),
+                _ => _maconomy.PageByName(keys, options.Sort.Descending, options.Page, options.Limit),
+            };
+            var page = await withOptions.Where(r => ids.Contains(r.Id)).ToListAsync(cancellationToken);
+            return (ids.Join(page, id => id, r => r.Id, (_, r) => r).ToList(), total);
+        }
+
         var items = await sorts.Apply(withOptions, options.Sort.SortBy, options.Sort.Descending)
             .Skip((options.Page - 1) * options.Limit)
             .Take(options.Limit)
@@ -87,16 +113,36 @@ internal sealed class RemsRepository : IRemsRepository
         return (items, total);
     }
 
+    private enum ClientColumn
+    {
+        Name,
+        Email,
+        Phone,
+    }
+
+    /// <summary>Which of the client's own columns a sort key orders by, or null for any other column.</summary>
+    private static ClientColumn? ClientColumnOf(string? sortBy) => sortBy?.Trim().ToLowerInvariant() switch
+    {
+        "clientname" => ClientColumn.Name,
+        "customeremail" => ClientColumn.Email,
+        "customermobilenumber" => ClientColumn.Phone,
+        _ => null,
+    };
+
     public async Task<IReadOnlyList<RemsClientChoice>> ListRequestClientsAsync(
         RemsRequestListOptions options, CancellationToken cancellationToken = default)
     {
         var clients = await ApplyScope(ApplyVisibility(options), options)
             .Where(r => r.ClientPersonId != null)
-            .Select(r => new { Id = r.ClientPersonId!.Value, Name = r.ClientPerson!.ClientDisplayName })
+            .Select(r => new
+            {
+                Id = r.ClientPersonId!.Value,
+                Name = r.ClientPerson!.ClientDisplayName,
+                Maconomy = r.ClientPerson!.MaconomyCustomerNumber,
+            })
             .Distinct()
-            .OrderBy(c => c.Name)
             .ToListAsync(cancellationToken);
-        return clients.Select(c => new RemsClientChoice(c.Id, c.Name)).ToList();
+        return _maconomy.Choices(clients.Select(c => (c.Id, c.Name, c.Maconomy)));
     }
 
     /// <summary>
@@ -197,7 +243,7 @@ internal sealed class RemsRepository : IRemsRepository
     }
 
     /// <summary>The user-supplied search/filter narrowing, shared by the list and its pool counts.</summary>
-    private static IQueryable<REMS> ApplyFieldFilters(IQueryable<REMS> query, RemsRequestListOptions options)
+    private IQueryable<REMS> ApplyFieldFilters(IQueryable<REMS> query, RemsRequestListOptions options)
     {
         if (!string.IsNullOrWhiteSpace(options.ClientName))
         {
@@ -205,17 +251,24 @@ internal sealed class RemsRepository : IRemsRepository
             // Against the client's name as the list SHOWS it — "Smith John Jr." — and against each half
             // of it on its own, because a reader types whichever they have. Surname-first is how the row
             // reads, but nobody searching for John Smith types "Smith John".
+            // A Maconomy client's name is matched in memory, and the row found by its customer number.
+            var maconomy = _maconomy.NumbersByName(t);
             query = query.Where(r =>
                 r.ClientPerson!.ClientDisplayName.Contains(t)
                 || r.ClientPerson!.FirstName.Contains(t)
-                || r.ClientPerson!.LastName.Contains(t));
+                || r.ClientPerson!.LastName.Contains(t)
+                || (r.ClientPerson!.MaconomyCustomerNumber != null
+                    && maconomy.Contains(r.ClientPerson!.MaconomyCustomerNumber)));
         }
         if (!string.IsNullOrWhiteSpace(options.Contact))
         {
             var t = options.Contact.Trim();
+            var maconomy = _maconomy.NumbersByContact(t);
             query = query.Where(r =>
                 (r.ClientPerson!.PrimaryEmail != null && r.ClientPerson!.PrimaryEmail.Contains(t)) ||
-                (r.ClientPerson!.MobileNumber != null && r.ClientPerson!.MobileNumber.Contains(t)));
+                (r.ClientPerson!.MobileNumber != null && r.ClientPerson!.MobileNumber.Contains(t)) ||
+                (r.ClientPerson!.MaconomyCustomerNumber != null
+                    && maconomy.Contains(r.ClientPerson!.MaconomyCustomerNumber)));
         }
         if (!string.IsNullOrWhiteSpace(options.Status))
         {
@@ -447,11 +500,14 @@ internal sealed class RemsRepository : IRemsRepository
             // request was Falcon Logistics on?"), and the parent's name is often not what the reader has.
             // Against the client's name as the list SHOWS it — "Smith John Jr." — and against each half
             // of it on its own, because a reader types whichever they have.
+            var maconomy = _maconomy.NumbersByName(t);
             rems = rems.Where(r =>
                 r.REMSNumber.Contains(t)
                 || r.ClientPerson!.ClientDisplayName.Contains(t)
                 || r.ClientPerson!.FirstName.Contains(t)
                 || r.ClientPerson!.LastName.Contains(t)
+                || (r.ClientPerson!.MaconomyCustomerNumber != null
+                    && maconomy.Contains(r.ClientPerson!.MaconomyCustomerNumber))
                 // Against the related client's name as the list SHOWS it — "Smith Jane" — and against each
                 // half on its own, exactly as the parent's name above is matched: a reader types whichever
                 // half they have, and neither order should be the only one that finds the row.
@@ -559,11 +615,15 @@ internal sealed class RemsRepository : IRemsRepository
         var unfiltered = new RemsRelatedEntityQuery(null, null, null, SortRequest.Default, Page: 1, Limit: 1);
         var clients = await RelatedRequests(unfiltered, withEntityType: false, withRelatedStatus: false)
             .Where(r => r.ClientPersonId != null)
-            .Select(r => new { Id = r.ClientPersonId!.Value, Name = r.ClientPerson!.ClientDisplayName })
+            .Select(r => new
+            {
+                Id = r.ClientPersonId!.Value,
+                Name = r.ClientPerson!.ClientDisplayName,
+                Maconomy = r.ClientPerson!.MaconomyCustomerNumber,
+            })
             .Distinct()
-            .OrderBy(c => c.Name)
             .ToListAsync(cancellationToken);
-        return clients.Select(c => new RemsClientChoice(c.Id, c.Name)).ToList();
+        return _maconomy.Choices(clients.Select(c => (c.Id, c.Name, c.Maconomy)));
     }
 
     public async Task<(IReadOnlyList<RemsRelatedEntityItem> Items, int Total)> ListRelatedEntitiesAsync(
@@ -606,9 +666,29 @@ internal sealed class RemsRepository : IRemsRepository
             .Add("createdOnUtc", x => x.Rems.CreatedOnUtc)
             .Add("updatedOnUtc", x => x.Rems.UpdatedOnUtc, x => x.Rems.REMSNumber);
 
-        var items = await sorts.Apply(rows, query.Sort.SortBy, query.Sort.Descending)
-            .Skip((query.Page - 1) * query.Limit)
-            .Take(query.Limit)
+        // A Maconomy client's name is not in the database, so with any on the list its Client order is
+        // worked out in memory over the whole filtered set and only that page is then read.
+        IReadOnlyList<Guid>? order = null;
+        var page = rows;
+        if (string.Equals(query.Sort.SortBy, "clientName", StringComparison.OrdinalIgnoreCase)
+            && await rows.AnyAsync(x => x.Rems.ClientPerson!.MaconomyCustomerNumber != null, cancellationToken))
+        {
+            var keys = await rows
+                .Select(x => new ClientSortKey<string>(
+                    x.Rems.Id, x.Rems.ClientPerson!.ClientDisplayName,
+                    x.Rems.ClientPerson!.MaconomyCustomerNumber, x.Rems.REMSNumber))
+                .ToListAsync(cancellationToken);
+            var ids = order = _maconomy.PageByName(keys, query.Sort.Descending, query.Page, query.Limit);
+            page = rows.Where(x => ids.Contains(x.Rems.Id));
+        }
+        else
+        {
+            page = sorts.Apply(rows, query.Sort.SortBy, query.Sort.Descending)
+                .Skip((query.Page - 1) * query.Limit)
+                .Take(query.Limit);
+        }
+
+        var read = await page
             .Select(x => new RemsRelatedEntityItem(
                 x.Rems.Id,
                 x.Rems.REMSNumber,
@@ -621,6 +701,7 @@ internal sealed class RemsRepository : IRemsRepository
                 x.Form.EntityType!.Value,
                 x.Rems.Status!.Value,
                 x.Rems.AdminAssignedToId,
+                x.Rems.CSEId,
                 x.Form.SubmittedOnUtc,
                 // The rows the nested table actually LISTS, which is why the joint filers are left out of
                 // it: they are shown as part of the parent, not under it.
@@ -630,8 +711,19 @@ internal sealed class RemsRepository : IRemsRepository
                 x.Rems.OnBehalfOfUserId,
                 x.Rems.CreatedOnUtc,
                 x.Rems.UpdatedById,
-                x.Rems.UpdatedOnUtc))
+                x.Rems.UpdatedOnUtc,
+                x.Rems.ClientPerson!.MaconomyCustomerNumber))
             .ToListAsync(cancellationToken);
+
+        var items = (order is null ? read : order.Join(read, id => id, i => i.RemsId, (_, i) => i))
+            .Select(i => i.MaconomyCustomerNumber is null
+                ? i
+                : i with
+                {
+                    ClientName = _maconomy.Name(i.MaconomyCustomerNumber, i.ClientName),
+                    ClientEmail = _maconomy.Email(i.MaconomyCustomerNumber, i.ClientEmail),
+                })
+            .ToList();
 
         return (items, total);
     }
@@ -769,8 +861,9 @@ internal sealed class RemsRepository : IRemsRepository
         var clientIds = requests.Select(r => r.ClientPersonId!.Value);
 
         var search = term.Trim();
+        // A Maconomy client's row holds nothing to search; those are found by searching Maconomy.
         var people = await _dbContext.Persons
-            .Where(p => p.IsActive && clientIds.Contains(p.Id))
+            .Where(p => p.IsActive && p.MaconomyCustomerNumber == null && clientIds.Contains(p.Id))
             .Where(p =>
                 p.FirstName.Contains(search) ||
                 p.LastName.Contains(search) ||

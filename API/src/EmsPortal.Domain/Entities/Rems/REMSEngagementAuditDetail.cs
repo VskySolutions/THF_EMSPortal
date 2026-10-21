@@ -7,7 +7,7 @@ namespace EmsPortal.Domain.Entities;
 /// Shared by the AUDIT and ASSURANCE departments rather than split in two. The client-acceptance form is
 /// the same compliance artifact under both, filed and read the same way, and a second table holding one
 /// media id would have needed a second upload endpoint and a second read on every screen that shows it.
-/// The three columns below it are Assurance's alone; audit engagements leave them null.
+/// The column below it is Assurance's alone; audit engagements leave it null.
 /// </para>
 /// </summary>
 public class REMSEngagementAuditDetail : AuditableEntity
@@ -31,14 +31,6 @@ public class REMSEngagementAuditDetail : AuditableEntity
     /// </summary>
     public DateOnly? ClientFiscalYearEnd { get; set; }
 
-    /// <summary>ASSURANCE only: whether administrative fees are charged on top of the engagement fee.</summary>
-    public bool? AdminFeesApply { get; set; }
-
-    /// <summary>
-    /// ASSURANCE only: how much those administrative fees come to. Meaningful only where
-    /// <see cref="AdminFeesApply"/> is true; answering "no" clears it.
-    /// </summary>
-    public decimal? AdminFeesAmount { get; set; }
 
     // ---- Navigations ----
     public REMSEngagement? Engagement { get; set; }

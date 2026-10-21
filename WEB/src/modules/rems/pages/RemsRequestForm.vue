@@ -31,6 +31,13 @@
             label="Email log" @click="emailLogOpen = true"
           />
 
+          <!-- What has HAPPENED to this request, as against the page below it, which is what it SAYS. -->
+          <q-btn
+            v-if="request" outline round dense color="primary" icon="o_history" @click="activityOpen = true"
+          >
+            <q-tooltip>Activity log and tags</q-tooltip>
+          </q-btn>
+
           <!-- Claiming the request. -->
           <q-btn
             v-if="canPickUp" unelevated no-caps color="amber-8" icon="o_pan_tool_alt"
@@ -40,7 +47,8 @@
           </q-btn>
 
           <!-- The workflow moves: each one hands the request to somebody else. -->
-          <!-- Submitting to the client belongs at the end of the tabs, where the work it completes is. -->
+          <!-- On the form, submitting to the client belongs at the end of the tabs, where the work it
+               completes is; the read-only page keeps it here. -->
           <q-btn
             v-if="canSendToClient && !hasFinishTab" unelevated no-caps color="teal-7" icon="o_send"
             label="Submit to Client" :disable="!readyToSend" @click="openSend"
@@ -175,7 +183,91 @@
         </template>
 
         <div class="rf-work__pane rf-work__pane--main">
-          <q-card flat bordered class="rf-card">
+          <!-- ═══ The read-only page: every part of the request on one page, in sections ═══ -->
+          <template v-if="!isEditing">
+            <!-- ---------- Client Information ---------- -->
+            <q-card flat bordered class="rf-card rf-section">
+              <div class="rf-section__head">
+                <q-icon name="o_person" size="20px" color="primary" />
+                <div class="rf-section__title">Client Information</div>
+              </div>
+              <q-separator />
+              <div class="rf-section__body">
+                <detail-grid :rows="clientRows" />
+                <!-- The client's other businesses, and whether each has been turned into its own request
+                     yet. -->
+                <additional-entities-panel
+                  v-if="additionalEntities.length" :rows="additionalEntities" class="q-mt-md"
+                  @create-ems="createFollowUp"
+                />
+              </div>
+            </q-card>
+
+            <!-- ---------- Engagement Setup ---------- -->
+            <q-card flat bordered class="rf-card rf-section">
+              <div class="rf-section__head">
+                <q-icon name="o_work" size="20px" color="primary" />
+                <div class="rf-section__title">Engagement Setup</div>
+              </div>
+              <q-separator />
+              <div class="rf-section__body">
+                <div v-if="!setupEngagement" class="text-grey-7">{{ noEngagementNote }}</div>
+                <detail-grid v-else :rows="setupRows" />
+              </div>
+            </q-card>
+
+            <!-- ---------- Marketing ---------- -->
+            <q-card v-if="setupEngagement" flat bordered class="rf-card rf-section">
+              <div class="rf-section__head">
+                <q-icon name="o_campaign" size="20px" color="primary" />
+                <div class="rf-section__title">Marketing</div>
+              </div>
+              <q-separator />
+              <div class="rf-section__body">
+                <detail-grid :rows="marketingRows" />
+              </div>
+            </q-card>
+
+            <!-- ---------- Commission ---------- -->
+            <q-card v-if="setupEngagement" flat bordered class="rf-card rf-section">
+              <div class="rf-section__head">
+                <q-icon name="o_payments" size="20px" color="primary" />
+                <div class="rf-section__title">Commission</div>
+              </div>
+              <q-separator />
+              <div class="rf-section__body">
+                <detail-grid :rows="commissionRows" />
+              </div>
+            </q-card>
+
+            <!-- ---------- Approval ---------- -->
+            <!-- Only ever shown to someone who may read it: the approver list is gated on managing
+                 engagements. -->
+            <q-card v-if="showApprovalSection" flat bordered class="rf-card rf-section">
+              <div class="rf-section__head">
+                <q-icon name="o_approval" size="20px" color="primary" />
+                <div class="rf-section__title">Approval</div>
+              </div>
+              <q-separator />
+              <div class="rf-section__body">
+                <template v-if="engagement">
+                  <engagement-approval
+                    v-if="canManageApproval"
+                    :engagement="engagement" :can-send="canRouteForApproval"
+                    :marketing-saved="marketingComplete" @status-changed="load"
+                  />
+                  <q-banner v-else dense class="rf-alert rf-alert--lock">
+                    <template #avatar><q-icon name="o_gavel" color="blue-9" /></template>
+                    {{ approvalNote }}
+                  </q-banner>
+                  <approval-history :engagement-id="engagement.id" class="q-mt-md" />
+                </template>
+              </div>
+            </q-card>
+          </template>
+
+          <!-- ═══ The form: a request is created and edited one tab at a time ═══ -->
+          <q-card v-else flat bordered class="rf-card">
             <div class="rf-tabbar">
               <q-tabs
                 v-model="tab" dense align="left" active-color="primary" indicator-color="primary"
@@ -207,7 +299,7 @@
                      against it, so on a brand-new request the create IS the step forward. -->
                 <q-btn
                   v-if="isNew" unelevated no-caps dense color="primary" icon-right="o_arrow_right"
-                  label="Save as Draft &amp; Next" class="q-px-md" :loading="saving" @click="createDraft"
+                  label="Save and Continue" class="q-px-md" :loading="saving" @click="createDraft"
                 />
 
                 <!-- Filled while stepping on is the thing to do here, outlined where it shares the corner
@@ -235,17 +327,15 @@
             <q-tab-panels v-model="tab" keep-alive animated>
               <!-- ---------- Client Information ---------- -->
               <q-tab-panel name="client">
-                <detail-grid v-if="!isEditing" :rows="clientRows" />
                 <!-- Entity Type, Industry and the CSE are the page's to save — the entity type and the
                      CSE belong to the request's EMS form record and the industry to its engagement. -->
                 <client-information-fields
-                  v-else
                   ref="clientFieldsRef"
                   v-model="clientForm"
                   v-model:entity-type="setupForm.entityType"
                   v-model:industry="setupForm.industry"
                   v-model:cse-user-id="setupForm.cseUserId"
-                  :cse-options="cseOptions"
+                  :cse-options="cseChoices"
                   :cse-hint="cseHint"
                   :readonly="!canEditClient"
                   :client-locked="clientLocked"
@@ -262,8 +352,6 @@
                   @remove-file="removeAttachment"
                 />
 
-                <!-- The client's other businesses, and whether each has been turned into its own request
-                     yet. -->
                 <additional-entities-panel
                   v-if="additionalEntities.length" :rows="additionalEntities" class="q-mt-md"
                   @create-ems="createFollowUp"
@@ -273,8 +361,6 @@
               <!-- ---------- Engagement Setup ---------- -->
               <q-tab-panel name="setup">
                 <div v-if="!setupEngagement" class="text-grey-7">{{ noEngagementNote }}</div>
-
-                <detail-grid v-else-if="!isEditing" :rows="setupRows" />
 
                 <!-- The entity type goes down read-only: the Government Audit card keys off it. -->
                 <engagement-setup-form
@@ -288,8 +374,8 @@
                   :tax-form-options="taxFormOptions"
                   :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
-                  :executive-options="executiveOptions"
-                  :billing-manager-options="billingManagerOptions"
+                  :executive-options="executiveChoices"
+                  :billing-manager-options="billingManagerChoices"
                   :billing-period-options="billingPeriodOptions"
                   :personnel-level-options="personnelLevelOptions"
                   :editable="canEditSetup"
@@ -299,9 +385,7 @@
 
               <!-- ---------- Marketing ---------- -->
               <q-tab-panel v-if="setupEngagement" name="marketing">
-                <detail-grid v-if="!isEditing" :rows="marketingRows" />
                 <engagement-marketing
-                  v-else
                   ref="marketingRef"
                   :engagement="setupEngagement" :marketing-groups="marketingGroups"
                   :marketing-unavailable="marketingUnavailable" :editable="canEditSetup"
@@ -311,10 +395,7 @@
 
               <!-- ---------- Commission ---------- -->
               <q-tab-panel v-if="setupEngagement" name="commission">
-                <!-- No hint line here. -->
-                <detail-grid v-if="!isEditing" :rows="commissionRows" />
                 <engagement-commission
-                  v-else
                   ref="commissionRef"
                   :engagement="setupEngagement" :recipient-options="cseOptions" :editable="canEditSetup"
                   :excluded-recipient-ids="reservedCommissionIds"
@@ -323,9 +404,7 @@
               </q-tab-panel>
 
               <!-- ---------- Approval ---------- -->
-              <!-- Only ever reached by someone who may read it: the approver list is gated on managing
-                   engagements. -->
-              <q-tab-panel v-if="showApprovalTab" name="approval">
+              <q-tab-panel v-if="showApprovalSection" name="approval">
                 <template v-if="engagement">
                   <engagement-approval
                     v-if="canManageApproval"
@@ -339,15 +418,6 @@
                   <approval-history :engagement-id="engagement.id" class="q-mt-md" />
                 </template>
               </q-tab-panel>
-
-              <!-- ---------- Activity ---------- -->
-              <!-- What has HAPPENED to this request, as against the four tabs before it, which are what it
-                   SAYS. Tags sit at the top of it rather than in the header. -->
-              <q-tab-panel v-if="remsId" name="activity">
-                <entity-tags-panel :entity-type="EntityType.Rems" :entity-id="remsId" class="q-mb-md" />
-                <q-separator class="q-mb-md" />
-                <entity-activity-timeline :entity-type="EntityType.Rems" :entity-id="remsId" />
-              </q-tab-panel>
             </q-tab-panels>
           </q-card>
         </div>
@@ -358,7 +428,7 @@
       <app-record-audit :audit="request?.audit" class="q-mt-md" />
     </template>
 
-    <!-- All five act on a saved request, so none of them exist while one is being composed. -->
+    <!-- All of them act on a saved request, so none of them exist while one is being composed. -->
     <template v-if="remsId">
       <send-back-dialog
         v-model="sendBackOpen" :rems-number="request?.remsNumber"
@@ -372,6 +442,7 @@
       />
       <conversation-dialog v-model="conversationOpen" :request-id="remsId" :subtitle="subtitle" />
       <email-log-dialog v-model="emailLogOpen" :rems-id="remsId" :subtitle="subtitle" @sent="load" />
+      <activity-dialog v-model="activityOpen" :rems-id="remsId" :subtitle="subtitle" />
       <edit-submitted-form-dialog
         v-if="canEditSubmission" v-model="editFormOpen" :rems-id="remsId" :subtitle="subtitle"
         @saved="onSubmissionCorrected"
@@ -381,10 +452,11 @@
 </template>
 
 <script setup>
-// THE REMS form: one tabbed page for creating, editing and reading a request.
+// THE REMS form: one component behind two pages — the read-only request, in sections, and the tabbed
+// form it is created and edited on.
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
-import { remsApi, getApiErrorMessage, webUrl, EntityType } from "services/api";
+import { remsApi, getApiErrorMessage, webUrl } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { formatDateOnly } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
@@ -401,8 +473,6 @@ import { useAuthStore } from "stores/auth";
 import AppDetailHeader from "components/common/AppDetailHeader.vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
-import EntityTagsPanel from "components/universal/EntityTagsPanel.vue";
-import EntityActivityTimeline from "components/universal/EntityActivityTimeline.vue";
 import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
 import DetailGrid from "modules/rems/components/DetailGrid.vue";
 import ClientInformationFields from "modules/rems/components/ClientInformationFields.vue";
@@ -418,6 +488,7 @@ import SubmittedFormPanel from "modules/rems/components/SubmittedFormPanel.vue";
 import EditSubmittedFormDialog from "modules/rems/components/EditSubmittedFormDialog.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
+import ActivityDialog from "modules/rems/components/ActivityDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -454,7 +525,7 @@ const request = ref(null);
 const workspace = ref(null);
 // The engagement as the SERVER last described it, re-read after each auto-save pass.
 const engagementLive = ref(null);
-// The workspace is refused to anyone the request is not about. Tracked so the setup tab can say which
+// The workspace is refused to anyone the request is not about. Tracked so the setup section can say which
 // of the two silences it is — "not yours to work" or "this request never had an engagement".
 const workspaceDenied = ref(false);
 const sendBacks = ref([]);
@@ -470,6 +541,7 @@ const commissionRef = ref(null);
 
 const conversationOpen = ref(false);
 const emailLogOpen = ref(false);
+const activityOpen = ref(false);
 const editFormOpen = ref(false);
 const submittedPanelRef = ref(null);
 const sendOpen = ref(false);
@@ -489,10 +561,13 @@ const blankClient = () => ({
   customerEmail: "",
   customerMobileNumber: "",
   type: "",
-  existingClientReferenceId: null
+  existingClientReferenceId: null,
+  // Set when the client is a Maconomy customer. The name, email and phone above are then Maconomy's,
+  // shown but never sent: the request names the customer by this number alone.
+  maconomyCustomerNumber: null
 });
 const clientForm = reactive(blankClient());
-// The fields the page owns rather than a tab.
+// The fields the page owns rather than a section.
 const setupForm = reactive({ cseUserId: null, entityType: null, industry: null });
 
 // ---- View vs Edit ----
@@ -570,7 +645,7 @@ const isHoldingAdmin = computed(() =>
 const awaitingPickUp = computed(() =>
   !isNew.value && status.value !== REMS_STATUS.DRAFT && !assignedAdminId.value);
 
-// The client tab belongs to the initiator while the request is theirs, and to the admin while it is his.
+// The client section belongs to the initiator while the request is theirs, and to the admin while it is his.
 const canEditClient = computed(() => {
   if (frozen.value) return false;
   if (isAdminStage.value) return isHoldingAdmin.value;
@@ -578,7 +653,7 @@ const canEditClient = computed(() => {
   return [REMS_STATUS.DRAFT, REMS_STATUS.AWAITING_CUSTOMER].includes(status.value);
 });
 // The setup is what the rework IS, so it stays open to the initiator and the CSE throughout — and to an
-// admin, for the same reason the client tab is (the server agrees: RemsSetupAccess.CanWork).
+// admin, for the same reason the client section is (the server agrees: RemsSetupAccess.CanWork).
 const canEditSetup = computed(() => {
   if (frozen.value) return false;
   if (isAdminStage.value) return isHoldingAdmin.value;
@@ -614,7 +689,7 @@ const lockedReason = computed(() => {
 });
 
 const noEngagementNote = computed(() => (workspaceDenied.value
-  ? "The engagement setup is with whoever the request is with — you can read the request itself on the first tab."
+  ? "The engagement setup is with whoever the request is with — you can read the request itself above."
   : "This request has no engagement on file. It was raised before the setup moved onto this page."));
 
 // ---- Actions available now ----
@@ -711,18 +786,22 @@ const readyToSend = computed(() =>
   !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.entityType &&
   !!setupForm.industry && commissionAllocated.value);
 const sendBlockedReason = computed(() => {
-  if (!clientForm.customerEmail?.trim()) return "The client has no email address to send the form to.";
-  if (!setupForm.cseUserId) return "Choose a CSE first — it is on the Client Information tab.";
+  if (!clientForm.customerEmail?.trim()) {
+    return clientForm.maconomyCustomerNumber
+      ? "Maconomy holds no email address for this customer. Add one in Maconomy, then refresh the client."
+      : "The client has no email address to send the form to.";
+  }
+  if (!setupForm.cseUserId) return "Choose a CSE first — it is under Client Information.";
   if (!setupForm.entityType) {
-    return "Choose an entity type on the Client Information tab — it decides what the client is asked.";
+    return "Choose an entity type under Client Information — it decides what the client is asked.";
   }
   // Required now, where it used to be optional. It is how the engagement is classified and reported on,
   // and a client whose trade nobody recorded at intake is one nobody goes back and records it for.
   if (!setupForm.industry) {
-    return "Choose an industry on the Client Information tab — the Entity Type beside it narrows the list.";
+    return "Choose an industry under Client Information — the Entity Type beside it narrows the list.";
   }
   if (!commissionAllocated.value) {
-    return `Commission totals ${commissionTotal.value}% — the recipients on the Commission tab must add ` +
+    return `Commission totals ${commissionTotal.value}% — the recipients under Commission must add ` +
       "up to 100% before this request can be sent to the client.";
   }
   return "";
@@ -822,13 +901,13 @@ const cseHint = computed(() => (cseOptions.value.length
   ? ""
   : "Nobody holds the \"CSE\" role — assign it on a user's page in Administration → Users."));
 
-// ---- The Approval tab ----
+// ---- The Approval section ----
 // Reading the approver list is gated on managing engagements, which the initiator does not hold — so
-// showing them the section would render a bare 403 on a tab they could do nothing with anyway.
+// showing them the section would render a bare 403 in a section they could do nothing with anyway.
 const ROUND_OPENED = ["PendingApproval", "Approved", "Rejected"];
 const approvalStarted = computed(() => ROUND_OPENED.includes(engagement.value?.status));
 const canManageApproval = computed(() => isAdmin.value);
-const showApprovalTab = computed(() =>
+const showApprovalSection = computed(() =>
   !!engagement.value && (canManageApproval.value || approvalStarted.value));
 
 const approvalNote = computed(() => {
@@ -841,17 +920,14 @@ const approvalNote = computed(() => {
   return "The admin sends this for approval once the client's intake has been reviewed.";
 });
 
-// ---- Tabs ----
-// One per part of the referral.
+// ---- Tabs (create / edit) ----
+// The form is filled in one part at a time; the read-only page lays the same parts out as sections.
 const TABS = [
   { name: "client", label: "Client Information", icon: "o_person" },
   { name: "setup", label: "Engagement Setup", icon: "o_work" },
   { name: "marketing", label: "Marketing", icon: "o_campaign" },
   { name: "commission", label: "Commission", icon: "o_payments" },
-  { name: "approval", label: "Approval", icon: "o_approval" },
-  // Last, because it is the only tab that is not part of filling the request in: it is the record's own
-  // trail, and its tags.
-  { name: "activity", label: "Activity", icon: "o_history" }
+  { name: "approval", label: "Approval", icon: "o_approval" }
 ];
 
 const tabs = computed(() => {
@@ -860,9 +936,7 @@ const tabs = computed(() => {
     setup: true,
     marketing: !!setupEngagement.value,
     commission: !!setupEngagement.value,
-    approval: showApprovalTab.value,
-    // There is no trail before there is a record. A request being composed has neither.
-    activity: !isNew.value
+    approval: showApprovalSection.value
   };
   return TABS.filter((t) => shown[t.name]).map((t) => ({
     ...t,
@@ -904,8 +978,10 @@ const prevTab = computed(() => stepTab(-1));
 const nextTab = computed(() => stepTab(1));
 
 // Where the initiator's own work ends. What lies past Commission is somebody else's: the approvers' round.
+// Only the form has one — the read-only page keeps Submit to Client in its header.
 const FINISH_TAB = "commission";
-const hasFinishTab = computed(() => tabs.value.some((t) => t.name === FINISH_TAB && !t.disable));
+const hasFinishTab = computed(() =>
+  isEditing.value && tabs.value.some((t) => t.name === FINISH_TAB && !t.disable));
 // Only where there is something to finish WITH — Submit to Client is the whole of finishing here.
 const atFinishTab = computed(() => tab.value === FINISH_TAB && canSendToClient.value);
 // Finishing does not REPLACE stepping on.
@@ -940,13 +1016,17 @@ const clientRows = computed(() => [
   // Read as one name, the particle after it — the pair is edited as two boxes because they are two
   // different things to store, not because they are two things about the client.
   { label: "Client", value: clientForm.clientName, suffix: clientForm.clientNameSuffix || "" },
+  // Only where there is one: a client typed into the portal has no Maconomy number to show.
+  ...(clientForm.maconomyCustomerNumber
+    ? [{ label: "Maconomy Customer", value: clientForm.maconomyCustomerNumber }]
+    : []),
   { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Client Email Address", value: clientForm.customerEmail },
   { label: "Client Phone Number", value: clientForm.customerMobileNumber },
   { label: "Relationship to THF", value: labelOf(typeOptions.value, clientForm.type) },
   { label: "Industry", value: labelOf(industryOptions.value, setupForm.industry) },
   // Whose client this is. Read here rather than under the engagement setup, which is where it is asked.
-  { label: "CSE", value: nameOf(cseOptions.value, setupForm.cseUserId) },
+  { label: "CSE", value: nameOf(cseChoices.value, setupForm.cseUserId) },
   // Read off the request rather than a picker: nobody chooses this, an admin claims it. Blank until one
   // does, and the badge in the header is what says the request is waiting for that.
   { label: "Reviewing Admin", value: request.value?.assignedAdmin?.name || "Waiting for pickup" },
@@ -994,11 +1074,7 @@ const setupRows = computed(() => {
       : []),
     ...(isAssuranceDepartment(e.department)
       ? [
-        { label: "Fiscal Year End of Client", value: dateOnly(e.audit?.clientFiscalYearEnd) },
-        {
-          label: "Admin Fees",
-          value: e.audit?.adminFeesApply ? (currency(e.audit.adminFeesAmount) || "Yes") : "No"
-        }
+        { label: "Fiscal Year End of Client", value: dateOnly(e.audit?.clientFiscalYearEnd) }
       ]
       : []),
     ...(isGcsDepartment(e.department)
@@ -1061,9 +1137,22 @@ const loadPickers = async () => {
   approvalPolicy.value = policy;
 };
 
+// A seat's picker offers the role's current holders; whoever is already IN the seat may have lost the
+// role since, and still has to read as a name rather than as an id. Commission keeps the bare list.
+const withCurrent = (options, current, role) => {
+  if (!current?.id || options.some((o) => o.value === current.id)) return options;
+  const label = options.length ? `${current.name} (no longer an active ${role})` : current.name || current.id;
+  return [...options, { label, value: current.id }];
+};
+const cseChoices = computed(() => withCurrent(cseOptions.value, request.value?.cse, "CSE"));
+const executiveChoices = computed(() =>
+  withCurrent(executiveOptions.value, engagement.value?.engagementExecutive, "Engagement Executive"));
+const billingManagerChoices = computed(() =>
+  withCurrent(billingManagerOptions.value, engagement.value?.billingManager, "Billing Manager"));
+
 // ---- STATIC-APPROVAL-POLICY ----
 // The seats on this request approve at their own stage and may not also be paid commission, so the
-// Commission tab does not offer them.
+// Commission section does not offer them.
 const approvalPolicy = ref(null);
 const reservedCommissionIds = computed(() => {
   if (!approvalPolicy.value?.staticRouting) return [];
@@ -1089,6 +1178,7 @@ const seedForms = (detail, ws) => {
   clientForm.customerMobileNumber = detail.customerMobileNumber || "";
   clientForm.type = detail.type || "";
   clientForm.existingClientReferenceId = detail.existingClientReferenceId || null;
+  clientForm.maconomyCustomerNumber = detail.maconomyCustomerNumber || null;
   setupForm.cseUserId = detail.cse?.id || pendingSetupPick?.cseUserId || null;
   setupForm.entityType =
     ws?.entityType || detail.entityType || pendingSetupPick?.entityType || null;
@@ -1105,8 +1195,8 @@ const loadDeclineReasons = async (id) => {
     .map((d) => `${d.approver} (${approverRoleLabel(d.role)}): ${d.reason}`);
 };
 
-// The engagement as the server now holds it, WITHOUT re-seeding the tabs from it — read after the page's
-// own writes so the approval tab and the send-for-approval gate follow what actually landed.
+// The engagement as the server now holds it, WITHOUT re-seeding the sections from it — read after the page's
+// own writes so the approval section and the send-for-approval gate follow what actually landed.
 const refreshEngagement = async () => {
   if (isNew.value || !remsId.value) return;
   const ws = await remsApi.engagement(remsId.value).catch(() => null);
@@ -1114,19 +1204,24 @@ const refreshEngagement = async () => {
 };
 
 // ---- What the page writes ----
-// Whether a client has been settled on: one on file, or a new one being described. The tab says which
+// Whether a client has been settled on: one on file, or a new one being described. The form says which
 // while it is open; a request read without it open is judged by the name it carries.
 const clientChosen = () => {
-  if (clientForm.existingClientReferenceId) return true;
+  if (clientForm.existingClientReferenceId || clientForm.maconomyCustomerNumber) return true;
   const fields = clientFieldsRef.value;
   return fields ? !!fields.addingNew : !!clientForm.clientName?.trim();
 };
 
-// The client half, which is what the API requires to accept a request at all. Top to bottom, as the tab
+// The client half, which is what the API requires to accept a request at all. Top to bottom, as the section
 // reads: who the client is, what kind of entity they are, then what they are called.
 const clientProblem = () => {
   if (!clientChosen()) return "Search for the client, or add a new one.";
   if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
+  // A Maconomy customer's name and email are Maconomy's to hold: nothing here is asked for or checked.
+  // One with no email can still be filed as a draft; sending is what waits for the address.
+  if (clientForm.maconomyCustomerNumber) {
+    return clientForm.type ? "" : "Choose how this referral relates to THF's records.";
+  }
   // Each of the two, because a surname on its own composes into a name that would otherwise pass.
   if (isIndividualEntityType(setupForm.entityType)) {
     if (!clientForm.clientFirstName?.trim() || !clientForm.clientLastName?.trim()) {
@@ -1147,7 +1242,7 @@ const clientProblem = () => {
   return "";
 };
 
-// The rest of the first tab, written by endpoints of its own once the request exists. Every field here is
+// The rest of the client section, written by endpoints of its own once the request exists. Every field here is
 // marked required on the form, so filing the draft asks for all of them rather than only the ones the
 // create endpoint happens to check.
 const setupProblem = () => {
@@ -1161,7 +1256,16 @@ const createProblem = () => clientProblem() || setupProblem();
 
 // No `description`: "Message from Partner" is not on the form, and leaving the field out of the payload is
 // what preserves it — the endpoint reads an omitted field as "leave this alone".
-const clientPayload = () => ({
+const clientPayload = () => (clientForm.maconomyCustomerNumber ? maconomyClientPayload() : typedClientPayload());
+
+// A Maconomy customer is named by number and nothing else: what is on screen about them was read from
+// Maconomy, and sending it back would be asking the portal to keep a copy.
+const maconomyClientPayload = () => ({
+  type: clientForm.type,
+  maconomyCustomerNumber: clientForm.maconomyCustomerNumber
+});
+
+const typedClientPayload = () => ({
   type: clientForm.type,
   clientName: clientForm.clientName,
   // The PARTS, so the server does not have to guess where a name splits.
@@ -1181,7 +1285,7 @@ const autoSaveOn = computed(() =>
   !isNew.value && !!remsId.value && isEditing.value && canSaveForm.value);
 
 // What the request said last time the page read or wrote it. Compared before a write so opening a record,
-// touching nothing, and switching tabs does not file a save of the identical thing.
+// touching nothing, and leaving it does not file a save of the identical thing.
 let clientBaseline = "";
 const clientSnapshot = () => JSON.stringify(clientPayload());
 
@@ -1197,7 +1301,7 @@ const {
     if (!canEditClient.value) return "";
     const problem = clientProblem();
     if (problem) {
-      // The chip says the tab cannot be saved; this is what points at the field that is why.
+      // The chip says the client cannot be saved; this is what points at the field that is why.
       attempted.value = true;
       clientUnsaved = true;
       return problem;
@@ -1210,8 +1314,9 @@ const {
       const payload = clientPayload();
       request.value = await remsApi.update(remsId.value, {
         ...payload,
-        // A null reference reads as "leave the link alone", so taking it off is said out loud.
-        clearExistingClientReference: !payload.existingClientReferenceId
+        // A null reference reads as "leave the link alone", so taking it off is said out loud. A Maconomy
+        // customer is linked by number, with no reference to take off.
+        clearExistingClientReference: !payload.existingClientReferenceId && !payload.maconomyCustomerNumber
       });
       clientBaseline = JSON.stringify(payload);
     }
@@ -1227,8 +1332,8 @@ const {
     // (`entityType` on the wire).
     if (!setupForm.cseUserId || !setupForm.entityType) {
       return setupForm.entityType
-        ? "The CSE and the Entity Type are saved together — choose a CSE on the Client Information tab."
-        : "The CSE and the Entity Type are saved together — choose an Entity Type on the Client Information tab.";
+        ? "The CSE and the Entity Type are saved together — choose a CSE under Client Information."
+        : "The CSE and the Entity Type are saved together — choose an Entity Type under Client Information.";
     }
     if (clientUnsaved) return "The entity type is saved once the client above it is complete.";
     await remsApi.saveForm(remsId.value, {
@@ -1294,7 +1399,7 @@ const load = async () => {
     loading.value = true;
     errorMsg.value = "";
     try {
-      // A refused workspace is not a failed page: the request itself still reads, and the setup tab
+      // A refused workspace is not a failed page: the request itself still reads, and the setup section
       // says why it is empty. Settled rather than awaited so one outcome cannot hide the other.
       const [detail, wsResult] = await Promise.all([
         remsApi.get(remsId.value),
@@ -1316,7 +1421,7 @@ const load = async () => {
     }
   } finally {
     clientBaseline = clientSnapshot();
-    // A tick, so the tabs re-rendering off the freshly seeded state settles before edits count again.
+    // A tick, so the sections re-rendering off the freshly seeded state settles before edits count again.
     await nextTick();
     resetSaves();
     resumeSaves();
@@ -1354,7 +1459,7 @@ const setMode = async (mode) => {
 };
 
 // ---- The one save: filing the draft ----
-// A request has to exist before anything else on this page can be written against it, so the first tab is
+// A request has to exist before anything else on this page can be written against it, so the client section is
 // committed by hand.
 const createDraft = async () => {
   attempted.value = true;
@@ -1570,23 +1675,14 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", warnOnUnload));
   border-radius: 6px;
 }
 
-/* The submitted form scrolls inside its own pane rather than making the page taller: the point of the
-   split is that both halves are on screen together. Sticky so the pane keeps pace as the form beside it
-   is scrolled. */
-.rf-submitted {
-  position: sticky;
-  top: 12px;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 140px);
-}
+/* As tall as what the client sent, and the page scrolls as one: a scroll of its own hid the bottom of a
+   long form, and a sticky pane taller than the screen never shows its end. */
 .rf-submitted__head {
   display: flex;
   align-items: flex-start;
   padding: 12px 14px;
 }
 .rf-submitted__body {
-  overflow: auto;
   padding: 14px;
 }
 
@@ -1603,11 +1699,32 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", warnOnUnload));
   .rf-work--split .rf-work__pane { flex: 1 1 auto !important; }
   .rf-work__gutter { display: none; }
   .rf-submitted {
-    position: static;
-    max-height: 60vh;
     margin-bottom: 16px;
   }
 }
+/* ── The sections (the read-only page) ───────────────────────────────────────────────────────────
+   One card each, stacked in the order the request is filled in. */
+.rf-work__pane--main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.rf-section__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.rf-section__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--q-primary);
+}
+.rf-section__body {
+  padding: 16px;
+}
+
+/* ── The tab strip (the form) ─────────────────────────────────────────────────────────────────── */
 .rf-tabs {
   padding: 0 4px;
   /* col gives flex-basis 0; without this the strip cannot shrink past its tabs and its own overflow
@@ -1630,7 +1747,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", warnOnUnload));
   padding: 6px 12px 6px 8px;
 }
 
-/* On a phone there is no width to share: three dense buttons and a six-tab strip on one line leaves
+/* On a phone there is no width to share: three dense buttons and a five-tab strip on one line leaves
    neither readable. The actions take their own line under the tabs instead. */
 @media (max-width: 599px) {
   .rf-tabbar { flex-wrap: wrap; }
@@ -1687,6 +1804,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", warnOnUnload));
 /* A phone spends the panel gutter on the fields instead, and the header actions line up with the
    breadcrumb above them once they have a line of their own. */
 @media (max-width: 599px) {
+  .rf-section__body,
   .rf-card :deep(.q-tab-panel) {
     padding: 12px 10px;
   }

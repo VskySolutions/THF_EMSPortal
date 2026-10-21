@@ -12,9 +12,11 @@ public static class PersonProfileMapper
     public static PersonProfileResponse Map(Person p, RecordAudit audit) => new(
         p.Id, p.PersonCode, p.UserId, p.TenantId,
         p.Suffix,
-        p.FirstName, p.MiddleName, p.LastName, p.DisplayName, p.FullName,
+        // A Maconomy client's name and contact details are Maconomy's; their own columns are empty.
+        p.FirstName, p.MiddleName, p.LastName,
+        p.IsMaconomyClient ? p.ClientName : p.DisplayName, p.IsMaconomyClient ? p.ClientName : p.FullName,
         p.PreferredName, p.Gender, p.DateOfBirth, p.MaritalStatus, p.Nationality,
-        p.PrimaryEmail, p.SecondaryEmail, p.MobileNumber, p.CountryCode, p.AlternateMobileNumber,
+        p.ClientEmail, p.SecondaryEmail, p.ClientPhone, p.CountryCode, p.AlternateMobileNumber,
         p.EmergencyContactName, p.EmergencyContactRelationship, p.EmergencyContactNumber,
         p.EmployeeCode,
         p.ProfileCompletionPercentage, p.IsProfileVerified, p.LastProfileUpdatedOn, p.Notes,

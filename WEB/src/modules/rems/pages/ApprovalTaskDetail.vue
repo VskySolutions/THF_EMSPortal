@@ -752,18 +752,12 @@ const showGovernment = computed(() => isGovernmentAudit(department.value, reques
 const taxForms = computed(() => engagement.value.tax?.taxForms || []);
 
 const attestCardTitle = computed(() =>
-  (showAssurance.value ? "Assurance — Client Acceptance Form & Fees" : "Audit — Client Acceptance Form"));
+  (showAssurance.value ? "Assurance — Client Acceptance Form & Year End" : "Audit — Client Acceptance Form"));
 
 const assuranceRows = computed(() => {
   const a = engagement.value.audit || {};
   return [
-    { label: "Fiscal Year End of Client", value: dateOnly(a.clientFiscalYearEnd) },
-    {
-      label: "Admin Fees",
-      value: a.adminFeesApply
-        ? (engagement.value.financialsRestricted ? "Yes" : (money(a.adminFeesAmount) || "Yes"))
-        : "No"
-    }
+    { label: "Fiscal Year End of Client", value: dateOnly(a.clientFiscalYearEnd) }
   ];
 });
 

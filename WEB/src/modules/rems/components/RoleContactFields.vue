@@ -40,8 +40,9 @@
         :error="!!err('email')" :error-message="err('email')"
       />
       <div class="col-12 col-sm-6">
-        <!-- Optional even on a required contact: roleComplete() asks only for a name and a valid email. -->
-        <app-phone-input v-model="role.phone" label="Phone Number" />
+        <!-- Optional unless the entity type asks for it (a trust or estate, a government body), in which
+             case every contact that is given at all carries one — see contactPhoneRequired. -->
+        <app-phone-input v-model="role.phone" label="Phone Number" :required="phoneRequired" />
         <div v-if="err('phone')" class="text-negative text-caption q-mt-xs">{{ err('phone') }}</div>
       </div>
     </div>
@@ -61,6 +62,8 @@ const props = defineProps({
   // What this contact is for. Empty on the roles that explain themselves (Self, Spouse).
   hint: { type: String, default: "" },
   required: { type: Boolean, default: false },
+  // The phone is owed too — on a required contact and on an optional one that is started.
+  phoneRequired: { type: Boolean, default: false },
   // Dotted payload path (e.g. "roles.self") used to look up per-field server messages.
   prefix: { type: String, default: "" },
   errors: { type: Object, default: () => ({}) }

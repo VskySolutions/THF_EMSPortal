@@ -23,6 +23,7 @@ internal sealed class EmailNotificationService : IEmailNotificationService
 {
     private readonly IEmailTemplateService _templates;
     private readonly ISmtpAccountRepository _smtpAccounts;
+    private readonly ITenantEmailSettingsRepository _emailSettings;
     private readonly ICredentialEncryptionService _encryption;
     private readonly ISmtpEmailSender _sender;
     private readonly ITenantRepository _tenants;
@@ -33,6 +34,7 @@ internal sealed class EmailNotificationService : IEmailNotificationService
     public EmailNotificationService(
         IEmailTemplateService templates,
         ISmtpAccountRepository smtpAccounts,
+        ITenantEmailSettingsRepository emailSettings,
         ICredentialEncryptionService encryption,
         ISmtpEmailSender sender,
         ITenantRepository tenants,
@@ -42,6 +44,7 @@ internal sealed class EmailNotificationService : IEmailNotificationService
     {
         _templates = templates;
         _smtpAccounts = smtpAccounts;
+        _emailSettings = emailSettings;
         _encryption = encryption;
         _sender = sender;
         _tenants = tenants;
@@ -51,7 +54,12 @@ internal sealed class EmailNotificationService : IEmailNotificationService
     }
 
     public async Task<bool> HasActiveSenderAsync(Guid tenantId, CancellationToken cancellationToken = default)
-        => await _smtpAccounts.GetActiveAsync(tenantId, cancellationToken) is not null;
+        => await NotificationsEnabledAsync(tenantId, cancellationToken)
+            && await _smtpAccounts.GetActiveAsync(tenantId, cancellationToken) is not null;
+
+    /// <summary>The tenant-wide switch. No settings row means it was never touched, and the default is on.</summary>
+    private async Task<bool> NotificationsEnabledAsync(Guid tenantId, CancellationToken cancellationToken)
+        => (await _emailSettings.GetByTenantAsync(tenantId, cancellationToken))?.NotificationsEnabled ?? true;
 
     public async Task<bool> SendAsync(
         Guid tenantId,
@@ -78,6 +86,16 @@ internal sealed class EmailNotificationService : IEmailNotificationService
 
         try
         {
+            // The tenant-wide switch comes before the account: an admin who turned notifications off
+            // expects silence even with a working account beneath it.
+            if (!await NotificationsEnabledAsync(tenantId, cancellationToken))
+            {
+                _logger.LogInformation("Skipping {TemplateKey} email for tenant {TenantId}: email notifications are turned off.", key, tenantId);
+                await RecordFailureAsync(tenantId, key, toEmail, messageId,
+                    EmailDeliveryFailureReason.NotificationsDisabled, null, cancellationToken);
+                return false;
+            }
+
             var account = await _smtpAccounts.GetActiveAsync(tenantId, cancellationToken);
             if (account is null)
             {

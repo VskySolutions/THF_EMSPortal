@@ -2,6 +2,7 @@ using System.Globalization;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Validators.Rems;
 using EmsPortal.Application.Abstractions.Email;
+using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.Tenancy;
@@ -15,6 +16,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -22,6 +25,7 @@ namespace EmsPortal.Api.Controllers;
 [ApiController]
 [Route("api/rems/public/forms")]
 [AllowAnonymous]
+[EnableRateLimiting(RateLimitPolicies.PublicFormRead)]
 [Produces("application/json")]
 [Tags("REMS Public Form")]
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
@@ -50,6 +54,10 @@ public sealed class RemsPublicFormController : ControllerBase
     private readonly IOptionSetRepository _optionSets;
     private readonly IOptionCodeResolver _codes;
     private readonly ILogger<RemsPublicFormController> _logger;
+    private readonly IMaconomyClientDirectory _maconomy;
+
+    /// <summary>The address this request's form is locked to, worked out once by <see cref="LoadFormAsync"/>.</summary>
+    private string _lockedEmail = string.Empty;
 
     public RemsPublicFormController(
         IRemsFormRepository forms,
@@ -67,8 +75,10 @@ public sealed class RemsPublicFormController : ControllerBase
         IOptions<AppOptions> appOptions,
         IOptionSetRepository optionSets,
         IOptionCodeResolver codes,
-        ILogger<RemsPublicFormController> logger)
+        ILogger<RemsPublicFormController> logger,
+        IMaconomyClientDirectory maconomy)
     {
+        _maconomy = maconomy;
         _forms = forms;
         _rems = rems;
         _clients = clients;
@@ -119,7 +129,7 @@ public sealed class RemsPublicFormController : ControllerBase
                 new RemsPublicFormResponse(
                     RemsPublicFormStates.Editable,
                     EntityType: form.EntityType!.Value,
-                    Prefill: BuildPrefill(rems),
+                    Prefill: BuildPrefill(rems, form.EntityType!.Value),
                     DraftPayload: RemsFormPayloadJson.TryDeserialize(CurrentDraft(form)?.DraftPayload),
                     ReferralSources: await ResolvePublicOptionsAsync(rems.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken)),
                 "REMS form resolved.")),
@@ -206,6 +216,7 @@ public sealed class RemsPublicFormController : ControllerBase
     /// read-only review presentation.
     /// </summary>
     [HttpPost("{inviteCode}/review")]
+    [EnableRateLimiting(RateLimitPolicies.PublicFormWrite)]
     [ProducesResponseType<ApiResponse<RemsReviewModel>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Review(
         string inviteCode,
@@ -237,6 +248,7 @@ public sealed class RemsPublicFormController : ControllerBase
 
     /// <summary>Transactionally submit the form (WO-113).</summary>
     [HttpPost("{inviteCode}/submit")]
+    [EnableRateLimiting(RateLimitPolicies.PublicFormWrite)]
     [ProducesResponseType<ApiResponse<RemsPublicFormResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Submit(
         string inviteCode,
@@ -289,6 +301,7 @@ public sealed class RemsPublicFormController : ControllerBase
     /// only.
     /// </summary>
     [HttpPost("{inviteCode}/cancel")]
+    [EnableRateLimiting(RateLimitPolicies.PublicFormWrite)]
     [ProducesResponseType<ApiResponse<RemsPublicCancelResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Cancel(string inviteCode, CancellationToken cancellationToken)
     {
@@ -409,7 +422,7 @@ public sealed class RemsPublicFormController : ControllerBase
             // EffectiveClientName, not ClientName: an individual gives their name in two boxes now, and
             // the joined echo beside them is the client's to send rather than ours to trust.
             Name = Clean(payload.EffectiveClientName) ?? string.Empty,
-            Email = form.Rems!.CustomerEmail ?? string.Empty, // LOCKED to the request's customer email.
+            Email = _lockedEmail, // LOCKED to the request's customer email.
             MobileNumber = Clean(payload.MobileNumber),
             ReferralSourceId = referralSourceId,
             ReferralSourceDetail = Clean(payload.ReferralSourceDetail),
@@ -734,7 +747,7 @@ public sealed class RemsPublicFormController : ControllerBase
         var contact = new RemsReviewContact(
             Clean(payload.EffectiveClientName), Clean(payload.ClientSuffix),
             Clean(payload.ClientFirstName), Clean(payload.ClientLastName),
-            rems.CustomerEmail ?? string.Empty, Clean(payload.MobileNumber), Clean(payload.ReferralSource));
+            _lockedEmail, Clean(payload.MobileNumber), Clean(payload.ReferralSource));
 
         var contract = string.Equals(entityType, RemsFormPayloadValidator.Government, StringComparison.Ordinal)
             ? new RemsReviewContractDetails(
@@ -810,14 +823,45 @@ public sealed class RemsPublicFormController : ControllerBase
             _tenantContext.Set(form.TenantId, string.Empty);
         }
 
+        if (form?.Rems is { } rems)
+        {
+            // No REMS controller ran first here, so a Maconomy customer's details are fetched explicitly.
+            await _maconomy.HydrateAsync(rems.ClientPerson, cancellationToken);
+            _lockedEmail = rems.CustomerEmail ?? string.Empty;
+            if (_lockedEmail.Length == 0 && rems.ClientPerson is { IsMaconomyClient: true })
+            {
+                // Maconomy cannot be read: the address the form was last sent to is the one it is locked to.
+                _lockedEmail = (await _forms.ListEmailEventsAsync(form.Id, cancellationToken))
+                    .Where(e => e.EventType is RemsFormEmailEventType.Sent or RemsFormEmailEventType.Reminder
+                        && !string.IsNullOrWhiteSpace(e.RecipientEmail))
+                    .OrderByDescending(e => e.OccurredOnUtc)
+                    .Select(e => e.RecipientEmail)
+                    .FirstOrDefault() ?? string.Empty;
+            }
+        }
+
         return form;
     }
 
     /// <summary>The locked prefill for the editable form.</summary>
-    private static RemsPublicPrefill BuildPrefill(REMS rems)
+    private RemsPublicPrefill BuildPrefill(REMS rems, string entityType)
     {
-        // STRAIGHT OFF THE CLIENT'S OWN RECORD, no splitting.
         var person = rems.ClientPerson;
+        if (person is { IsMaconomyClient: true })
+        {
+            // Maconomy holds one name string. For a person it is nearly always "LAST, FIRST", so that is
+            // offered split — a starting point the client corrects, not an answer.
+            var whole = person.Maconomy?.Name.Trim() ?? string.Empty;
+            var comma = whole.IndexOf(',');
+            var individual = RemsClientEntityType.IsIndividual(entityType);
+            return new RemsPublicPrefill(
+                whole,
+                individual && comma > 0 ? whole[(comma + 1)..].Trim() : string.Empty,
+                individual && comma > 0 ? whole[..comma].Trim() : string.Empty,
+                null, _lockedEmail, rems.CustomerMobileNumber);
+        }
+
+        // STRAIGHT OFF THE CLIENT'S OWN RECORD, no splitting.
         var first = person?.IsOrganisation == true ? string.Empty : person?.FirstName ?? string.Empty;
         var last = person?.IsOrganisation == true ? string.Empty : person?.LastName ?? string.Empty;
         var name = person?.IsOrganisation == true
@@ -864,7 +908,9 @@ public sealed class RemsPublicFormController : ControllerBase
         else if (RemsFormPayloadValidator.IsBusinessGroup(entityType))
         {
             yield return (roles.PrimaryContact, nameof(RemsContactRole.PrimaryClientContact), true);
-            yield return (roles.FinancialContact, nameof(RemsContactRole.FinancialContact), true);
+            // Owed by every business but a commercial one, which may give a financial contact or not.
+            yield return (roles.FinancialContact, nameof(RemsContactRole.FinancialContact),
+                entityType != RemsFormPayloadValidator.Commercial);
             // Trust and Estate only. Yielded for the whole family — a null role stages nothing, and an
             // answer given before the entity type changed is still an answer (as with the retired roles).
             yield return (roles.TrustEstateContact, nameof(RemsContactRole.TrustEstateContact), false);
@@ -875,7 +921,8 @@ public sealed class RemsPublicFormController : ControllerBase
         }
         else if (entityType == RemsFormPayloadValidator.Government)
         {
-            yield return (roles.FinanceDirector, nameof(RemsContactRole.FinanceDirector), true);
+            // Neither is owed; a government body gives whichever it has.
+            yield return (roles.FinanceDirector, nameof(RemsContactRole.FinanceDirector), false);
             yield return (roles.OtherContact, nameof(RemsContactRole.OtherContact), false);
             yield return (roles.BillingContact, nameof(RemsContactRole.BillingContact), false);   // retired
         }

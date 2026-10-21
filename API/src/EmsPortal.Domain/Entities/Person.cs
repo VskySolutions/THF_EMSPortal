@@ -134,6 +134,42 @@ public class Person : AuditableEntity
     /// </summary>
     public string ClientDisplayName { get; private set; } = string.Empty;
 
+    // ---- A client that is a Maconomy customer ----
+
+    /// <summary>
+    /// The Maconomy customer this client is, when they were picked from Maconomy. It is ALL the portal
+    /// holds about them: the name, email and phone columns stay empty and are read from Maconomy by this
+    /// number. Unique per tenant.
+    /// </summary>
+    public string? MaconomyCustomerNumber { get; set; }
+
+    /// <summary>What Maconomy says about that customer, set on each read and never saved. Null when it could not be read.</summary>
+    [NotMapped]
+    public MaconomyClientDetails? Maconomy { get; set; }
+
+    [NotMapped]
+    public bool IsMaconomyClient => !string.IsNullOrWhiteSpace(MaconomyCustomerNumber);
+
+    /// <summary>
+    /// The client's name wherever it is READ: Maconomy's for a Maconomy customer, the record's own
+    /// otherwise. SQL cannot see the first, so lists search and sort it through the client directory.
+    /// </summary>
+    [NotMapped]
+    public string ClientName => IsMaconomyClient
+        ? Maconomy?.Name ?? MaconomyPlaceholderName(MaconomyCustomerNumber!)
+        : ClientDisplayName;
+
+    /// <summary>What stands in for the name while Maconomy cannot be read: the one thing the portal does hold.</summary>
+    public static string MaconomyPlaceholderName(string customerNumber) => $"Maconomy customer {customerNumber.Trim()}";
+
+    /// <summary>The email to reach the client at: Maconomy's for a Maconomy customer.</summary>
+    [NotMapped]
+    public string? ClientEmail => IsMaconomyClient ? Maconomy?.Email : PrimaryEmail;
+
+    /// <summary>The client's telephone: Maconomy's for a Maconomy customer.</summary>
+    [NotMapped]
+    public string? ClientPhone => IsMaconomyClient ? Maconomy?.Phone : MobileNumber;
+
     // ---- Contact information ----
     public string? PrimaryEmail { get; set; }
     public string? SecondaryEmail { get; set; }

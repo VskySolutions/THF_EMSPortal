@@ -116,7 +116,7 @@ import { useDateFormat, formatDateOnly } from "composables/useDateFormat";
 import { useRemsMeta, isBusinessEntityType } from "modules/rems/useRemsMeta";
 import { addressText, billingAddressList, addresseeParts } from "modules/rems/remsAddress";
 import {
-  answeredRoleKeys, groupKey, normalizeRoles, roleDefsFor, roleHasAny, roleNameParts
+  answeredRoleKeys, normalizeRoles, roleDefsFor, roleHasAny, roleNameParts
 } from "modules/rems/remsContactRoles";
 import { additionalIndividualHasData, individualSummary } from "modules/rems/useRemsIntakeForm";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
@@ -277,8 +277,8 @@ const groups = computed(() => {
   }
 
   // Contacts.
-  const key = groupKey(view.value?.entityType, isBusiness.value);
-  const contactRows = roleDefsFor(key, answeredRoleKeys(roles))
+  const entityType = view.value?.entityType;
+  const contactRows = roleDefsFor(entityType, answeredRoleKeys(roles))
     .filter((def) => roleHasAny(roles[def.key]))
     .map((def) => ({
       role: def.label,
@@ -288,7 +288,7 @@ const groups = computed(() => {
     }));
   // Absent where the group is asked for none and the submission carries none — an individual, whose own
   // details are the Contact group and whose family has a group of its own.
-  if (contactRows.length || roleDefsFor(key).length) {
+  if (contactRows.length || roleDefsFor(entityType).length) {
     result.push({ title: "Contacts", icon: "o_groups", kind: "contacts", rows: contactRows });
   }
 

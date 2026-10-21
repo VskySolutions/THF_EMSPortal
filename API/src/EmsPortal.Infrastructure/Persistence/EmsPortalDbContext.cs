@@ -1,8 +1,10 @@
 using EmsPortal.Application.Abstractions.Security;
 using EmsPortal.Application.Abstractions.Tenancy;
 using EmsPortal.Domain.Entities;
+using EmsPortal.Shared.Configuration;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Infrastructure.Persistence;
 
@@ -26,12 +28,17 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public EmsPortalDbContext(
         DbContextOptions<EmsPortalDbContext> options,
         ITenantContext tenantContext,
-        IActorAccessor actorAccessor)
+        IActorAccessor actorAccessor,
+        IOptions<LimitsOptions> limits)
         : base(options)
     {
         _tenantContext = tenantContext;
         _actorAccessor = actorAccessor;
+        MaxRows = limits.Value.Paging.MaxPageSize < 1 ? 1 : limits.Value.Paging.MaxPageSize;
     }
+
+    /// <summary>The most rows a whole-list read returns (Limits:Paging:MaxPageSize). Paged reads are clamped to it on the way in.</summary>
+    public int MaxRows { get; }
 
     public DbSet<AuditTrailEntry> AuditTrail => Set<AuditTrailEntry>();
 
@@ -73,6 +80,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SmtpAccount> SmtpAccounts => Set<SmtpAccount>();
     public DbSet<MaconomyConnection> MaconomyConnections => Set<MaconomyConnection>();
     public DbSet<TenantBranding> TenantBrandings => Set<TenantBranding>();
+    public DbSet<TenantEmailSettings> TenantEmailSettings => Set<TenantEmailSettings>();
 
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
 
@@ -155,6 +163,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<SmtpAccount>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<MaconomyConnection>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<TenantBranding>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<TenantEmailSettings>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Universal Features (Phase 14): every UF table is tenant-scoped + soft-deletable, so it
         // carries the combined ambient-tenant + soft-delete filter. FieldModifiedLog is the lone
@@ -206,6 +215,10 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<RemsDepartmentDirector>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSFormSubmission>().HasQueryFilter(e => !_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId);
         modelBuilder.Entity<REMSFormEmailEvent>().HasQueryFilter(e => !_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<REMSAdditionalIndividual>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<REMSAdditionalEntity>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<REMSSendBack>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<REMSDelegation>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Soft-delete filters for the non-tenant-scoped entities.
         modelBuilder.Entity<Tenant>().HasQueryFilter(e => !e.Deleted);
@@ -326,6 +339,9 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                     break;
                 case TenantBranding tenantBranding when tenantBranding.TenantId == Guid.Empty:
                     tenantBranding.TenantId = _tenantContext.TenantId;
+                    break;
+                case TenantEmailSettings tenantEmailSettings when tenantEmailSettings.TenantId == Guid.Empty:
+                    tenantEmailSettings.TenantId = _tenantContext.TenantId;
                     break;
 
                 // ---- Universal Features (Phase 14) ----

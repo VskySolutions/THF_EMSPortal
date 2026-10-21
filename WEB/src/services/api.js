@@ -235,7 +235,11 @@ export const smtpAccountApi = {
   activate: (id, tenantId) => api.put(`/api/admin/smtp-accounts/${id}/activate`, null, { params: { tenantId } }).then(unwrap),
   // body: { recipientEmail } → { success, sentAtUtc?, serverResponse?, errorCategory?, errorDetail? }
   test: (id, recipientEmail, tenantId) =>
-    api.post(`/api/admin/smtp-accounts/${id}/test`, { recipientEmail }, { params: { tenantId } }).then(unwrap)
+    api.post(`/api/admin/smtp-accounts/${id}/test`, { recipientEmail }, { params: { tenantId } }).then(unwrap),
+  // The tenant-wide switch over every notification email. → { notificationsEnabled, updatedByName, updatedOnUtc }
+  settings: (tenantId) => api.get("/api/admin/email-settings", { params: { tenantId } }).then(unwrap),
+  // payload: { notificationsEnabled }. Live at once; test sends are unaffected.
+  saveSettings: (payload, tenantId) => api.put("/api/admin/email-settings", payload, { params: { tenantId } }).then(unwrap)
 };
 
 // The tenant's Maconomy connection and the customer lookup it powers. `tenantId` is the Super Admin's
@@ -505,10 +509,11 @@ export const remsApi = {
   quickCounts: (params) => api.get("/api/rems/requests/quick-counts", remsListParams(params)).then(unwrap),
   get: (id) => api.get(`/api/rems/requests/${id}`).then(unwrap),
   // payload: { existingClientReferenceId?, clientName, type, description?, customerEmail?,
-  // customerMobileNumber?, mediaId? } No reviewing admin is named.
+  // customerMobileNumber?, mediaId? } No reviewing admin is named. For a Maconomy customer the payload
+  // is { type, maconomyCustomerNumber }: they are named by number and nothing else about them is sent.
   create: (payload) => api.post("/api/rems/requests", payload).then(unwrap),
   // payload: any subset of { description, type, clientName, customerEmail, customerMobileNumber,
-  // existingClientReferenceId } — null fields are unchanged.
+  // existingClientReferenceId, maconomyCustomerNumber } — null fields are unchanged.
   update: (id, payload) => api.put(`/api/rems/requests/${id}`, payload).then(unwrap),
   // Attach already-uploaded media (POST /api/media first) to an existing request. Media the request
   // already carries is ignored, so a retried save cannot file the same document twice. Returns the detail.
@@ -555,6 +560,14 @@ export const remsApi = {
   // corporateName, isOrganisation, entityType }]. `excludingRemsId` is the request being edited.
   clientLookup: (q, excludingRemsId) =>
     api.get("/api/rems/clients/lookup", { params: { q, excludingRemsId } }).then(unwrap),
+  // The Maconomy half of the same search: { status: "ok" | "notConnected" | "unavailable", note, more,
+  // items }. Each item is a picker row carrying `maconomyCustomerNumber`; `id` is set only where a
+  // request already names that customer. Always a 200 — an unreachable Maconomy is a status, not an error.
+  maconomyClientLookup: (q, excludingRemsId) =>
+    api.get("/api/rems/clients/maconomy", { params: { q, excludingRemsId } }).then(unwrap),
+  // One Maconomy customer as a picker row, read from Maconomy now rather than from what the server holds.
+  maconomyCustomer: (number, excludingRemsId) =>
+    api.get("/api/rems/clients/maconomy/customer", { params: { number, excludingRemsId } }).then(unwrap),
   // One client on file, in the picker's shape.
   client: (id, excludingRemsId) =>
     api.get(`/api/rems/clients/${id}`, { params: { excludingRemsId } }).then(unwrap),
@@ -609,8 +622,7 @@ export const remsApi = {
   // Take the signed client-acceptance form off the engagement. The link goes; the stored file itself is
   // left where it is. Idempotent — an engagement carrying none answers 200, not 404.
   removeCaf: (id) => api.delete(`/api/rems/engagements/${id}/audit/client-acceptance-form`).then(unwrap),
-  // payload: { clientFiscalYearEnd?, adminFeesApply?, adminFeesAmount? } — the Assurance half of the attest
-  // detail the CAF above shares. Answering adminFeesApply=false clears the amount server-side.
+  // payload: { clientFiscalYearEnd? } — the Assurance half of the attest detail the CAF above shares.
   updateAuditDetail: (id, payload) => api.put(`/api/rems/engagements/${id}/audit`, payload).then(unwrap),
   // payload.
   updateGovernment: (id, payload) => api.put(`/api/rems/engagements/${id}/government`, payload).then(unwrap),

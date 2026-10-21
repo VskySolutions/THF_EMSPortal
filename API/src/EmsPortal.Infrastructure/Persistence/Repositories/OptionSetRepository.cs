@@ -27,6 +27,7 @@ internal sealed class OptionSetRepository : IOptionSetRepository
         return await query
             .OrderByDescending(s => s.UpdatedOnUtc)
             .ThenBy(s => s.Name)
+            .Take(_dbContext.MaxRows)
             .ToListAsync(cancellationToken);
     }
 
@@ -84,6 +85,7 @@ internal sealed class OptionSetRepository : IOptionSetRepository
         => await _dbContext.OptionSetItems
             .Where(i => i.OptionSetId == setId)
             .OrderBy(i => i.SortOrder)
+            .Take(_dbContext.MaxRows)
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<OptionSetItem>> ListItemsByIdsAsync(

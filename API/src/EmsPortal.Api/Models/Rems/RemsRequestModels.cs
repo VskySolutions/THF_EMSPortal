@@ -37,6 +37,13 @@ public sealed class CreateRemsRequestRequest
     /// <summary>Optional Client Service Executive (User id).</summary>
     public Guid? CSEId { get; set; }
 
+    /// <summary>
+    /// The Maconomy customer the client IS, when they were picked from Maconomy. The request then names
+    /// that customer by number alone: nothing of the name, email or mobile above is kept, and all three
+    /// are read from Maconomy wherever the client is shown.
+    /// </summary>
+    public string? MaconomyCustomerNumber { get; set; }
+
     /// <summary>Optional single attachment: a previously-uploaded media id (POST /api/media).</summary>
     public Guid? MediaId { get; set; }
 
@@ -72,6 +79,9 @@ public sealed class UpdateRemsRequestRequest
     public string? CustomerMobileNumber { get; set; }
     public Guid? CSEId { get; set; }
     public Guid? ExistingClientReferenceId { get; set; }
+
+    /// <inheritdoc cref="CreateRemsRequestRequest.MaconomyCustomerNumber"/>
+    public string? MaconomyCustomerNumber { get; set; }
 
     /// <summary>
     /// Takes the request off the existing client it is linked to, so the details sent with it file a
@@ -158,7 +168,9 @@ public sealed record RemsRequestRow(
     string? CreatedBy,
     string? UpdatedBy,
     DateTime UpdatedOnUtc,
-    RemsRowActions Actions);
+    RemsRowActions Actions,
+    /// <summary>Set when the client is a Maconomy customer.</summary>
+    string? MaconomyCustomerNumber = null);
 
 /// <summary>An attached file on a request detail (linked media).</summary>
 public sealed record RemsFileRef(
@@ -206,11 +218,16 @@ public sealed record RemsRequestDetail(
     /// The client's own intake link, for copying — non-null only while it is theirs to follow: the
     /// form has been sent and they have not answered yet.
     /// </summary>
-    string? ClientFormLink);
+    string? ClientFormLink,
+    /// <summary>Set when the client is a Maconomy customer: their name, email and mobile above are Maconomy's, read by this number.</summary>
+    string? MaconomyCustomerNumber = null,
+    /// <summary>The client is a Maconomy customer and Maconomy could not be read, so the name is a stand-in and the contact details are missing.</summary>
+    bool MaconomyUnavailable = false);
 
 /// <summary>A client-lookup result (WO-111).</summary>
 public sealed record RemsClientLookupItem(
-    Guid Id,
+    /// <summary>The client's record. Null for a Maconomy customer no request has named yet.</summary>
+    Guid? Id,
     /// <summary>The name as it reads — "Smith John Jr." for a person, the legal name for an organisation.</summary>
     string Name,
     string? Email,
@@ -230,7 +247,29 @@ public sealed record RemsClientLookupItem(
     /// The REMS.EntityType code the client's record holds, which a request for them is filed under. Null
     /// for an organisation no intake form has classified yet.
     /// </summary>
-    string? EntityType);
+    string? EntityType,
+    /// <summary>Set for a Maconomy customer: everything above was read from Maconomy by this number.</summary>
+    string? MaconomyCustomerNumber = null,
+    /// <summary>The REMS.Industry code Maconomy's specification 1 stands for, so the picker can fill the industry in. Null otherwise.</summary>
+    string? Industry = null);
+
+/// <summary>The Maconomy half of the client search.</summary>
+public sealed record RemsMaconomyLookup(
+    /// <summary><c>ok</c>, <c>notConnected</c> (the tenant has no Maconomy to search) or <c>unavailable</c>.</summary>
+    string Status,
+    /// <summary>What to tell the person searching when Maconomy could not be asked.</summary>
+    string? Note,
+    /// <summary>More customers matched than are returned.</summary>
+    bool More,
+    IReadOnlyList<RemsClientLookupItem> Items);
+
+/// <summary>The three answers <see cref="RemsMaconomyLookup.Status"/> gives.</summary>
+public static class RemsMaconomyLookupStatuses
+{
+    public const string Ok = "ok";
+    public const string NotConnected = "notConnected";
+    public const string Unavailable = "unavailable";
+}
 
 /// <summary>
 /// The clients already on file that a NEW client's details belong to — what the save would refuse or

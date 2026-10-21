@@ -22,6 +22,7 @@ export function useAutoSave (savers, options = {}) {
     state.value = "saving";
     let failure = null;
     let wrote = false;
+    let retryAfterMs = 0;
 
     for (const key of keys) {
       if (!dirty[key]) continue;
@@ -36,6 +37,10 @@ export function useAutoSave (savers, options = {}) {
         }
       } catch (err) {
         dirty[key] = true;
+        if (err?.response?.status === 429) {
+          retryAfterMs = Math.max(retryAfterMs, (Number(err.response.headers?.["retry-after"]) || 30) * 1000);
+          continue;
+        }
         const kind = err?.response ? "error" : "blocked";
         // A server refusal outranks a not-fillable-yet part: it is the one the user has to act on.
         if (!failure || (kind === "error" && failure.kind !== "error")) {
@@ -43,6 +48,13 @@ export function useAutoSave (savers, options = {}) {
           failure = { kind, message: message.value };
         }
       }
+    }
+
+    if (retryAfterMs > 0 && !failure) {
+      // The API's rate limit, not a refusal: the data is fine and goes again after the wait the API named.
+      failure = { kind: "pending", message: `Too many saves at once; trying again in ${Math.ceil(retryAfterMs / 1000)} seconds.` };
+      clearTimeout(timer);
+      timer = setTimeout(() => { void flush(); }, retryAfterMs);
     }
 
     // A part re-dirtied WHILE this pass was writing has a timer of its own already running, so the pass

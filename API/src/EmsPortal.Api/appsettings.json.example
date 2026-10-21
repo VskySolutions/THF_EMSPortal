@@ -1,19 +1,32 @@
 {
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
+  "ConnectionStrings": {
+    "SqlServer": "Data Source=<server>;Initial Catalog=<database>;User Id=<user>;Password=<password>;MultipleActiveResultSets=True;TrustServerCertificate=True;"
   },
-  "AllowedHosts": "*",
   "App": {
     "BaseUrl": ""
   },
-  "ErrorHandling": {
-    "IncludeExceptionDetails": false
+  "Cors": {
+    "AllowedOrigins": [
+      "https://thf.vskyapplications.com",
+      "https://thf.falconsolutions.us"
+    ]
   },
-  "ConnectionStrings": {
-    "SqlServer": "Data Source=<server>;Initial Catalog=<database>;User Id=<user>;Password=<password>;MultipleActiveResultSets=True;TrustServerCertificate=True;"
+  "Limits": {
+    "RateLimiting": {
+      "Enabled": true,
+      "General": { "PermitLimit": 600, "WindowSeconds": 60, "QueueLimit": 0 },
+      "Login": { "PermitLimit": 10, "WindowSeconds": 60, "QueueLimit": 0 },
+      "PasswordReset": { "PermitLimit": 5, "WindowSeconds": 900, "QueueLimit": 0 },
+      "PublicFormRead": { "PermitLimit": 60, "WindowSeconds": 60, "QueueLimit": 0 },
+      "PublicFormWrite": { "PermitLimit": 10, "WindowSeconds": 60, "QueueLimit": 0 },
+      "Email": { "PermitLimit": 10, "WindowSeconds": 60, "QueueLimit": 0 },
+      "MaconomySearch": { "PermitLimit": 60, "WindowSeconds": 60, "QueueLimit": 0 },
+      "PublicContent": { "PermitLimit": 300, "WindowSeconds": 60, "QueueLimit": 0 },
+      "UploadConcurrency": 2
+    },
+    "Paging": { "MaxPageSize": 1000, "MaxBulkIds": 1000 },
+    "Uploads": { "MaxFileMb": 10, "BrandingImageMb": 2, "BrandingBackgroundMb": 5, "MaxRequestBodyMb": 30 },
+    "Timeouts": { "DefaultSeconds": 30, "LongRunningSeconds": 120 }
   },
   "Hangfire": {
     "WorkerCount": 10,
@@ -39,12 +52,30 @@
   "ApiKeys": {
     "Keys": []
   },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ErrorHandling": {
+    "IncludeExceptionDetails": false
+  },
+  "Serilog": {
+    "MinimumLevel": "Information",
+    "WriteTo": []
+  },
   "Maconomy": {
     "MaxLimit": 100,
     "TimeoutSeconds": 15,
     "TokenLifetimeMinutes": 15,
     "TokenRefreshMarginSeconds": 60,
-    "SearchCacheSeconds": 30
+    "SearchCacheSeconds": 30,
+    "CustomerCacheSeconds": 600,
+    "NumbersPerCall": 100,
+    "FailureCooldownSeconds": 60,
+    "PreloadAllCustomers": false,
+    "PreloadMaxRows": 50000
   },
   "Rems": {
     "ApprovalPolicy": {
@@ -53,9 +84,5 @@
       "TaxExceptionCses": [ "James Previte", "Stephen Hamic" ],
       "TaxFeeCeilingWithoutShareholder": 10000
     }
-  },
-  "Serilog": {
-    "MinimumLevel": "Information",
-    "WriteTo": []
   }
 }

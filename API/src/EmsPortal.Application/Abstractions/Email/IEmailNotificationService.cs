@@ -21,8 +21,8 @@ public interface IEmailNotificationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Fast check (no SMTP round-trip) of whether the tenant has an active SMTP account, i.e. whether
-    /// a queued email will actually be attempted.
+    /// Fast check (no SMTP round-trip) of whether a queued email will actually be attempted: the tenant
+    /// has not turned its notifications off, and it has an active SMTP account.
     /// </summary>
     Task<bool> HasActiveSenderAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }

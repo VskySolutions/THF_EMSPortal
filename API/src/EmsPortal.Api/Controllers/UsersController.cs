@@ -165,6 +165,14 @@ public sealed class UsersController : ControllerBase
                 ApiErrorCodes.DuplicateIdentifier, "Person is already a user.", person.PersonCode));
         }
 
+        // A login needs a name and an email on the record, and this one holds a customer number alone.
+        if (person.IsMaconomyClient)
+        {
+            return Conflict(ApiResponseFactory.Error(
+                ApiErrorCodes.ValidationFailed, "This client is a Maconomy customer.",
+                "A Maconomy customer's record holds no details of its own, so it cannot be made a user."));
+        }
+
         var email = string.IsNullOrWhiteSpace(request.Email) ? person.PrimaryEmail : request.Email;
         if (string.IsNullOrWhiteSpace(email))
         {
@@ -267,9 +275,6 @@ public sealed class UsersController : ControllerBase
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         // Everyone sees only the ACTIVE tenant's users — a Super Admin included.
         var activeTenantId = User.GetActiveTenantId();
         var tenantFilter = tenantId is { } requestedTenantId && User.HasPermission(Permissions.TenantsWrite)

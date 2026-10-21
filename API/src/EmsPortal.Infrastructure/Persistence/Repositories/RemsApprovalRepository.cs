@@ -9,10 +9,12 @@ namespace EmsPortal.Infrastructure.Persistence.Repositories;
 internal sealed class RemsApprovalRepository : IRemsApprovalRepository
 {
     private readonly EmsPortalDbContext _dbContext;
+    private readonly MaconomyClientReader _maconomy;
 
-    public RemsApprovalRepository(EmsPortalDbContext dbContext)
+    public RemsApprovalRepository(EmsPortalDbContext dbContext, MaconomyClientReader maconomy)
     {
         _dbContext = dbContext;
+        _maconomy = maconomy;
     }
 
     public Task<REMSApprovalRound?> GetRoundByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -107,11 +109,11 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
             {
                 Id = t.Round!.Engagement!.Rems!.ClientPersonId!.Value,
                 Name = t.Round!.Engagement!.Rems!.ClientPerson!.ClientDisplayName,
+                Maconomy = t.Round!.Engagement!.Rems!.ClientPerson!.MaconomyCustomerNumber,
             })
             .Distinct()
-            .OrderBy(c => c.Name)
             .ToListAsync(cancellationToken);
-        return clients.Select(c => new RemsClientChoice(c.Id, c.Name)).ToList();
+        return _maconomy.Choices(clients.Select(c => (c.Id, c.Name, c.Maconomy)));
     }
 
     /// <summary>
@@ -131,11 +133,14 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
             // Against the client's name as the row SHOWS it — "Smith John Jr." — and against each half of
             // it on its own, like the other REMS lists: surname first is how it reads, but nobody hunting
             // for John Smith types "Smith John".
+            var maconomy = _maconomy.NumbersByName(t);
             tasks = tasks.Where(x =>
                 x.Round!.Engagement!.Rems!.REMSNumber.Contains(t) ||
                 x.Round!.Engagement!.Rems!.ClientPerson!.ClientDisplayName.Contains(t) ||
                 x.Round!.Engagement!.Rems!.ClientPerson!.FirstName.Contains(t) ||
-                x.Round!.Engagement!.Rems!.ClientPerson!.LastName.Contains(t));
+                x.Round!.Engagement!.Rems!.ClientPerson!.LastName.Contains(t) ||
+                (x.Round!.Engagement!.Rems!.ClientPerson!.MaconomyCustomerNumber != null
+                    && maconomy.Contains(x.Round!.Engagement!.Rems!.ClientPerson!.MaconomyCustomerNumber)));
         }
         if (query.Role is { } role)
         {
@@ -281,6 +286,22 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
             .Add("createdOnUtc", t => t.CreatedOnUtc)
             .Add("updatedOnUtc", t => t.UpdatedOnUtc, t => t.Round!.SentOnUtc);
 
+        // A Maconomy client's name is not in the database, so with any in the inbox its Client order is
+        // worked out in memory over the whole filtered set and only that page is then read.
+        if (string.Equals(query.Sort.SortBy, "client", StringComparison.OrdinalIgnoreCase)
+            && await tasks.AnyAsync(
+                t => t.Round!.Engagement!.Rems!.ClientPerson!.MaconomyCustomerNumber != null, cancellationToken))
+        {
+            var keys = await tasks
+                .Select(t => new ClientSortKey<DateTime>(
+                    t.Id, t.Round!.Engagement!.Rems!.ClientPerson!.ClientDisplayName,
+                    t.Round!.Engagement!.Rems!.ClientPerson!.MaconomyCustomerNumber, t.UpdatedOnUtc))
+                .ToListAsync(cancellationToken);
+            var ids = _maconomy.PageByName(keys, query.Sort.Descending, query.Page, query.Limit);
+            var page = await withGraph.Where(t => ids.Contains(t.Id)).ToListAsync(cancellationToken);
+            return (ids.Join(page, id => id, t => t.Id, (_, t) => t).ToList(), total);
+        }
+
         var items = await sorts.Apply(withGraph, query.Sort.SortBy, query.Sort.Descending)
             .Skip((query.Page - 1) * query.Limit)
             .Take(query.Limit)
@@ -294,6 +315,22 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
     public Task<bool> IsApproverOnRequestAsync(Guid remsId, Guid userId, CancellationToken cancellationToken = default)
         => _dbContext.RemsApprovalTasks
             .AnyAsync(t => t.ApproverId == userId && t.Round!.Engagement!.REMSId == remsId, cancellationToken);
+
+    public async Task<IReadOnlySet<Guid>> RequestsWithApproverAsync(
+        IReadOnlyCollection<Guid> remsIds, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var wanted = remsIds.Distinct().ToList();
+        if (wanted.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+        var found = await _dbContext.RemsApprovalTasks
+            .Where(t => t.ApproverId == userId && wanted.Contains(t.Round!.Engagement!.REMSId))
+            .Select(t => t.Round!.Engagement!.REMSId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return found.ToHashSet();
+    }
 
     // The same task the inbox row for this request opens, picked by the same rule the inbox collapse uses:
     // highest round number of THEIR OWN tasks, id as the tie-break. Projected to the id alone — the caller

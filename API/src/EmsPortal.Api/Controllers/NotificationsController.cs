@@ -52,9 +52,6 @@ public sealed class NotificationsController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
 
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         var (items, total) = await _notifications.ListAsync(
             userId, isRead, type, search, createdFrom, createdTo,
             new SortRequest(sortBy, descending), page, limit, cancellationToken);

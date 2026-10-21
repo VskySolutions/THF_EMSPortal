@@ -10,6 +10,12 @@ using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
+using Microsoft.AspNetCore.Http.Timeouts;
+using EmsPortal.Api.Filters;
+using EmsPortal.Shared.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -28,7 +34,7 @@ namespace EmsPortal.Api.Controllers;
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
 public sealed class AttachmentsController : ControllerBase
 {
-    private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB default
+    private readonly UploadLimits _uploads;
 
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -50,9 +56,11 @@ public sealed class AttachmentsController : ControllerBase
         IUploadRecordKeyResolver recordKeys,
         IUserRepository users,
         IActivityEventWriter activity,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IOptions<LimitsOptions> limits)
     {
         _attachments = attachments;
+        _uploads = limits.Value.Uploads;
         _fileStorage = fileStorage;
         _recordKeys = recordKeys;
         _users = users;
@@ -77,7 +85,9 @@ public sealed class AttachmentsController : ControllerBase
     }
 
     [HttpPost]
-    [RequestSizeLimit(MaxFileSizeBytes)]
+    [UploadSizeLimit(UploadKind.File)]
+    [EnableRateLimiting(RateLimitPolicies.Upload)]
+    [RequestTimeout(RequestTimeoutPolicies.LongRunning)]
     [ProducesResponseType<ApiResponse<AttachmentResponse>>(StatusCodes.Status201Created)]
     public async Task<IActionResult> Upload(
         [FromForm] IFormFile? file,
@@ -93,9 +103,9 @@ public sealed class AttachmentsController : ControllerBase
         {
             return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "A non-empty file is required."));
         }
-        if (file.Length > MaxFileSizeBytes)
+        if (file.Length > _uploads.MaxFileBytes)
         {
-            return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "File exceeds the 10 MB limit."));
+            return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", $"File exceeds the {_uploads.MaxFileMb} MB limit."));
         }
 
         var extension = Path.GetExtension(file.FileName);

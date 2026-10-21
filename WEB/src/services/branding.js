@@ -3,6 +3,7 @@
 //
 // A theme is SPARSE: null means "as the application ships". Nothing is emitted for a null, so a tenant
 // that has changed nothing gets exactly the stylesheets in src/css and not one rule more.
+import GOOGLE_FONTS from "./google-fonts.json";
 
 // ---- The stock look ----
 // What every null stands for. Shown in the editor as the placeholder beside an untouched setting, and
@@ -75,53 +76,47 @@ export const DEFAULT_THEME = Object.freeze({
 export const HEADING_KEYS = ["h1", "h2", "h3", "h4", "h5", "h6"];
 
 // ---- Fonts ----
-// The same list the API accepts. Everything but the system stack is fetched from Google Fonts by name.
+// Every Google Fonts family, by category, plus the system stack. The catalogue is google-fonts.json,
+// written by scripts/update-google-fonts.mjs, which hands the API the same file to validate against.
+// Everything but the system stack is fetched from Google Fonts by name.
+const SYSTEM_STACK = "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif";
+
+// What shows while a family loads, or if it never does.
+const CATEGORIES = [
+  { key: "sans-serif", label: "Sans serif", fallback: SYSTEM_STACK },
+  { key: "serif", label: "Serif", fallback: "Georgia, \"Times New Roman\", serif" },
+  { key: "display", label: "Display", fallback: SYSTEM_STACK },
+  { key: "handwriting", label: "Handwriting", fallback: SYSTEM_STACK },
+  { key: "monospace", label: "Monospace", fallback: "ui-monospace, Menlo, Consolas, monospace" }
+];
+
+const FONT_CATEGORY = new Map(
+  CATEGORIES.flatMap((c) => (GOOGLE_FONTS.families[c.key] || []).map((name) => [name, c])));
+
+// The dropdown: the system stack, then each category under a heading (the `header` shape AppSelect groups by).
 export const FONT_OPTIONS = [
-  { label: "System default", value: "System", serif: false },
-  { label: "Poppins", value: "Poppins", serif: false },
-  { label: "Inter", value: "Inter", serif: false },
-  { label: "Roboto", value: "Roboto", serif: false },
-  { label: "Open Sans", value: "Open Sans", serif: false },
-  { label: "Lato", value: "Lato", serif: false },
-  { label: "Montserrat", value: "Montserrat", serif: false },
-  { label: "Nunito", value: "Nunito", serif: false },
-  { label: "Nunito Sans", value: "Nunito Sans", serif: false },
-  { label: "Source Sans 3", value: "Source Sans 3", serif: false },
-  { label: "Work Sans", value: "Work Sans", serif: false },
-  { label: "DM Sans", value: "DM Sans", serif: false },
-  { label: "Manrope", value: "Manrope", serif: false },
-  { label: "Plus Jakarta Sans", value: "Plus Jakarta Sans", serif: false },
-  { label: "Raleway", value: "Raleway", serif: false },
-  { label: "Rubik", value: "Rubik", serif: false },
-  { label: "IBM Plex Sans", value: "IBM Plex Sans", serif: false },
-  { label: "Noto Sans", value: "Noto Sans", serif: false },
-  { label: "Merriweather (serif)", value: "Merriweather", serif: true },
-  { label: "Playfair Display (serif)", value: "Playfair Display", serif: true },
-  { label: "Lora (serif)", value: "Lora", serif: true },
-  { label: "Source Serif 4 (serif)", value: "Source Serif 4", serif: true },
-  { label: "Roboto Slab (serif)", value: "Roboto Slab", serif: true }
+  { label: "System default", value: "System" },
+  ...CATEGORIES.flatMap((c) => [
+    { label: c.label, value: `__cat_${c.key}`, disable: true, header: true },
+    ...(GOOGLE_FONTS.families[c.key] || []).map((name) => ({ label: name, value: name }))
+  ])
 ];
 
 // Already on the page through quasar.variables.scss and the roboto-font extra.
 const BUNDLED_FONTS = ["Poppins", "Merriweather", "Roboto"];
 
-const SYSTEM_STACK = "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif";
-
-const fontOption = (name) => FONT_OPTIONS.find((f) => f.value === name) || null;
-
 /** The CSS font-family for a font name off the list, or null for a name that is not on it. */
 export function fontStack (name) {
-  const font = fontOption(name);
-  if (!font) return null;
-  if (font.value === "System") return SYSTEM_STACK;
-  return `"${font.value}", ${font.serif ? "Georgia, \"Times New Roman\", serif" : SYSTEM_STACK}`;
+  if (name === "System") return SYSTEM_STACK;
+  const category = FONT_CATEGORY.get(name);
+  return category ? `"${name}", ${category.fallback}` : null;
 }
 
 /** Puts the stylesheet for these fonts on the page. Asking again for a font already loaded costs nothing. */
 export function ensureFonts (names) {
   if (typeof document === "undefined") return;
   [...new Set(names)]
-    .filter((name) => fontOption(name) && name !== "System" && !BUNDLED_FONTS.includes(name))
+    .filter((name) => FONT_CATEGORY.has(name) && !BUNDLED_FONTS.includes(name))
     .forEach((name) => {
       const id = `brand-font-${name.replace(/\s+/g, "-").toLowerCase()}`;
       if (document.getElementById(id)) return;

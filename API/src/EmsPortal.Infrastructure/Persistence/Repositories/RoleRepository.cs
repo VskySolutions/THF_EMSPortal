@@ -14,12 +14,13 @@ internal sealed class RoleRepository : IRoleRepository
     }
 
     public async Task<IReadOnlyList<Role>> ListAsync(CancellationToken cancellationToken = default)
-        => await _dbContext.Roles.OrderByDescending(r => r.UpdatedOnUtc).ToListAsync(cancellationToken);
+        => await _dbContext.Roles.OrderByDescending(r => r.UpdatedOnUtc).Take(_dbContext.MaxRows).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Role>> ListVisibleToTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
         => await _dbContext.Roles
             .Where(r => r.TenantId == null || r.TenantId == tenantId)
             .OrderByDescending(r => r.UpdatedOnUtc)
+            .Take(_dbContext.MaxRows)
             .ToListAsync(cancellationToken);
 
     public Task<Role?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

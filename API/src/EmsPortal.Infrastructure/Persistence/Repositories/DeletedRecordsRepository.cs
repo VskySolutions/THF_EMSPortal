@@ -67,7 +67,11 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
 
         // Nullable TenantId: these rows may be platform-wide, in which case no tenant owns them and only
         // an unscoped (Super Admin) caller sees them.
-        AddNullableTenant(map, EntityType.Person, _dbContext.Persons, p => p.DisplayName, p => p.TenantId);
+        // A Maconomy client's row has no name of its own to show, only the customer number.
+        AddNullableTenant(
+            map, EntityType.Person, _dbContext.Persons,
+            p => p.MaconomyCustomerNumber != null ? "Maconomy customer " + p.MaconomyCustomerNumber : p.DisplayName,
+            p => p.TenantId);
         AddNullableTenant(map, EntityType.OptionSet, _dbContext.OptionSets, s => s.Name, s => s.TenantId);
         // Identified by subject rather than TemplateKey: the key is an enum, and .ToString() on one inside
         // a projection is not reliably translatable — the subject is a plain string column and reads

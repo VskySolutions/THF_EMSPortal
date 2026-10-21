@@ -1,6 +1,8 @@
+import { LANDING_PATH } from "modules/auth/returnPath";
+
 const routes = [
-  // Home redirects to the dashboard, which renders the role-appropriate view (super / tenant / common).
-  { path: "/", redirect: "/dashboard" },
+  // Home is My REMS Requests; the Dashboard stays reachable from the menu.
+  { path: "/", redirect: LANDING_PATH },
   { path: "/not-authorized", name: "not_authorized", component: () => import("src/pages/not_authorized.vue"), meta: { title: "Not Authorized" } },
   { path: "/:catchAll(.*)*", component: () => import("pages/error.vue"), meta: { title: "Error" } }
 ];

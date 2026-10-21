@@ -92,7 +92,7 @@ import { addressText, billingAddressList, addresseeParts } from "modules/rems/re
 import { formatDateOnly } from "composables/useDateFormat";
 import { isBusinessEntityType } from "modules/rems/useRemsMeta";
 import {
-  answeredRoleKeys, groupKey, normalizeRoles, roleDefsFor, roleHasAny, roleNameParts
+  answeredRoleKeys, normalizeRoles, roleDefsFor, roleHasAny, roleNameParts
 } from "modules/rems/remsContactRoles";
 import { additionalIndividualHasData, individualSummary } from "modules/rems/useRemsIntakeForm";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
@@ -212,8 +212,7 @@ const groups = computed(() => {
   }
 
   // Additional Contacts (role contacts, in group order).
-  const key = groupKey(props.entityType, isBusinessEntityType(props.entityType));
-  const contactRows = roleDefsFor(key, answeredRoleKeys(roles))
+  const contactRows = roleDefsFor(props.entityType, answeredRoleKeys(roles))
     .filter((def) => roleHasAny(roles[def.key]))
     .map((def) => ({
       role: def.label,
@@ -223,7 +222,7 @@ const groups = computed(() => {
     }));
   // Absent entirely where the group is asked for none — an individual, whose own details are the first
   // card and whose family is a card of its own.
-  if (contactRows.length || roleDefsFor(key).length) {
+  if (contactRows.length || roleDefsFor(props.entityType).length) {
     result.push({ title: "Additional Contacts", icon: "o_groups", kind: "contacts", rows: contactRows });
   }
 

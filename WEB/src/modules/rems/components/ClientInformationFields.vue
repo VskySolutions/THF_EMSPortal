@@ -60,46 +60,52 @@
             <q-list separator>
               <!-- mousedown.prevent keeps focus in the search box, so choosing a result never fires the
                    blur that closes this menu out from under the click. -->
+              <!-- ONE LIST, TWO SOURCES: clients the portal holds, then Maconomy customers, each row
+                   saying which it is. -->
               <q-item
-                v-for="(client, i) in clientOptions" :key="client.id"
+                v-for="(client, i) in clientOptions" :key="rowKey(client)"
                 clickable :active="i === activeIndex" active-class="bg-grey-2 text-primary"
                 @mousedown.prevent @click="pickClient(client)"
               >
                 <q-item-section avatar>
-                  <q-icon
-                    :name="client.isOrganisation ? 'o_apartment' : 'o_person'"
-                    size="18px" color="grey-7"
-                  />
+                  <q-icon :name="rowIcon(client)" size="18px" color="grey-7" />
                 </q-item-section>
                 <q-item-section>
                   <q-item-label>
                     <app-name-with-suffix :name="client.name" :suffix="client.suffix" />
                   </q-item-label>
-                  <q-item-label caption>{{ client.email || "no email" }}</q-item-label>
+                  <q-item-label caption>{{ rowCaption(client) }}</q-item-label>
                 </q-item-section>
-                <!-- What tells two clients of one name apart. -->
+                <!-- Where the row comes from, and what tells two clients of one name apart. -->
                 <q-item-section side>
-                  <app-option-badge v-if="client.entityType" :option="entityTypeOption(client.entityType)" />
-                  <span v-else class="text-caption text-grey-6">Not recorded</span>
+                  <div class="cif-tags">
+                    <span class="cif-source" :class="{ 'cif-source--maconomy': !!client.maconomyCustomerNumber }">
+                      {{ client.maconomyCustomerNumber ? "Maconomy" : "Unapproved" }}
+                    </span>
+                    <app-option-badge v-if="client.entityType" :option="entityTypeOption(client.entityType)" />
+                    <span v-else class="text-caption text-grey-6">Not recorded</span>
+                  </div>
                 </q-item-section>
               </q-item>
-              <q-item v-if="!clientOptions.length">
+              <!-- Maconomy answers after the portal does, so its half says when it is still coming. -->
+              <q-item v-if="maconomyState === 'loading'" dense>
+                <q-item-section avatar><q-spinner size="16px" color="primary" /></q-item-section>
+                <q-item-section class="text-caption text-grey-7">Searching Maconomy…</q-item-section>
+              </q-item>
+              <!-- Said as a failure, not as "no match": the clients on file above are still good. -->
+              <q-item v-else-if="maconomyState === 'unavailable'" dense>
+                <q-item-section avatar><q-icon name="o_cloud_off" size="18px" color="warning" /></q-item-section>
+                <q-item-section class="text-caption text-grey-8">
+                  {{ maconomyNote }} Only clients already in the portal are listed.
+                </q-item-section>
+              </q-item>
+              <q-item v-if="!clientOptions.length && maconomyState !== 'loading'">
                 <q-item-section class="text-grey-7">{{ noMatchNote }}</q-item-section>
               </q-item>
-              <q-item v-else-if="clientOptions.length >= LOOKUP_LIMIT" dense>
+              <q-item v-else-if="moreMatches" dense>
                 <q-item-section class="text-caption text-grey-7">
-                  Showing the first {{ LOOKUP_LIMIT }} — keep typing to narrow it down.
+                  More clients match than are shown — keep typing to narrow it down.
                 </q-item-section>
-              </q-item>
-              <!-- The way out of a search that did not find them. -->
-              <q-item
-                clickable :active="activeIndex === clientOptions.length"
-                active-class="bg-grey-2" @mousedown.prevent @click="startNewClient"
-              >
-                <q-item-section avatar>
-                  <q-icon name="o_person_add" size="18px" color="primary" />
-                </q-item-section>
-                <q-item-section class="text-primary">{{ addNewLabel }}</q-item-section>
               </q-item>
             </q-list>
           </q-menu>
@@ -125,9 +131,24 @@
         @update:model-value="onEntityTypeChosen"
       />
 
+      <!-- A Maconomy customer's name is ONE string, read from Maconomy and shown as it is held there.
+           It is not asked for in parts, because it is not the portal's to store. -->
+      <app-text-field
+        v-if="isMaconomyClient"
+        :model-value="model.clientName" label="Client/Entity Name" required readonly :class="nameCols"
+      >
+        <template #append>
+          <q-icon name="o_lock" size="18px" color="grey-6" class="rf-note">
+            <q-tooltip anchor="top right" self="bottom right" max-width="300px" :delay="200">
+              {{ maconomyLockNote }}
+            </q-tooltip>
+          </q-icon>
+        </template>
+      </app-text-field>
+
       <!-- THESE BOXES ARE THE NAME. Nothing is split out of a search term — splitting a typed string on
            its first space files "Van Der Berg" under a surname of "Der Berg". -->
-      <template v-if="isIndividualClient">
+      <template v-else-if="isIndividualClient">
         <app-text-field
           v-model="model.clientFirstName" label="First Name" required
           :class="namePartCols" :readonly="nameReadonly"
@@ -190,12 +211,12 @@
     </div>
 
     <!-- How to reach them. Asked once it is known what kind of client they are. -->
-    <div v-if="clientSettled && clientKind" class="row q-col-gutter-md cif-row">
+    <div v-if="clientSettled && (clientKind || isMaconomyClient)" class="row q-col-gutter-md cif-row">
       <!-- Required, not "one of email or mobile": the intake form is emailed, so a request without an
            address has nowhere to send the thing the whole request exists to collect. -->
       <app-text-field
         :model-value="fieldValue('customerEmail')" label="Client Email Address" type="email" required
-        placeholder="jane@company.com" :class="contactCols"
+        :placeholder="isMaconomyClient ? undefined : 'jane@company.com'" :class="contactCols"
         :readonly="fieldLocked('customerEmail')"
         :error="!!emailError" :error-message="emailError"
         @update:model-value="onFieldTyped('customerEmail', $event)"
@@ -210,7 +231,22 @@
         </template>
       </app-text-field>
 
+      <!-- Shown exactly as Maconomy holds it: its telephone is free text, and the phone box would
+           reformat an extension or a note out of it. -->
+      <app-text-field
+        v-if="isMaconomyClient"
+        :model-value="model.customerMobileNumber" label="Client Phone Number" readonly :class="contactCols"
+      >
+        <template #append>
+          <q-icon name="o_lock" size="18px" color="grey-6" class="rf-note">
+            <q-tooltip anchor="top right" self="bottom right" max-width="300px" :delay="200">
+              {{ maconomyLockNote }}
+            </q-tooltip>
+          </q-icon>
+        </template>
+      </app-text-field>
       <app-phone-input
+        v-else
         v-model:country="mobileCountry" :model-value="fieldValue('customerMobileNumber')"
         label="Client Phone Number" :class="contactCols" :readonly="fieldLocked('customerMobileNumber')"
         @update:model-value="onFieldTyped('customerMobileNumber', $event)"
@@ -231,7 +267,16 @@
       />
     </div>
 
-    <div v-if="linkedClient && !readonly && !clientLocked" class="rf-hint">
+    <!-- A Maconomy customer: where the details come from, what is missing, and the way to re-read them. -->
+    <div v-if="isMaconomyClient" class="cif-maconomy" :class="{ 'cif-maconomy--warn': !!maconomyWarning }">
+      <q-icon :name="maconomyWarning ? 'o_error_outline' : 'o_sync_alt'" size="18px" />
+      <span>{{ maconomyWarning || maconomyInfo }}</span>
+      <q-btn
+        v-if="!readonly" flat dense no-caps size="sm" color="primary" icon="o_refresh"
+        label="Refresh from Maconomy" :loading="refreshing" @click="refreshFromMaconomy"
+      />
+    </div>
+    <div v-else-if="linkedClient && !readonly && !clientLocked" class="rf-hint">
       These details are the client's record. What it already holds is locked; a blank can be filled in here.
     </div>
 
@@ -269,7 +314,7 @@
            kinds of government and nothing else. -->
       <app-select
         :model-value="industry" :options="offeredIndustries" label="Industry" required
-        class="col-12 col-sm-6 col-md-4" :readonly="setupReadonly"
+        class="col-12 col-sm-6 col-md-4" :readonly="industryReadonly"
         :hint="industryHint" :info="industryInfo"
         :error="attempted && !!entityType && !industry"
         error-message="Choose the trade this client is in."
@@ -314,7 +359,7 @@
 // Section 1 of the REMS form: who the engagement is for, how to reach them, what kind of entity they are,
 // what trade they are in, and which CSE owns them.
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
-import { remsApi, mediaApi } from "services/api";
+import { remsApi, mediaApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useConfirm } from "composables/useConfirm";
 import {
@@ -447,21 +492,36 @@ const uploadAttachments = async (remsId = null) => {
   return media.map((m) => m?.id).filter(Boolean);
 };
 
-// ---- The client: one on file, or a new one ----
+// ---- The client: one on file, a Maconomy customer, or a new one ----
+// A request is linked to a client by their record, or — for a Maconomy customer — by customer number.
+const isLinked = !!model.existingClientReferenceId || !!model.maconomyCustomerNumber;
 // The search term, or the name of the client picked with it.
-const clientQuery = ref(model.existingClientReferenceId ? (model.clientName || "") : "");
+const clientQuery = ref(isLinked ? (model.clientName || "") : "");
 // `entityType` and `isOrganisation` are undefined on a request opened already linked, until its
 // client's record has been read (onMounted).
-const linkedClient = ref(model.existingClientReferenceId
-  ? { id: model.existingClientReferenceId, name: model.clientName }
+const linkedClient = ref(isLinked
+  ? {
+    id: model.existingClientReferenceId || null,
+    name: model.clientName,
+    maconomyCustomerNumber: model.maconomyCustomerNumber || null
+  }
   : null);
 // A request naming a client it is not linked to is describing a new one.
-const addingNew = ref(
-  !model.existingClientReferenceId && (!!model.clientName?.trim() || !!props.entityType));
+const addingNew = ref(!isLinked && (!!model.clientName?.trim() || !!props.entityType));
+// A Maconomy customer: the portal holds their number and reads everything else from Maconomy, so
+// nothing about them is typed, edited or sent from here.
+const isMaconomyClient = computed(() => !!linkedClient.value?.maconomyCustomerNumber);
 const clientSettled = computed(() => !!linkedClient.value || addingNew.value);
 const canStartNew = computed(() => !props.readonly && !props.clientLocked && !clientSettled.value);
 
-const clientOptions = ref([]);
+// The two halves of one search: clients the portal holds, and Maconomy customers.
+const systemOptions = ref([]);
+const maconomyOptions = ref([]);
+const clientOptions = computed(() => [...systemOptions.value, ...maconomyOptions.value]);
+// idle | loading | ok | notConnected | unavailable
+const maconomyState = ref("idle");
+const maconomyNote = ref("");
+const maconomyMore = ref(false);
 const clientLoading = ref(false);
 const clientMenu = ref(false);
 const clientSearched = ref(false);
@@ -475,15 +535,24 @@ const clientInfo = computed(() => {
     return "Locked — the intake form has gone out for this client. Changing who they are would leave " +
       "the request naming somebody nobody wrote to.";
   }
+  if (isMaconomyClient.value) {
+    return "A Maconomy customer. The details below are read from Maconomy each time — the portal " +
+      "stores only the customer number.";
+  }
   if (linkedClient.value) return "Linked to a THF client record — the details below are read off it.";
   if (addingNew.value) return "A client THF does not have yet. The details below file a new record.";
-  return "Search by name, email or phone, across every entity type. Pick the client to fill in their " +
-    "details, or add a new one.";
+  return "Search by name, email or phone, across every entity type — clients already in the portal " +
+    "and Maconomy customers together. Pick the client to fill in their details, or add a new one.";
 });
 
 // A person or an organisation, which decides the boxes the name is asked in. A client on file is what
 // their record says; a new one is what the entity type chosen for them says.
 const clientKind = computed(() => {
+  // A Maconomy customer is whatever their entity type says, and nothing until there is one.
+  if (isMaconomyClient.value) {
+    if (!props.entityType) return "";
+    return isIndividualEntityType(props.entityType) ? "individual" : "organisation";
+  }
   const onRecord = linkedClient.value?.isOrganisation;
   if (typeof onRecord === "boolean") return onRecord ? "organisation" : "individual";
   if (props.entityType) return isIndividualEntityType(props.entityType) ? "individual" : "organisation";
@@ -507,6 +576,8 @@ watch(() => props.modelValue.clientName, (name) => {
 const entityTypeReadonly = computed(() => {
   if (props.setupReadonly || props.entityTypeLocked) return true;
   if (!linkedClient.value) return false;
+  // While Maconomy cannot say what the customer's type is, the one already chosen is left alone.
+  if (isMaconomyClient.value && maconomyUnread.value) return !!props.entityType;
   const onRecord = linkedClient.value.entityType;
   // Not read yet: locked if the request already carries one, which is the safe guess.
   return onRecord === undefined ? !!props.entityType : !!onRecord;
@@ -515,14 +586,20 @@ const entityTypeReadonly = computed(() => {
 const entityTypeHint = computed(() => {
   if (props.entityTypeLocked) return "Locked — the intake form has been sent.";
   if (!linkedClient.value || props.setupReadonly) return "";
+  if (isMaconomyClient.value) {
+    return entityTypeReadonly.value
+      ? "From Maconomy."
+      : "Maconomy gives this customer no entity type — choose it here.";
+  }
   return entityTypeReadonly.value
     ? "From the client's record."
     : "Not on the client's record yet — choose it here.";
 });
 
-// A client on file is offered only the types their kind of record can hold.
+// A client on file is offered only the types their kind of record can hold. A Maconomy customer with no
+// type is offered them all: there is no record of theirs to contradict.
 const offeredEntityTypes = computed(() => {
-  if (!linkedClient.value || !clientKind.value) return props.entityTypeOptions;
+  if (!linkedClient.value || !clientKind.value || isMaconomyClient.value) return props.entityTypeOptions;
   return props.entityTypeOptions.filter((o) =>
     isIndividualEntityType(o.value) === isIndividualClient.value || o.value === props.entityType);
 });
@@ -530,6 +607,11 @@ const offeredEntityTypes = computed(() => {
 // The trades this kind of entity is in, out of the tenant's own list.
 const offeredIndustries = computed(() =>
   remsIndustryOptions(props.industryOptions, props.entityType, props.industry));
+
+// Maconomy's industry, once it is the one on the form, is Maconomy's to change — as the entity type is.
+const industryFromMaconomy = computed(() =>
+  isMaconomyClient.value && !!linkedClient.value?.industry && linkedClient.value.industry === props.industry);
+const industryReadonly = computed(() => props.setupReadonly || industryFromMaconomy.value);
 
 // Said on the field, because a list that has just gone from twenty-nine values to three looks broken
 // unless something says why.
@@ -544,6 +626,7 @@ const industryInfo = computed(() => (props.entityType
 // with no explanation reads as data lost rather than as an answer that stopped applying.
 const industryCleared = ref("");
 const industryHint = computed(() => {
+  if (industryFromMaconomy.value && !props.setupReadonly) return "From Maconomy.";
   if (industryCleared.value || props.entityType) return industryCleared.value;
   return clientSettled.value
     ? "Choose an Entity Type first — it decides which trades are offered."
@@ -567,6 +650,16 @@ const applyEntityType = (value) => {
 const onIndustryPicked = (value) => {
   industryCleared.value = "";
   emit("update:industry", value);
+};
+
+// Maconomy holds the customer's industry in specification 1, sent here as a REMS.Industry code. It is
+// taken when it is a trade this tenant offers under the entity type; otherwise the field is left as it was.
+const applyMaconomyIndustry = (customer, entityType) => {
+  const code = customer?.industry;
+  if (!code || code === props.industry) return;
+  if (!props.industryOptions.some((o) => o.value === code)) return;
+  if (!remsIndustryFitsEntityType(entityType || null, code)) return;
+  onIndustryPicked(code);
 };
 
 // ---- The name ----
@@ -636,8 +729,11 @@ if (linkedClient.value) {
 }
 
 const recordHolds = (key) => !!linkedClient.value && !!held[key];
-const fieldLocked = (key) => props.readonly || props.clientLocked || recordHolds(key);
+// Everything about a Maconomy customer is locked, blanks included: a blank is filled in Maconomy.
+const fieldLocked = (key) =>
+  props.readonly || props.clientLocked || isMaconomyClient.value || recordHolds(key);
 const lockNote = (key) => {
+  if (isMaconomyClient.value) return maconomyLockNote.value;
   if (props.clientLocked) {
     return key === "customerEmail"
       ? "Locked — the intake form was sent to this address."
@@ -680,7 +776,25 @@ const samePhone = (a, b) => {
 // After a save the server says what the client's record now holds: a blank this request filled is
 // theirs from then on, and a value somebody else filled first is the one that stands.
 watch(() => props.saved, (saved) => {
-  if (!saved || !linkedClient.value || saved.existingClientReferenceId !== linkedClient.value.id) return;
+  if (!saved || !linkedClient.value) return;
+  // A Maconomy customer: the save says which record now names them, and what Maconomy said just then.
+  if (isMaconomyClient.value) {
+    if (saved.maconomyCustomerNumber !== linkedClient.value.maconomyCustomerNumber) return;
+    linkedClient.value.id = saved.existingClientReferenceId || linkedClient.value.id;
+    maconomyUnread.value = !!saved.maconomyUnavailable;
+    const changed = (saved.clientName || "") !== (model.clientName || "") ||
+      (saved.customerEmail || "") !== (model.customerEmail || "") ||
+      (saved.customerMobileNumber || "") !== (model.customerMobileNumber || "");
+    // What is on screen from the pick stands while Maconomy cannot be read.
+    if (!saved.maconomyUnavailable && changed) {
+      clientQuery.value = saved.clientName || "";
+      showMaconomyDetails({
+        name: saved.clientName, email: saved.customerEmail, phone: saved.customerMobileNumber
+      });
+    }
+    return;
+  }
+  if (saved.existingClientReferenceId !== linkedClient.value.id) return;
   holdFrom({ email: saved.customerEmail, phone: saved.customerMobileNumber, suffix: saved.clientNameSuffix });
   if (held.customerEmail && fieldDraft.customerEmail === null) model.customerEmail = held.customerEmail;
   if (held.clientNameSuffix && fieldDraft.clientNameSuffix === null) {
@@ -697,6 +811,8 @@ const suffixTooLong = computed(() => String(fieldValue("clientNameSuffix")).trim
 const hasEmail = computed(() => !!String(fieldValue("customerEmail")).trim());
 
 const emailError = computed(() => {
+  // Not an error to type a way out of: the notice under the fields says where the address is added.
+  if (isMaconomyClient.value) return "";
   if (emailHolder.value) return "A client is already on file with this email address.";
   return props.attempted && !hasEmail.value
     ? "The intake form is emailed to the client — an address is required."
@@ -710,7 +826,7 @@ let nameCheckSeq = 0;
 
 // Whether the address typed would become a client's email: a new client's, or the blank on one on file.
 const givesEmail = () =>
-  addingNew.value || (!!linkedClient.value && !recordHolds("customerEmail"));
+  addingNew.value || (!!linkedClient.value && !isMaconomyClient.value && !recordHolds("customerEmail"));
 
 const checkEmailOnFile = async () => {
   const email = (model.customerEmail || "").trim();
@@ -751,9 +867,64 @@ const linkNameOnFile = async () => {
 const LOOKUP_DEBOUNCE_MS = 500;
 // The server's page size. Reaching it means there may be more than are shown.
 const LOOKUP_LIMIT = 20;
+// Maconomy is asked from two characters: one letter matches thousands of its customers.
+const MACONOMY_MIN_CHARS = 2;
+const MACONOMY_SEARCH_FAILED = "Maconomy could not be searched just now.";
 let lookupTimer = null;
 // Bumped on every query so a slow response for an abandoned term cannot land on top of a newer one.
 let lookupSeq = 0;
+
+// A term already searched in the last two minutes is not asked of Maconomy again, so retyping or
+// backspacing costs no call. An answer of "could not be searched" is never kept.
+const MACONOMY_CACHE_MS = 2 * 60 * 1000;
+const maconomyCache = new Map();
+const maconomyLookup = (term) => {
+  const key = term.toLowerCase();
+  const held = maconomyCache.get(key);
+  if (held && Date.now() - held.at < MACONOMY_CACHE_MS) return held.promise;
+  const promise = remsApi.maconomyClientLookup(term, props.saved?.id).then((found) => {
+    if (found?.status !== "ok") maconomyCache.delete(key);
+    return found;
+  }, (err) => {
+    maconomyCache.delete(key);
+    throw err;
+  });
+  maconomyCache.set(key, { at: Date.now(), promise });
+  return promise;
+};
+
+const clearMaconomyOptions = (state = "idle") => {
+  maconomyOptions.value = [];
+  maconomyState.value = state;
+  maconomyNote.value = "";
+  maconomyMore.value = false;
+};
+
+// The Maconomy half, answered on its own: it is slower than the portal's half, and it can fail without
+// the search having failed.
+// A tenant with no Maconomy connection says so once, and is not asked again on every search.
+let maconomyNotConnected = false;
+
+const searchMaconomy = async (term, seq) => {
+  if (term.length < MACONOMY_MIN_CHARS || maconomyNotConnected) {
+    clearMaconomyOptions();
+    return;
+  }
+  clearMaconomyOptions("loading");
+  let found;
+  try {
+    found = await maconomyLookup(term);
+  } catch {
+    found = { status: "unavailable", note: MACONOMY_SEARCH_FAILED, items: [] };
+  }
+  if (found?.status === "notConnected") maconomyNotConnected = true;
+  if (seq !== lookupSeq) return;
+  maconomyOptions.value = found?.items || [];
+  maconomyState.value = found?.status || "ok";
+  maconomyNote.value = found?.note || MACONOMY_SEARCH_FAILED;
+  maconomyMore.value = !!found?.more;
+  if (activeIndex.value < 0 && clientOptions.value.length) activeIndex.value = 0;
+};
 
 const runLookup = (term) => {
   clearTimeout(lookupTimer);
@@ -763,12 +934,16 @@ const runLookup = (term) => {
   lookupFailed.value = false;
   if (!term) {
     clientLoading.value = false;
-    clientOptions.value = [];
+    systemOptions.value = [];
+    clearMaconomyOptions();
     clientMenu.value = false;
     return;
   }
   clientLoading.value = true;
   lookupTimer = setTimeout(async () => {
+    // Both at once. The portal's own clients show as soon as they are back; Maconomy's customers are
+    // added under them when Maconomy answers.
+    searchMaconomy(term, seq);
     let items = [];
     let failed = false;
     try {
@@ -778,9 +953,9 @@ const runLookup = (term) => {
       failed = true;
     }
     if (seq !== lookupSeq) return;
-    clientOptions.value = items;
+    systemOptions.value = items;
     lookupFailed.value = failed;
-    activeIndex.value = items.length ? 0 : -1;
+    activeIndex.value = clientOptions.value.length ? 0 : -1;
     clientLoading.value = false;
     clientSearched.value = true;
     clientMenu.value = clientFocused.value;
@@ -788,14 +963,23 @@ const runLookup = (term) => {
   }, LOOKUP_DEBOUNCE_MS);
 };
 
+// More matched than either half returned.
+const moreMatches = computed(() => systemOptions.value.length >= LOOKUP_LIMIT || maconomyMore.value);
+
+// ---- A row of the merged list ----
+const rowKey = (client) => client.id || `maconomy:${client.maconomyCustomerNumber}`;
+// A Maconomy customer with no entity type is neither a person nor an organisation yet.
+const rowIcon = (client) => {
+  if (client.maconomyCustomerNumber && !client.entityType) return "o_account_circle";
+  return client.isOrganisation ? "o_apartment" : "o_person";
+};
+const rowCaption = (client) => (client.maconomyCustomerNumber
+  ? `${client.maconomyCustomerNumber} · ${client.email || "no email"}`
+  : client.email || "no email");
+
 const noMatchNote = computed(() => (lookupFailed.value
   ? "The search is not available right now — try again in a moment."
   : `No client matches “${clientQuery.value.trim()}”.`));
-
-const addNewLabel = computed(() => {
-  const term = clientQuery.value.trim();
-  return term ? `Add “${term}” as a new client` : "Add a new client";
-});
 
 // ---- The request's Type, which follows the client ----
 const autoType = (code) => (props.typeOptions.some((o) => o.value === code) ? code : "");
@@ -846,23 +1030,93 @@ const pickClient = (client) => {
   dropFieldDrafts();
   linkedClient.value = client;
   clientQuery.value = client.name || "";
-  clientOptions.value = [];
+  systemOptions.value = [];
+  clearMaconomyOptions();
   clientSearched.value = false;
-  model.existingClientReferenceId = client.id;
-  // Everything on screen becomes THEIR record's — it is what the server keeps for a client on file.
-  model.clientFirstName = client.firstName || "";
-  model.clientLastName = client.lastName || "";
-  model.clientCorporateName = client.corporateName || "";
-  model.clientNameSuffix = client.suffix || "";
-  model.customerEmail = client.email || "";
-  // Blanked first so THIS client's number decides the country, not the last one's.
-  mobileCountry.value = client.phone ? null : DEFAULT_DIAL_CODE;
-  model.customerMobileNumber = client.phone || "";
-  holdFrom(client);
-  composeClientName(client.isOrganisation ? "organisation" : "individual");
+  model.existingClientReferenceId = client.id || null;
+  model.maconomyCustomerNumber = client.maconomyCustomerNumber || null;
+  if (client.maconomyCustomerNumber) {
+    showMaconomyDetails(client);
+  } else {
+    // Everything on screen becomes THEIR record's — it is what the server keeps for a client on file.
+    model.clientFirstName = client.firstName || "";
+    model.clientLastName = client.lastName || "";
+    model.clientCorporateName = client.corporateName || "";
+    model.clientNameSuffix = client.suffix || "";
+    model.customerEmail = client.email || "";
+    // Blanked first so THIS client's number decides the country, not the last one's.
+    mobileCountry.value = client.phone ? null : DEFAULT_DIAL_CODE;
+    model.customerMobileNumber = client.phone || "";
+    holdFrom(client);
+    composeClientName(client.isOrganisation ? "organisation" : "individual");
+  }
   applyEntityType(client.entityType);
+  if (client.maconomyCustomerNumber) applyMaconomyIndustry(client, client.entityType);
   clientMenu.value = false;
   activeIndex.value = -1;
+};
+
+// ---- A Maconomy customer ----
+// What Maconomy says about them, put on screen. The name is Maconomy's one string — never composed
+// from parts, because there are none — and none of this is sent when the request is saved.
+const showMaconomyDetails = (customer) => {
+  model.clientFirstName = "";
+  model.clientLastName = "";
+  model.clientCorporateName = "";
+  model.clientNameSuffix = "";
+  model.clientName = customer.name || "";
+  composedName = model.clientName;
+  model.customerEmail = customer.email || "";
+  model.customerMobileNumber = customer.phone || "";
+  holdFrom(null);
+  syncTypeToClient();
+};
+
+const maconomyNumber = computed(() => linkedClient.value?.maconomyCustomerNumber || "");
+const maconomyLockNote = computed(() =>
+  `From Maconomy customer ${maconomyNumber.value}. It is changed in Maconomy, not here.`);
+const maconomyInfo = computed(() =>
+  `Maconomy customer ${maconomyNumber.value}. These details are read from Maconomy each time and are ` +
+  "not stored in the portal — to change one, change it in Maconomy.");
+
+// The request as last saved says when Maconomy could not be read at all.
+const maconomyUnread = ref(!!props.saved?.maconomyUnavailable);
+const maconomyWarning = computed(() => {
+  if (maconomyUnread.value) {
+    return `Maconomy could not be reached just now, so the details of customer ${maconomyNumber.value} ` +
+      "could not be read. Refresh to try again.";
+  }
+  return String(model.customerEmail || "").trim()
+    ? ""
+    : `Maconomy holds no email address for customer ${maconomyNumber.value}. The intake form cannot be ` +
+      "sent until one is added in Maconomy.";
+});
+
+// Re-reads the customer from Maconomy now — the way a correction made there reaches this page without
+// waiting for the portal's copy to refresh.
+const refreshing = ref(false);
+const refreshFromMaconomy = async () => {
+  const number = maconomyNumber.value;
+  if (!number || refreshing.value) return;
+  refreshing.value = true;
+  try {
+    const customer = await remsApi.maconomyCustomer(number, props.saved?.id);
+    if (maconomyNumber.value !== number) return;
+    // Whether the industry on the form was Maconomy's, judged before the re-read replaces what it said.
+    const industryWasMaconomys = industryFromMaconomy.value;
+    linkedClient.value = { ...customer, id: customer.id || linkedClient.value.id || null };
+    clientQuery.value = customer.name || "";
+    maconomyUnread.value = false;
+    showMaconomyDetails(customer);
+    // Maconomy's entity type stands while the form can still take one.
+    if (customer.entityType && customer.entityType !== props.entityType) applyEntityType(customer.entityType);
+    if (!props.industry || industryWasMaconomys) applyMaconomyIndustry(customer, customer.entityType || props.entityType);
+    notify.success("Read from Maconomy.");
+  } catch (err) {
+    notify.error(getApiErrorMessage(err, "Maconomy could not be read just now."));
+  } finally {
+    refreshing.value = false;
+  }
 };
 
 // Taking the client out takes everything that was theirs with them, the entity type included.
@@ -877,7 +1131,9 @@ const resetClient = ({ keepQuery = false } = {}) => {
   emailHolder.value = null;
   dropFieldDrafts();
   holdFrom(null);
+  maconomyUnread.value = false;
   model.existingClientReferenceId = null;
+  model.maconomyCustomerNumber = null;
   model.clientName = "";
   composedName = "";
   model.clientFirstName = "";
@@ -946,7 +1202,9 @@ const onClientTyped = (val) => {
 const soleExactMatch = computed(() => {
   const name = clientQuery.value.trim().toLowerCase();
   if (!name) return null;
-  const matches = clientOptions.value.filter((c) => (c.name || "").trim().toLowerCase() === name);
+  // Clients the portal holds only: a Maconomy customer is linked by picking them, never by a name
+  // that happens to match one.
+  const matches = systemOptions.value.filter((c) => (c.name || "").trim().toLowerCase() === name);
   return matches.length === 1 ? matches[0] : null;
 });
 
@@ -976,31 +1234,35 @@ const onClientBlur = () => {
   linkExactMatchIfSettled();
 };
 
-// The rows, and the "add a new client" row after them.
+// The rows.
 const moveActive = (delta) => {
   if (!clientMenu.value) {
     openMenuIfResults();
     return;
   }
-  const count = clientOptions.value.length + 1;
+  const count = clientOptions.value.length;
+  if (!count) return;
   activeIndex.value = (activeIndex.value + delta + count) % count;
 };
 
 const onClientEnter = () => {
   if (!clientMenu.value || activeIndex.value < 0) return;
-  if (activeIndex.value === clientOptions.value.length) startNewClient();
-  else pickClient(clientOptions.value[activeIndex.value]);
+  pickClient(clientOptions.value[activeIndex.value]);
 };
 
 // A request opened already linked knows its client only by id. Their record is what says which fields
 // it holds and which entity type it carries.
 onMounted(async () => {
   if (!linkedClient.value || props.readonly || props.clientLocked) return;
-  const { id } = linkedClient.value;
-  const record = await remsApi.client(id, props.saved?.id).catch(() => null);
+  const { id, maconomyCustomerNumber: number } = linkedClient.value;
+  // By record where one names them; a Maconomy customer no record names yet is read by number.
+  const read = id
+    ? remsApi.client(id, props.saved?.id)
+    : remsApi.maconomyCustomer(number, props.saved?.id);
+  const record = await read.catch(() => null);
   if (!record || linkedClient.value?.id !== id) return;
   linkedClient.value = record;
-  holdFrom(record);
+  if (!record.maconomyCustomerNumber) holdFrom(record);
   // The record's type stands where this request has none of its own yet.
   if (!props.entityType && record.entityType) applyEntityType(record.entityType);
 });
@@ -1032,6 +1294,50 @@ defineExpose({ uploadAttachments, addingNew, emailHolder });
 .cif-new {
   margin-top: 18px;
   height: 40px;
+}
+
+/* A result row's tags: where it comes from, then its entity type. */
+.cif-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cif-source {
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink-500);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.cif-source--maconomy {
+  border-color: var(--teal-300);
+  background: var(--teal-050);
+  color: var(--teal-900);
+}
+
+/* A Maconomy customer: where the details come from, and the way to re-read them. */
+.cif-maconomy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--teal-050);
+  color: var(--ink-700);
+  font-size: 13px;
+}
+/* The sentence takes the room; the icon and the button keep their own. */
+.cif-maconomy > span { flex: 1 1 auto; }
+.cif-maconomy > .q-icon,
+.cif-maconomy > .q-btn { flex: none; }
+.cif-maconomy--warn {
+  background: #fff4e5;
+  color: #8a4b00;
 }
 
 /* A client already on file under the email typed for a new one, with the way to use them instead. */

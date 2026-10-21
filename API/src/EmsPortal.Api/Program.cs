@@ -6,6 +6,7 @@ using EmsPortal.Api.Hangfire;
 using EmsPortal.Api.Logging;
 using EmsPortal.Api.Middleware;
 using EmsPortal.Api.OpenApi;
+using EmsPortal.Api.RateLimiting;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Tenancy;
 using Scalar.AspNetCore;
@@ -17,6 +18,7 @@ using EmsPortal.Infrastructure.Logging;
 using EmsPortal.Infrastructure.Persistence;
 using EmsPortal.Shared.Configuration;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 // Secrets such as the Microsoft sign-in keys live in a .env file: beside the project under Visual Studio /
@@ -35,7 +37,12 @@ builder.Host.UseSerilog((context, _, loggerConfiguration) =>
         context.HostingEnvironment.EnvironmentName));
 
 // API host services.
-builder.Services.AddControllers(options => options.Filters.Add<ValidationActionFilter>());
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ValidationActionFilter>();
+    // Every page and limit query value lands inside Limits:Paging before any action reads it.
+    options.Filters.Add<PagingClampFilter>();
+});
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(
     options => options.SuppressModelStateInvalidFilter = true);
 
@@ -68,15 +75,24 @@ builder.Services.AddScoped<EmsPortal.Api.Dashboard.IDashboardQueryService, EmsPo
 // STATIC-APPROVAL-POLICY
 builder.Services.AddScoped<EmsPortal.Api.Approval.IRemsApprovalPolicy, EmsPortal.Api.Approval.RemsApprovalPolicy>();
 
-// CORS for the browser SPA (WEB/). Allowed origins come from configuration
-// (Cors:AllowedOrigins); falls back to the local Quasar dev server ports.
+// CORS for the browser SPA (WEB/). Cors:AllowedOrigins in appsettings.json is the one list, edited on the
+// server after a publish (a restart applies it). A trailing slash is the usual hand-editing slip, so it is forgiven.
 const string SpaCorsPolicy = "SpaCors";
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:9000", "http://localhost:9001", "https://thf.vskyapplications.com"];
+var allowedOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Where(origin => origin.Length > 0)
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
 builder.Services.AddCors(options =>
     options.AddPolicy(SpaCorsPolicy, policy =>
         policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod()));
+            .AllowAnyMethod()
+            // The one response header the SPA has to read: how long to wait after a 429.
+            .WithExposedHeaders("Retry-After")));
+
+// Rate limits, request timeouts and the body-size ceiling: Limits in appsettings.json, edited on the server like the origins.
+builder.Services.AddEmsPortalRateLimiting(builder.Configuration);
 
 var app = builder.Build();
 
@@ -84,6 +100,18 @@ if (dotEnvPath is not null)
 {
     app.Logger.LogInformation("Loaded environment overrides from {DotEnvPath}", dotEnvPath);
 }
+
+// Said at startup because an origin missing from the list only ever shows as a CORS error in a browser console.
+if (allowedOrigins.Length == 0)
+{
+    app.Logger.LogWarning("Cors:AllowedOrigins is empty: no browser origin can call this API");
+}
+else
+{
+    app.Logger.LogInformation("CORS allows browser origins {Origins}", string.Join(", ", allowedOrigins));
+}
+
+app.Logger.LogInformation("Limits in force: {Limits}", app.Services.GetRequiredService<IOptions<LimitsOptions>>().Value.Describe());
 
 // The Integration API owns the application schema and applies EF Core migrations
 // on startup. The Background Worker and MCP Server must not run migrations.
@@ -113,6 +141,10 @@ app.UseMiddleware<RequestResponseLoggingMiddleware>();
 app.UseCors(SpaCorsPolicy);
 
 app.UseAuthentication();
+
+// After authentication, so a signed-in caller is counted as themselves rather than as their address.
+app.UseEmsPortalRateLimiting();
+
 app.UseAuthorization();
 
 // Resolve the active tenant from the authenticated JWT and populate ITenantContext.

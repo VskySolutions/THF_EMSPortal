@@ -12,17 +12,36 @@ namespace EmsPortal.Application.Branding;
 public static partial class BrandingThemeRules
 {
     /// <summary>
-    /// The fonts a tenant may choose. Each is loaded from Google Fonts by name, except the system stack.
-    /// Mirrored by the picker in <c>WEB/src/services/branding.js</c>.
+    /// The fonts a tenant may choose: the system stack, and every Google Fonts family in the embedded
+    /// <c>google-fonts.json</c>. Each is loaded from Google Fonts by name. The file is written by
+    /// <c>WEB/scripts/update-google-fonts.mjs</c>, which gives the picker in <c>WEB/src/services/branding.js</c>
+    /// the same copy, so the two cannot drift apart.
     /// </summary>
-    public static readonly IReadOnlySet<string> Fonts = new HashSet<string>(StringComparer.Ordinal)
+    public static readonly IReadOnlySet<string> Fonts = LoadFonts();
+
+    private static IReadOnlySet<string> LoadFonts()
     {
-        "System",
-        "Poppins", "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Nunito", "Nunito Sans",
-        "Source Sans 3", "Work Sans", "DM Sans", "Manrope", "Plus Jakarta Sans", "Raleway", "Rubik",
-        "IBM Plex Sans", "Noto Sans",
-        "Merriweather", "Playfair Display", "Lora", "Source Serif 4", "Roboto Slab",
-    };
+        using var stream = typeof(BrandingThemeRules).Assembly.GetManifestResourceStream("google-fonts.json")
+            ?? throw new InvalidOperationException("google-fonts.json is not embedded in EmsPortal.Application.");
+        var catalogue = JsonSerializer.Deserialize<GoogleFontsCatalogue>(
+            stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        var fonts = new HashSet<string>(StringComparer.Ordinal) { "System" };
+        if (catalogue is not null)
+        {
+            foreach (var names in catalogue.Families.Values)
+            {
+                fonts.UnionWith(names);
+            }
+        }
+        return fonts;
+    }
+
+    /// <summary>The shape of <c>google-fonts.json</c>: family names keyed by category.</summary>
+    private sealed class GoogleFontsCatalogue
+    {
+        public Dictionary<string, string[]> Families { get; set; } = new();
+    }
 
     private static readonly string[] Transforms = { "none", "uppercase", "capitalize" };
     private static readonly string[] Shadows = { "none", "soft", "raised" };

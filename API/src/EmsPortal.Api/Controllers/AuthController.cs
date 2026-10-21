@@ -13,6 +13,8 @@ using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -66,6 +68,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("/api/auth/login")]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     [AllowAnonymous]
     [ProducesResponseType<ApiResponse<LoginTokenResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
@@ -88,6 +91,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("/api/auth/refresh")]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     [AllowAnonymous]
     [ProducesResponseType<ApiResponse<RefreshTokenResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken cancellationToken)
@@ -304,6 +308,7 @@ public sealed class AuthController : ControllerBase
     /// an active account.
     /// </summary>
     [HttpPost("/api/auth/forgot-password")]
+    [EnableRateLimiting(RateLimitPolicies.PasswordReset)]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -356,6 +361,7 @@ public sealed class AuthController : ControllerBase
 
     /// <summary>Completes the flow: redeems the token and sets the new password.</summary>
     [HttpPost("/api/auth/reset-password")]
+    [EnableRateLimiting(RateLimitPolicies.PasswordReset)]
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithTokenRequest request, CancellationToken cancellationToken)
     {

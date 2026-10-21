@@ -57,6 +57,12 @@ internal sealed class PersonConfiguration : IEntityTypeConfiguration<Person>
                     END)), N''), [DisplayName])
                 """,
                 stored: true);
+        // One client per Maconomy customer in a tenant: a second pick of the same customer finds the first.
+        builder.Property(p => p.MaconomyCustomerNumber).HasMaxLength(64);
+        builder.HasIndex(p => new { p.TenantId, p.MaconomyCustomerNumber })
+            .IsUnique()
+            .HasFilter("[MaconomyCustomerNumber] IS NOT NULL AND [Deleted] = 0");
+
         builder.Property(p => p.FirstName).HasMaxLength(100);
         builder.Property(p => p.MiddleName).HasMaxLength(100);
         builder.Property(p => p.LastName).HasMaxLength(100);

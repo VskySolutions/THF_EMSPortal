@@ -30,6 +30,8 @@ public sealed record RemsRelatedEntityRow(
     IReadOnlyList<RemsRelatedClientView> RelatedClients,
     /// <summary>How many rows <see cref="RelatedClients"/> holds — a sortable handle on a nested table.</summary>
     int RelatedCount,
+    /// <summary>Whether THIS caller may open the request at all: the rule the request page itself applies.</summary>
+    bool CanView,
     /// <summary>Whether THIS caller may open the request as a form.</summary>
     bool CanEdit,
     // The owning REQUEST's audit trail — the row is keyed on it, and it is what the actions open.

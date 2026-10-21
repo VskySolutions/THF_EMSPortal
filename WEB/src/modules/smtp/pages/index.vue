@@ -20,6 +20,34 @@
       @back="$router.back()"
     />
 
+    <!-- The tenant-wide switch. Off holds back every notification email, whatever the accounts below say. -->
+    <q-card flat bordered class="q-mb-md" :class="settings.notificationsEnabled ? '' : 'bg-orange-1'">
+      <q-card-section class="row items-center no-wrap">
+        <q-icon
+          :name="settings.notificationsEnabled ? 'o_notifications_active' : 'o_notifications_off'" size="28px"
+          :color="settings.notificationsEnabled ? 'primary' : 'warning'" class="q-mr-md"
+        />
+        <div class="col">
+          <div class="text-subtitle2">Email notifications</div>
+          <div class="text-caption text-grey-8">
+            <template v-if="settings.notificationsEnabled">
+              Invitations, password resets, REMS form links and reminders are emailed through the active account below.
+            </template>
+            <template v-else>
+              Turned off{{ switchedBy }}. Nothing is emailed from this tenant: invitations, password resets, REMS form
+              links and reminders are all held back. Test emails from this page still send.
+            </template>
+          </div>
+        </div>
+        <q-toggle
+          :model-value="settings.notificationsEnabled" :label="settings.notificationsEnabled ? 'On' : 'Off'"
+          :disable="!canManage || settingsBusy" class="q-ml-md" @update:model-value="setNotifications"
+        >
+          <q-tooltip v-if="!canManage">Changing this needs the permission to manage email.</q-tooltip>
+        </q-toggle>
+      </q-card-section>
+    </q-card>
+
     <!-- Warning when the tenant has accounts but none is active (AC-SMTP-009.3). -->
     <q-banner v-if="showNoActiveWarning" dense rounded class="bg-red-1 text-negative q-mb-md">
       <template #avatar><q-icon name="o_warning" color="negative" /></template>
@@ -108,11 +136,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { debounce } from "quasar";
 import { smtpAccountApi, getApiErrorMessage, EntityType } from "services/api";
 import { useTenantOptions } from "composables/useTenantOptions";
 import { useTenantScope } from "composables/useTenantScope";
+import { usePermissions, Permissions } from "composables/usePermissions";
+import { useDateFormat } from "composables/useDateFormat";
 import { useNotify } from "composables/useNotify";
 import { useConfirm } from "composables/useConfirm";
 import { useListTable } from "composables/useListTable";
@@ -135,6 +165,9 @@ const notify = useNotify();
 const { confirm } = useConfirm();
 const { encryptionLabel } = useSmtpOptions();
 const { canChooseTenant } = useTenantOptions();
+const { has } = usePermissions();
+const fmt = useDateFormat();
+const canManage = computed(() => has(Permissions.EmailManage));
 
 // The tenant in view comes from the toolbar's global scope control rather than a dropdown of its own —
 // one selection drives every tenant-scoped screen.
@@ -184,6 +217,54 @@ watch([search, filters], reload, { deep: true });
 // Warn only when not filtering by status, the tenant has accounts, and none is active.
 const showNoActiveWarning = computed(() =>
   !filters.status && !loading.value && rows.value.length > 0 && !rows.value.some((r) => r.isActive));
+
+// ---- The tenant-wide switch ----
+// Fetched apart from the list: it is one value with its own audit pair, and the list reloads on every
+// search keystroke. Saved the moment it is flipped; nothing else on the page is involved.
+const settings = ref({ notificationsEnabled: true, updatedByName: null, updatedOnUtc: null });
+const settingsBusy = ref(false);
+
+const switchedBy = computed(() => {
+  const s = settings.value;
+  if (!s.updatedOnUtc) return "";
+  return `${s.updatedByName ? ` by ${s.updatedByName}` : ""} on ${fmt.formatDateTime(s.updatedOnUtc)}`;
+});
+
+const loadSettings = async () => {
+  try {
+    settings.value = await smtpAccountApi.settings(scopeTenantId());
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  }
+};
+
+const setNotifications = async (enabled) => {
+  if (!enabled) {
+    const ok = await confirm({
+      title: "Turn off email notifications",
+      message: "Stop every notification email from this tenant? Invitations, password resets, REMS form links and " +
+        "reminders are all held back until it is turned on again. Test emails from this page still send.",
+      confirmLabel: "Turn off",
+      type: "danger"
+    });
+    if (!ok) return;
+  }
+  settingsBusy.value = true;
+  try {
+    settings.value = await smtpAccountApi.saveSettings({ notificationsEnabled: enabled }, scopeTenantId());
+    notify.success(enabled ? "Email notifications turned on." : "Email notifications turned off.");
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    settingsBusy.value = false;
+  }
+};
+
+onMounted(() => {
+  loadSettings();
+  window.addEventListener("tenant-switched", loadSettings);
+});
+onBeforeUnmount(() => window.removeEventListener("tenant-switched", loadSettings));
 
 // ---- Create / Edit ----
 const formOpen = ref(false);
@@ -265,5 +346,5 @@ const bulkDelete = async (sel) => {
 };
 
 // Exposed for unit tests (and parent interactions).
-defineExpose({ openCreate, openEdit, setActive, deleteAccount, bulkDelete, openTest, showNoActiveWarning });
+defineExpose({ openCreate, openEdit, setActive, deleteAccount, bulkDelete, openTest, showNoActiveWarning, setNotifications });
 </script>

@@ -115,7 +115,7 @@ public sealed class PermissionGroupsController : ControllerBase
 
         var (items, total) = await _groups.ListAsync(
             scopeTenant, search, isActive, usedByRoles, category, new SortRequest(sortBy, descending),
-            Math.Max(1, page), Math.Clamp(limit, 1, 100), cancellationToken);
+            page, limit, cancellationToken);
 
         // Batch the per-group current usage (distinct active members) in one query to avoid N+1.
         var usageByGroup = await _groups.CountActiveMembersForGroupsAsync(items.Select(i => i.Id).ToList(), cancellationToken);

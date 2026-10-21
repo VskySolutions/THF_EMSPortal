@@ -214,9 +214,7 @@ public sealed record RemsApprovalAuditDetailView(
     Guid? ClientAcceptanceFormMediaId,
     string? FileName,
     string? Url,
-    DateOnly? ClientFiscalYearEnd,
-    bool? AdminFeesApply,
-    decimal? AdminFeesAmount);
+    DateOnly? ClientFiscalYearEnd);
 
 /// <summary>Tax detail with the due-date schedule deserialized and the form checklist resolved to labels.</summary>
 public sealed record RemsApprovalTaxDetailView(

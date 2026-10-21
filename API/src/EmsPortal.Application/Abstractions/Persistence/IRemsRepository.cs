@@ -231,6 +231,8 @@ public sealed record RemsRelatedEntityItem(
     /// REMS surface applies, and a list that skipped it would say something different about the same row.
     /// </summary>
     Guid? AdminAssignedToId,
+    /// <summary>The CSE named on the request: with the admin and the initiator, one of the people who may open it.</summary>
+    Guid? CSEId,
     /// <summary>When the client sent their intake form back. Never null in practice: no submission, no rows.</summary>
     DateTime? SubmittedOnUtc,
     int RelatedCount,
@@ -243,7 +245,9 @@ public sealed record RemsRelatedEntityItem(
     Guid? OnBehalfOfUserId,
     DateTime CreatedOnUtc,
     Guid? UpdatedById,
-    DateTime UpdatedOnUtc);
+    DateTime UpdatedOnUtc,
+    /// <summary>Set when the client is a Maconomy customer, whose name and email are read from Maconomy rather than the database.</summary>
+    string? MaconomyCustomerNumber = null);
 
 /// <summary>
 /// One related client, from either source table, in the shape the list draws them in.
@@ -438,7 +442,8 @@ public interface IRemsRepository
     /// <summary>
     /// The client picker's candidates: the people some request in the tenant names as its client
     /// (<see cref="REMS.ClientPersonId"/>), narrowed to requests whose intake form was raised under
-    /// <paramref name="entityTypeCode"/> when one is given, and matched on name, email or phone.
+    /// <paramref name="entityTypeCode"/> when one is given, and matched on name, email or phone. Clients
+    /// that are Maconomy customers are not among them: their details are searched in Maconomy.
     /// </summary>
     Task<IReadOnlyList<RemsClientLookupRow>> LookupClientsAsync(
         string term, string? entityTypeCode, Guid? excludingRemsId, int limit,

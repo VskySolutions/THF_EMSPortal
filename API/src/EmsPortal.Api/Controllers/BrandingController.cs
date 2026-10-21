@@ -10,6 +10,12 @@ using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using DomainMedia = EmsPortal.Domain.Entities.Media;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
+using Microsoft.AspNetCore.Http.Timeouts;
+using EmsPortal.Api.Filters;
+using EmsPortal.Shared.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -29,8 +35,7 @@ namespace EmsPortal.Api.Controllers;
 [ProducesResponseType(StatusCodes.Status403Forbidden)]
 public sealed class BrandingController : ControllerBase
 {
-    private const long MaxImageBytes = 2 * 1024 * 1024;
-    private const long MaxBackgroundBytes = 5 * 1024 * 1024;
+    private readonly UploadLimits _uploads;
 
     private readonly ITenantBrandingRepository _branding;
     private readonly ITenantRepository _tenants;
@@ -47,9 +52,11 @@ public sealed class BrandingController : ControllerBase
         IMediaRepository media,
         IRemsFormRepository remsForms,
         IFileStorage fileStorage,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IOptions<LimitsOptions> limits)
     {
         _branding = branding;
+        _uploads = limits.Value.Uploads;
         _tenants = tenants;
         _users = users;
         _media = media;
@@ -80,6 +87,7 @@ public sealed class BrandingController : ControllerBase
     /// with the stock look rather than a 404, so the endpoint cannot be used to learn which tenants exist.
     /// </summary>
     [HttpGet("public")]
+    [EnableRateLimiting(RateLimitPolicies.PublicContent)]
     [AllowAnonymous]
     [ProducesResponseType<ApiResponse<PublicBrandingResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPublic([FromQuery] string? tenant, CancellationToken cancellationToken)
@@ -93,6 +101,7 @@ public sealed class BrandingController : ControllerBase
 
     /// <summary>Branding for the public client form: the firm that sent the link is the one the client should see.</summary>
     [HttpGet("public/forms/{inviteCode}")]
+    [EnableRateLimiting(RateLimitPolicies.PublicContent)]
     [AllowAnonymous]
     [ProducesResponseType<ApiResponse<PublicBrandingResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetForPublicForm(string inviteCode, CancellationToken cancellationToken)
@@ -164,7 +173,9 @@ public sealed class BrandingController : ControllerBase
     /// </summary>
     [HttpPost("assets/{slot}")]
     [RequirePermission(Permissions.BrandingManage)]
-    [RequestSizeLimit(MaxBackgroundBytes + 64 * 1024)]
+    [UploadSizeLimit(UploadKind.BrandingBackground)]
+    [EnableRateLimiting(RateLimitPolicies.Upload)]
+    [RequestTimeout(RequestTimeoutPolicies.LongRunning)]
     [ProducesResponseType<ApiResponse<BrandingResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UploadAsset(
         string slot, [FromQuery] Guid? tenantId, [FromForm] IFormFile? file, CancellationToken cancellationToken)
@@ -184,7 +195,7 @@ public sealed class BrandingController : ControllerBase
         {
             return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "A non-empty file is required."));
         }
-        var limit = slot == BrandingAssetSlots.LoginBackground ? MaxBackgroundBytes : MaxImageBytes;
+        var limit = slot == BrandingAssetSlots.LoginBackground ? _uploads.BrandingBackgroundBytes : _uploads.BrandingImageBytes;
         if (file.Length > limit)
         {
             return BadRequest(ApiResponseFactory.Error(

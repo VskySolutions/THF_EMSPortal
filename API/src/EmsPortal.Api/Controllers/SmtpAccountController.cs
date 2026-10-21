@@ -10,6 +10,8 @@ using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using EmsPortal.Api.RateLimiting;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -27,19 +29,25 @@ public sealed class SmtpAccountController : ControllerBase
 {
     private readonly ISmtpAccountService _service;
     private readonly ISmtpAccountRepository _accounts;
+    private readonly ITenantEmailSettingsRepository _emailSettings;
     private readonly ITenantRepository _tenants;
     private readonly IUserRepository _users;
+    private readonly IUnitOfWork _unitOfWork;
 
     public SmtpAccountController(
         ISmtpAccountService service,
         ISmtpAccountRepository accounts,
+        ITenantEmailSettingsRepository emailSettings,
         ITenantRepository tenants,
-        IUserRepository users)
+        IUserRepository users,
+        IUnitOfWork unitOfWork)
     {
         _service = service;
         _accounts = accounts;
+        _emailSettings = emailSettings;
         _tenants = tenants;
         _users = users;
+        _unitOfWork = unitOfWork;
     }
 
     // ---- List ----
@@ -245,6 +253,7 @@ public sealed class SmtpAccountController : ControllerBase
     // ---- Test send ----
 
     [HttpPost("{id:guid}/test")]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [RequirePermission(Permissions.EmailManage)]
     [ProducesResponseType<ApiResponse<SmtpTestResultResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Test(Guid id, [FromQuery] Guid? tenantId, [FromBody] TestSmtpRequest body, CancellationToken cancellationToken)
@@ -269,6 +278,82 @@ public sealed class SmtpAccountController : ControllerBase
             result.ErrorDetail);
         return Ok(ApiResponseFactory.Success(response,
             result.Success ? "Test email sent." : "Test email failed."));
+    }
+
+    // ---- Tenant-wide switch ----
+
+    /// <summary>Whether the tenant's notification emails go out at all, and who last decided that.</summary>
+    [HttpGet("/api/admin/email-settings")]
+    [RequirePermission(Permissions.UsersRead)]
+    [ProducesResponseType<ApiResponse<EmailSettingsResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSettings([FromQuery] Guid? tenantId, CancellationToken cancellationToken)
+    {
+        var (resolvedTenant, error) = await ResolveTargetTenantAsync(tenantId, cancellationToken);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var settings = await _emailSettings.GetByTenantAsync(resolvedTenant, cancellationToken);
+        return Ok(ApiResponseFactory.Success(await ToSettingsResponseAsync(settings, cancellationToken), "Email settings retrieved."));
+    }
+
+    /// <summary>
+    /// Turns every notification email for the tenant on or off. Off holds back invitations, password
+    /// resets, REMS form links and reminders alike, whatever account is active; a test send from this
+    /// screen is explicit and still goes out. The switch is live at once: nothing else has to be saved.
+    /// </summary>
+    [HttpPut("/api/admin/email-settings")]
+    [RequirePermission(Permissions.EmailManage)]
+    [ProducesResponseType<ApiResponse<EmailSettingsResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateSettings(
+        [FromQuery] Guid? tenantId, [FromBody] UpdateEmailSettingsRequest body, CancellationToken cancellationToken)
+    {
+        var (resolvedTenant, error) = await ResolveTargetTenantAsync(tenantId, cancellationToken);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var settings = await _emailSettings.GetByTenantAsync(resolvedTenant, cancellationToken);
+        if (settings is null)
+        {
+            // No row is the default, so confirming the default stores nothing and names nobody.
+            if (body.NotificationsEnabled)
+            {
+                return Ok(ApiResponseFactory.Success(await ToSettingsResponseAsync(null, cancellationToken), "Email notifications are on."));
+            }
+
+            settings = new TenantEmailSettings { Id = Guid.NewGuid(), TenantId = resolvedTenant, NotificationsEnabled = false };
+            await _emailSettings.AddAsync(settings, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        else if (settings.NotificationsEnabled != body.NotificationsEnabled)
+        {
+            settings.NotificationsEnabled = body.NotificationsEnabled;
+            _emailSettings.Update(settings);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(ApiResponseFactory.Success(
+            await ToSettingsResponseAsync(settings, cancellationToken),
+            body.NotificationsEnabled ? "Email notifications turned on." : "Email notifications turned off."));
+    }
+
+    private async Task<EmailSettingsResponse> ToSettingsResponseAsync(TenantEmailSettings? settings, CancellationToken cancellationToken)
+    {
+        if (settings is null)
+        {
+            return new EmailSettingsResponse(true, null, null);
+        }
+
+        string? updatedBy = null;
+        if (settings.UpdatedById is { } actor)
+        {
+            var names = await _users.GetFullNamesAsync(new[] { actor }, cancellationToken);
+            names.TryGetValue(actor, out updatedBy);
+        }
+        return new EmailSettingsResponse(settings.NotificationsEnabled, updatedBy, settings.UpdatedOnUtc);
     }
 
     // ---- Helpers ----

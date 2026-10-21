@@ -1,3 +1,4 @@
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Persons;
 using EmsPortal.Api.Models.Profile;
@@ -15,6 +16,7 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>Person (CRM master record) management.</summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("/api/admin/persons")]
 [Produces("application/json")]
 [Tags("Persons")]
@@ -121,9 +123,6 @@ public sealed class PersonsController : ControllerBase
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
-
         // Super Admins may scope to any tenant; everyone else is pinned to their active tenant by the
         // ambient query filter (a client-supplied tenantId is ignored for non-Super-Admins).
         Guid? scopeTenant = User.IsSuperAdmin() && tenantId is { } tid ? tid : null;
@@ -131,8 +130,9 @@ public sealed class PersonsController : ControllerBase
             search, scopeTenant, isUser, isActive, new SortRequest(sortBy, descending), page, limit,
             cancellationToken: cancellationToken);
         var names = await ResolveActorNamesAsync(items.SelectMany(p => new[] { p.CreatedById, p.UpdatedById }), cancellationToken);
+        // A Maconomy client's row holds no name or contact details; ClientEmail/ClientPhone read Maconomy's.
         var summaries = items.Select(p => new PersonSummary(
-            p.Id, p.PersonCode, p.FullName, p.PrimaryEmail, p.MobileNumber,
+            p.Id, p.PersonCode, p.IsMaconomyClient ? p.ClientName : p.FullName, p.ClientEmail, p.ClientPhone,
             p.TenantId, p.Tenant?.Name,
             p.UserId is not null, p.IsActive,
             p.SourceEntityType?.ToString(), p.SourceEntityId,
@@ -154,7 +154,8 @@ public sealed class PersonsController : ControllerBase
             : (Guid?)null;
         var items = await _persons.ListSelectableAsync(scope, cancellationToken);
         var options = items.Select(x => new PersonSelectItem(
-            x.Person.Id, x.Person.FullName, x.Person.PrimaryEmail, x.Person.MobileNumber, x.Person.CountryCode, x.Person.TenantId, x.IsUser));
+            x.Person.Id, x.Person.IsMaconomyClient ? x.Person.ClientName : x.Person.FullName,
+            x.Person.ClientEmail, x.Person.ClientPhone, x.Person.CountryCode, x.Person.TenantId, x.IsUser));
         return Ok(ApiResponseFactory.Success(options, "Persons retrieved."));
     }
 
@@ -176,6 +177,14 @@ public sealed class PersonsController : ControllerBase
         if (person is null)
         {
             return NotFound(ApiResponseFactory.NotFound("Person not found."));
+        }
+
+        // Their record holds the customer number alone, and an edit here would put details beside it.
+        if (person.IsMaconomyClient)
+        {
+            return Conflict(ApiResponseFactory.Error(
+                ApiErrorCodes.ValidationFailed, "This client is a Maconomy customer.",
+                $"The details of Maconomy customer {person.MaconomyCustomerNumber} are held in Maconomy and are changed there."));
         }
 
         // Personal

@@ -17,19 +17,22 @@ public sealed class MaconomyConnectionService : IMaconomyConnectionService
     private readonly ICredentialEncryptionService _encryption;
     private readonly IAuditTrailService _audit;
     private readonly IMaconomySessionManager _session;
+    private readonly IMaconomyClientDirectory _clients;
 
     public MaconomyConnectionService(
         IMaconomyConnectionRepository connections,
         IUnitOfWork unitOfWork,
         ICredentialEncryptionService encryption,
         IAuditTrailService audit,
-        IMaconomySessionManager session)
+        IMaconomySessionManager session,
+        IMaconomyClientDirectory clients)
     {
         _connections = connections;
         _unitOfWork = unitOfWork;
         _encryption = encryption;
         _audit = audit;
         _session = session;
+        _clients = clients;
     }
 
     public Task<MaconomyConnection?> GetAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -93,6 +96,8 @@ public sealed class MaconomyConnectionService : IMaconomyConnectionService
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        // What is held in memory was read through the connection as it was.
+        _clients.Forget(tenantId);
         return connection;
     }
 
@@ -109,6 +114,7 @@ public sealed class MaconomyConnectionService : IMaconomyConnectionService
         await _audit.AddAsync(nameof(MaconomyConnection), connection.Id.ToString(), "MaconomyConnectionDeleted",
             details: Describe(connection), cancellationToken: cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _clients.Forget(tenantId);
         return true;
     }
 

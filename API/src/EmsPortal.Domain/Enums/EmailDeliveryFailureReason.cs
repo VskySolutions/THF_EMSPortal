@@ -11,6 +11,9 @@ public enum EmailDeliveryFailureReason
     /// <summary>The tenant has no active SMTP account, so no send was attempted.</summary>
     NoActiveSmtpAccount,
 
+    /// <summary>The tenant has turned its email notifications off, so no send was attempted.</summary>
+    NotificationsDisabled,
+
     /// <summary>The effective template could not be resolved or rendered.</summary>
     TemplateUnavailable,
 

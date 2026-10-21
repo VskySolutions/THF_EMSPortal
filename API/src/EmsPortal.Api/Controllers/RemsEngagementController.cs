@@ -1,4 +1,5 @@
 using EmsPortal.Api.Approval;
+using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
@@ -19,6 +20,7 @@ namespace EmsPortal.Api.Controllers;
 /// client/entity/engagement workspace, the audit/government/tax conditional details.
 /// </summary>
 [ApiController]
+[LoadMaconomyClients]
 [Route("api/rems")]
 [Produces("application/json")]
 [Tags("REMS Engagement Workspace")]
@@ -124,9 +126,6 @@ public sealed class RemsEngagementController : ControllerBase
         {
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
-
-        page = Math.Max(1, page);
-        limit = Math.Clamp(limit, 1, 100);
 
         var slice = string.Equals(assignment?.Trim(), "mine", StringComparison.OrdinalIgnoreCase)
             ? RemsClientFormAssignment.Mine
@@ -287,7 +286,9 @@ public sealed class RemsEngagementController : ControllerBase
 
         // Not the Admin's to change: the email is the address the invite went to, and the version pins the
         // shape the stored JSON is read back in.
-        payload.Email = rems.CustomerEmail;
+        // For a Maconomy customer while Maconomy cannot be read, the address already on the submission.
+        payload.Email = rems.CustomerEmail
+            ?? RemsFormPayloadJson.TryDeserialize(submission.SubmittedPayload)?.Email;
         payload.Version = 1;
 
         var validation = new RemsFormPayloadValidator().Validate(payload, form.EntityType!.Value);
@@ -829,7 +830,7 @@ public sealed class RemsEngagementController : ControllerBase
         return Ok(ApiResponseFactory.Success(view!, "Government audit detail updated."));
     }
 
-    /// <summary>Set the ASSURANCE detail: the client's fiscal year end and the administrative fees.</summary>
+    /// <summary>Set the ASSURANCE detail: the client's fiscal year end.</summary>
     [HttpPut("engagements/{id:guid}/audit")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
@@ -858,10 +859,6 @@ public sealed class RemsEngagementController : ControllerBase
         }
 
         detail.ClientFiscalYearEnd = request.ClientFiscalYearEnd;
-        detail.AdminFeesApply = request.AdminFeesApply;
-        // An amount without a "yes" beside it is an amount nobody is charging. Answering "no" clears it
-        // rather than leaving a figure behind that no screen shows and every report would still sum.
-        detail.AdminFeesAmount = request.AdminFeesApply == true ? request.AdminFeesAmount : null;
 
         await LogEngagementUpdatedAsync(engagement, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
