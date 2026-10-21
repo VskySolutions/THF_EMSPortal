@@ -335,7 +335,7 @@
                   v-model:entity-type="setupForm.entityType"
                   v-model:industry="setupForm.industry"
                   v-model:cse-user-id="setupForm.cseUserId"
-                  :cse-options="cseOptions"
+                  :cse-options="cseChoices"
                   :cse-hint="cseHint"
                   :readonly="!canEditClient"
                   :client-locked="clientLocked"
@@ -374,8 +374,8 @@
                   :tax-form-options="taxFormOptions"
                   :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
-                  :executive-options="executiveOptions"
-                  :billing-manager-options="billingManagerOptions"
+                  :executive-options="executiveChoices"
+                  :billing-manager-options="billingManagerChoices"
                   :billing-period-options="billingPeriodOptions"
                   :personnel-level-options="personnelLevelOptions"
                   :editable="canEditSetup"
@@ -1026,7 +1026,7 @@ const clientRows = computed(() => [
   { label: "Relationship to THF", value: labelOf(typeOptions.value, clientForm.type) },
   { label: "Industry", value: labelOf(industryOptions.value, setupForm.industry) },
   // Whose client this is. Read here rather than under the engagement setup, which is where it is asked.
-  { label: "CSE", value: nameOf(cseOptions.value, setupForm.cseUserId) },
+  { label: "CSE", value: nameOf(cseChoices.value, setupForm.cseUserId) },
   // Read off the request rather than a picker: nobody chooses this, an admin claims it. Blank until one
   // does, and the badge in the header is what says the request is waiting for that.
   { label: "Reviewing Admin", value: request.value?.assignedAdmin?.name || "Waiting for pickup" },
@@ -1136,6 +1136,19 @@ const loadPickers = async () => {
   billingManagerOptions.value = toOptions(billing);
   approvalPolicy.value = policy;
 };
+
+// A seat's picker offers the role's current holders; whoever is already IN the seat may have lost the
+// role since, and still has to read as a name rather than as an id. Commission keeps the bare list.
+const withCurrent = (options, current, role) => {
+  if (!current?.id || options.some((o) => o.value === current.id)) return options;
+  const label = options.length ? `${current.name} (no longer an active ${role})` : current.name || current.id;
+  return [...options, { label, value: current.id }];
+};
+const cseChoices = computed(() => withCurrent(cseOptions.value, request.value?.cse, "CSE"));
+const executiveChoices = computed(() =>
+  withCurrent(executiveOptions.value, engagement.value?.engagementExecutive, "Engagement Executive"));
+const billingManagerChoices = computed(() =>
+  withCurrent(billingManagerOptions.value, engagement.value?.billingManager, "Billing Manager"));
 
 // ---- STATIC-APPROVAL-POLICY ----
 // The seats on this request approve at their own stage and may not also be paid commission, so the
