@@ -2,6 +2,7 @@ import { route } from "quasar/wrappers";
 import { createRouter, createMemoryHistory, createWebHistory, createWebHashHistory } from "vue-router";
 import routes from "./routes";
 import { useAuthStore } from "stores/auth";
+import { LANDING_PATH } from "modules/auth/returnPath";
 import { isJwtExpired } from "services/jwt";
 import { useNotify } from "composables/useNotify";
 
@@ -68,14 +69,14 @@ export default route(function ({ store }) {
     if (requiresAuth) {
       const signedIn = await authStore.ensureSession();
       if (!signedIn) {
-        const isDefaultLanding = to.fullPath === "/" || to.fullPath === "/dashboard";
+        const isDefaultLanding = to.fullPath === "/" || to.fullPath === LANDING_PATH;
         return next({ name: "login", query: isDefaultLanding ? {} : { redirect: to.fullPath } });
       }
     }
 
-    // Already logged in but on an auth page → the dashboard. An expired token does not count.
+    // Already logged in but on an auth page → the landing page. An expired token does not count.
     if (to.path.startsWith("/auth") && authStore.isAuthenticated && !isJwtExpired(authStore.token)) {
-      return next("/dashboard");
+      return next(LANDING_PATH);
     }
 
     if (authStore.isAuthenticated) {
