@@ -41,6 +41,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
     private const string JointFiling = "joint";
 
     private readonly IRemsRepository _rems;
+    private readonly IRemsApprovalRepository _approvals;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
@@ -48,12 +49,14 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
 
     public RemsRelatedEntitiesController(
         IRemsRepository rems,
+        IRemsApprovalRepository approvals,
         IUserRepository users,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
         IOptionCodeResolver codes)
     {
         _rems = rems;
+        _approvals = approvals;
         _users = users;
         _unitOfWork = unitOfWork;
         _activity = activity;
@@ -128,6 +131,18 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
             mayUpdate && !RemsRequestStatuses.IsFrozen(i.RequestStatus)
             && (isRemsAdmin || (me is { } uid && (i.CreatedById == uid || i.OnBehalfOfUserId == uid)));
 
+        // The board is the whole firm's; the request page opens only to a REMS Admin, the people named on
+        // the request and its approvers (RemsRequestsController.GetById). So never offer a View it refuses.
+        var approverOn = me is { } approver
+            ? await _approvals.RequestsWithApproverAsync(remsIds, approver, cancellationToken)
+            : new HashSet<Guid>();
+        bool CanView(RemsRelatedEntityItem i) =>
+            isRemsAdmin
+            || (me is { } uid
+                && (i.CreatedById == uid || i.OnBehalfOfUserId == uid
+                    || i.AdminAssignedToId == uid || i.CSEId == uid
+                    || approverOn.Contains(i.RemsId)));
+
         var rows = items.Select(i =>
         {
             var declared = related.TryGetValue(i.RemsId, out var d)
@@ -139,7 +154,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 i.RemsId, i.RemsNumber, i.ClientName, i.ClientNameSuffix,
                 i.ClientEmail, i.EntityType, i.RequestStatus,
                 RemsWorkspaceMapper.UserRef(i.AdminAssignedToId, names), i.SubmittedOnUtc,
-                parent, children, i.RelatedCount, CanEdit(i),
+                parent, children, i.RelatedCount, CanView(i), CanEdit(i),
                 NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc);
         });
 

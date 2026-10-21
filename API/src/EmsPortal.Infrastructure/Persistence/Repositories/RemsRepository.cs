@@ -701,6 +701,7 @@ internal sealed class RemsRepository : IRemsRepository
                 x.Form.EntityType!.Value,
                 x.Rems.Status!.Value,
                 x.Rems.AdminAssignedToId,
+                x.Rems.CSEId,
                 x.Form.SubmittedOnUtc,
                 // The rows the nested table actually LISTS, which is why the joint filers are left out of
                 // it: they are shown as part of the parent, not under it.

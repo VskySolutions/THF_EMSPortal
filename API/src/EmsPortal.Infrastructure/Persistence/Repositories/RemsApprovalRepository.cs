@@ -316,6 +316,22 @@ internal sealed class RemsApprovalRepository : IRemsApprovalRepository
         => _dbContext.RemsApprovalTasks
             .AnyAsync(t => t.ApproverId == userId && t.Round!.Engagement!.REMSId == remsId, cancellationToken);
 
+    public async Task<IReadOnlySet<Guid>> RequestsWithApproverAsync(
+        IReadOnlyCollection<Guid> remsIds, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var wanted = remsIds.Distinct().ToList();
+        if (wanted.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+        var found = await _dbContext.RemsApprovalTasks
+            .Where(t => t.ApproverId == userId && wanted.Contains(t.Round!.Engagement!.REMSId))
+            .Select(t => t.Round!.Engagement!.REMSId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return found.ToHashSet();
+    }
+
     // The same task the inbox row for this request opens, picked by the same rule the inbox collapse uses:
     // highest round number of THEIR OWN tasks, id as the tie-break. Projected to the id alone — the caller
     // is deciding where to navigate, and the task detail endpoint loads the packet.

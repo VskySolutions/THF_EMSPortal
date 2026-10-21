@@ -231,6 +231,8 @@ public sealed record RemsRelatedEntityItem(
     /// REMS surface applies, and a list that skipped it would say something different about the same row.
     /// </summary>
     Guid? AdminAssignedToId,
+    /// <summary>The CSE named on the request: with the admin and the initiator, one of the people who may open it.</summary>
+    Guid? CSEId,
     /// <summary>When the client sent their intake form back. Never null in practice: no submission, no rows.</summary>
     DateTime? SubmittedOnUtc,
     int RelatedCount,

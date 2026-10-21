@@ -88,6 +88,13 @@ public interface IRemsApprovalRepository
     Task<bool> IsApproverOnRequestAsync(Guid remsId, Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// <see cref="IsApproverOnRequestAsync"/> asked of a whole page at once: which of these requests the
+    /// user has ever been routed a task on.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> RequestsWithApproverAsync(
+        IReadOnlyCollection<Guid> remsIds, Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The id of the caller's CURRENT task on a request — their own task on the latest round they
     /// were routed — or null if they were never an approver on it.
     /// </summary>
