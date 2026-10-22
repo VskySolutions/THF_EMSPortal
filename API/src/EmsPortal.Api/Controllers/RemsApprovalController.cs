@@ -4,6 +4,7 @@ using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
+using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Common;
 using EmsPortal.Application.Abstractions.Persistence;
@@ -67,6 +68,8 @@ public sealed class RemsApprovalController : ControllerBase
     private readonly IOptionCodeResolver _codes;
     // STATIC-APPROVAL-POLICY
     private readonly IRemsApprovalPolicy _policy;
+    private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IRemsMaconomyCustomerSyncRepository _syncs;
 
     public RemsApprovalController(
         IRemsRepository rems,
@@ -81,9 +84,13 @@ public sealed class RemsApprovalController : ControllerBase
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
         IOptionCodeResolver codes,
-        IRemsApprovalPolicy policy)
+        IRemsApprovalPolicy policy,
+        IMaconomyCustomerSyncService customerSync,
+        IRemsMaconomyCustomerSyncRepository syncs)
     {
         _policy = policy;
+        _customerSync = customerSync;
+        _syncs = syncs;
         _rems = rems;
         _delegations = delegations;
         _engagements = engagements;
@@ -490,12 +497,22 @@ public sealed class RemsApprovalController : ControllerBase
             cancellationToken);
         string? NameOf(Guid? id) => id is { } uid && auditNames.TryGetValue(uid, out var n) ? n : null;
 
+        // Sync now lives on this list. Every row is the caller's own task, so being on the row is what
+        // entitles them; the view is null for a request whose client is not posted at all.
+        var syncs = await _syncs.ListByRemsIdsAsync(
+            tasks.Select(t => t.Round!.Engagement!.Rems!.Id).Distinct().ToList(), cancellationToken);
+        var syncEnabled = User.GetActiveTenantId() is { } tenantId
+            && await _customerSync.IsEnabledAsync(tenantId, cancellationToken);
+
         var rows = tasks.Select(t =>
         {
             var round = t.Round!;
             var engagement = round.Engagement!;
             var rems = engagement.Rems!;
             var client = ClientOf(engagement);
+            var sync = syncs.GetValueOrDefault(rems.Id);
+            var maconomySync = RemsMaconomySyncViews.For(
+                rems, sync, sync is not null && _customerSync.IsStale(sync), syncEnabled, canManage: true);
             return new RemsApprovalTaskRow(
                 t.Id, round.Id, round.RoundNumber, t.ApproverRole.ToString(), t.Status.ToString(),
                 round.SentOnUtc, t.DecidedOnUtc, round.Status.ToString(),
@@ -507,7 +524,8 @@ public sealed class RemsApprovalController : ControllerBase
                 round.Tasks.Count(x => x.Status == RemsApprovalTaskStatus.Approved),
                 round.Tasks.Count(x => x.Status == RemsApprovalTaskStatus.Rejected),
                 round.Tasks.Count,
-                NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc);
+                NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc,
+                MaconomySync: maconomySync);
         });
         return Ok(ApiResponseFactory.Paginated(rows, "REMS approval tasks retrieved.", page, limit, total));
     }
@@ -719,6 +737,7 @@ public sealed class RemsApprovalController : ControllerBase
 
         // The round is settled once nobody is still deciding.
         var fullyApproved = round.Tasks.All(t => t.Id == task.Id || t.Status != RemsApprovalTaskStatus.Pending);
+        REMSMaconomyCustomerSync? pendingSync = null;
         if (fullyApproved)
         {
             round.Status = RemsApprovalRoundStatus.Approved;
@@ -728,6 +747,10 @@ public sealed class RemsApprovalController : ControllerBase
             engagement.Status = RemsEngagementStatus.Approved;
             _engagements.Update(engagement);
             await SyncRequestStatusAsync(rems, engagement, cancellationToken);
+
+            // A brand-new client is posted to Maconomy from here — recorded with the approval, queued once
+            // it is committed, and never anything the approval waits on or fails because of.
+            pendingSync = await _customerSync.RecordOnApprovalAsync(rems, cancellationToken);
 
             var involved = new HashSet<Guid>(round.Tasks.Select(t => t.ApproverId)) { round.SentByUserId };
             if (rems.CSEId is { } cse)
@@ -751,6 +774,10 @@ public sealed class RemsApprovalController : ControllerBase
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (pendingSync is not null)
+        {
+            _customerSync.Enqueue(pendingSync);
+        }
 
         var view = await BuildTaskViewAsync(task, cancellationToken);
         return Ok(ApiResponseFactory.Success(view, fullyApproved ? "Task approved; engagement fully approved." : "Task approved."));

@@ -49,4 +49,13 @@ public class MaconomyConnection : AuditableEntity
 
     /// <summary>Switches the lookup off without losing the credentials.</summary>
     public bool IsEnabled { get; set; } = true;
+
+    // ---- The customer sync: posting a fully approved brand-new client to Maconomy ----
+
+    /// <summary>Whether a request's approval queues its new client for posting. Off by default; Start/Stop on the settings page.</summary>
+    public bool CustomerSyncEnabled { get; set; }
+
+    public DateTime? CustomerSyncChangedOnUtc { get; set; }
+
+    public Guid? CustomerSyncChangedById { get; set; }
 }

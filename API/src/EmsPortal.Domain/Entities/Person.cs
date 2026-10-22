@@ -154,9 +154,11 @@ public class Person : AuditableEntity
     /// The client's name wherever it is READ: Maconomy's for a Maconomy customer, the record's own
     /// otherwise. SQL cannot see the first, so lists search and sort it through the client directory.
     /// </summary>
+    // A client the portal itself posted to Maconomy keeps the name it was typed with, which beats the
+    // placeholder while Maconomy cannot be read; one picked from Maconomy has no typed name to fall back on.
     [NotMapped]
     public string ClientName => IsMaconomyClient
-        ? Maconomy?.Name ?? MaconomyPlaceholderName(MaconomyCustomerNumber!)
+        ? Maconomy?.Name ?? (ClientDisplayName.Length > 0 ? ClientDisplayName : MaconomyPlaceholderName(MaconomyCustomerNumber!))
         : ClientDisplayName;
 
     /// <summary>What stands in for the name while Maconomy cannot be read: the one thing the portal does hold.</summary>
@@ -164,11 +166,11 @@ public class Person : AuditableEntity
 
     /// <summary>The email to reach the client at: Maconomy's for a Maconomy customer.</summary>
     [NotMapped]
-    public string? ClientEmail => IsMaconomyClient ? Maconomy?.Email : PrimaryEmail;
+    public string? ClientEmail => IsMaconomyClient ? Maconomy?.Email ?? PrimaryEmail : PrimaryEmail;
 
     /// <summary>The client's telephone: Maconomy's for a Maconomy customer.</summary>
     [NotMapped]
-    public string? ClientPhone => IsMaconomyClient ? Maconomy?.Phone : MobileNumber;
+    public string? ClientPhone => IsMaconomyClient ? Maconomy?.Phone ?? MobileNumber : MobileNumber;
 
     // ---- Contact information ----
     public string? PrimaryEmail { get; set; }

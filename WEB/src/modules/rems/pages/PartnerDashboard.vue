@@ -105,6 +105,15 @@
         </q-td>
       </template>
 
+      <!-- Whether the client has been posted to Maconomy. Blank for a request whose client is not posted:
+           an existing client, one picked from Maconomy, or a request not yet approved. -->
+      <template #body-cell-maconomySync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomySync" :sync="cell.row.maconomySync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <!-- What kind of entity the client is, as the badge Related Entities draws for the same value — the
            tenant's word for it in the tenant's colour, rather than the stored code. -->
       <template #body-cell-entityType="cell">
@@ -200,6 +209,8 @@ import AppListHeader from "components/common/AppListHeader.vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
+import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
+import { maconomySyncLabel } from "modules/rems/maconomySync";
 import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -300,6 +311,7 @@ const columns = computed(() => [
     ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
   },
   { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
+  { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.
   { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", sortable: true, default: false, filterable: false },

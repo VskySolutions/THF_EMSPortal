@@ -170,7 +170,9 @@ public sealed record RemsRequestRow(
     DateTime UpdatedOnUtc,
     RemsRowActions Actions,
     /// <summary>Set when the client is a Maconomy customer.</summary>
-    string? MaconomyCustomerNumber = null);
+    string? MaconomyCustomerNumber = null,
+    /// <summary>Where posting the client to Maconomy has got to; null on a request whose client is not posted.</summary>
+    RemsMaconomySyncView? MaconomySync = null);
 
 /// <summary>An attached file on a request detail (linked media).</summary>
 public sealed record RemsFileRef(
@@ -222,7 +224,9 @@ public sealed record RemsRequestDetail(
     /// <summary>Set when the client is a Maconomy customer: their name, email and mobile above are Maconomy's, read by this number.</summary>
     string? MaconomyCustomerNumber = null,
     /// <summary>The client is a Maconomy customer and Maconomy could not be read, so the name is a stand-in and the contact details are missing.</summary>
-    bool MaconomyUnavailable = false);
+    bool MaconomyUnavailable = false,
+    /// <summary>Where posting the client to Maconomy has got to; null on a request whose client is not posted.</summary>
+    RemsMaconomySyncView? MaconomySync = null);
 
 /// <summary>A client-lookup result (WO-111).</summary>
 public sealed record RemsClientLookupItem(

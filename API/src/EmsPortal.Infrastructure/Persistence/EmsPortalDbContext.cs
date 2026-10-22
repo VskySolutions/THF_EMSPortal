@@ -138,6 +138,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<REMSApprovalChecklistItem> RemsApprovalChecklistItems => Set<REMSApprovalChecklistItem>();
     public DbSet<RemsSettings> RemsSettings => Set<RemsSettings>();
     public DbSet<RemsDepartmentDirector> RemsDepartmentDirectors => Set<RemsDepartmentDirector>();
+    public DbSet<REMSMaconomyCustomerSync> RemsMaconomyCustomerSyncs => Set<REMSMaconomyCustomerSync>();
 
     /// <summary>Data Protection key ring storage (Multi-Tenancy ADR-002).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
@@ -219,6 +220,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<REMSAdditionalEntity>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSSendBack>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSDelegation>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<REMSMaconomyCustomerSync>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Soft-delete filters for the non-tenant-scoped entities.
         modelBuilder.Entity<Tenant>().HasQueryFilter(e => !e.Deleted);

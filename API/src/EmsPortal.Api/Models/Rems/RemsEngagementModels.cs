@@ -37,7 +37,9 @@ public sealed record RemsClientFormRow(
     string? CreatedBy,
     DateTime CreatedOnUtc,
     string? UpdatedBy,
-    DateTime UpdatedOnUtc);
+    DateTime UpdatedOnUtc,
+    /// <summary>The Maconomy customer sync status word, where a row has been recorded for the request.</summary>
+    string? MaconomySyncStatus = null);
 
 /// <summary>The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload.</summary>
 public sealed record RemsSubmissionView(

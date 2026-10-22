@@ -70,7 +70,13 @@ public sealed record RemsApprovalTaskRow(
     string? CreatedBy,
     DateTime CreatedOnUtc,
     string? UpdatedBy,
-    DateTime UpdatedOnUtc);
+    DateTime UpdatedOnUtc,
+    /// <summary>
+    /// Where posting the client to Maconomy has got to, once the request is approved; null on a request
+    /// whose client is not posted. Sync now lives on this list, so <c>CanSyncNow</c> is answered for the
+    /// approver reading it.
+    /// </summary>
+    RemsMaconomySyncView? MaconomySync = null);
 
 /// <summary>A checklist line on an approval task.</summary>
 public sealed record RemsChecklistItemView(Guid Id, int DisplayOrder, string Label, bool IsCompleted, DateTime? CompletedOnUtc);

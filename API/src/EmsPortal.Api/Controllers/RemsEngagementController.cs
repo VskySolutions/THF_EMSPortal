@@ -3,6 +3,7 @@ using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
+using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Common;
 using EmsPortal.Application.Abstractions.Persistence;
@@ -57,6 +58,8 @@ public sealed class RemsEngagementController : ControllerBase
     private readonly IOptionCodeResolver _codes;
     // STATIC-APPROVAL-POLICY
     private readonly IRemsApprovalPolicy _policy;
+    private readonly IRemsMaconomyCustomerSyncRepository _syncs;
+    private readonly IMaconomyCustomerSyncService _customerSync;
 
     public RemsEngagementController(
         IRemsRepository rems,
@@ -73,9 +76,13 @@ public sealed class RemsEngagementController : ControllerBase
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
         IOptionCodeResolver codes,
-        IRemsApprovalPolicy policy)
+        IRemsApprovalPolicy policy,
+        IRemsMaconomyCustomerSyncRepository syncs,
+        IMaconomyCustomerSyncService customerSync)
     {
         _policy = policy;
+        _syncs = syncs;
+        _customerSync = customerSync;
         _rems = rems;
         _delegations = delegations;
         _forms = forms;
@@ -150,6 +157,7 @@ public sealed class RemsEngagementController : ControllerBase
         // Whether this caller can prise a request loose from whoever holds it — the remedy when the admin
         // on it is away. Ordinary admins give back only their own.
         var elevated = RemsSetupAccess.IsElevated(User);
+        var syncs = await _syncs.ListByRemsIdsAsync(items.Select(i => i.RemsId).ToList(), cancellationToken);
 
         var rows = items.Select(i => new RemsClientFormRow(
             i.RemsId, i.RemsNumber, i.ClientName, i.ClientNameSuffix,
@@ -158,7 +166,10 @@ public sealed class RemsEngagementController : ControllerBase
             RemsWorkspaceMapper.UserRef(i.AdminAssignedToId, names), RemsWorkspaceMapper.UserRef(i.CSEId, names),
             CanPickUp: mayAssign && i.AdminAssignedToId is null,
             CanHandBack: mayAssign && i.AdminAssignedToId is { } holder && (elevated || holder == me),
-            NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc));
+            NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
+            MaconomySyncStatus: syncs.TryGetValue(i.RemsId, out var sync)
+                ? RemsMaconomySyncViews.StatusOf(sync, _customerSync.IsStale(sync))
+                : null));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }

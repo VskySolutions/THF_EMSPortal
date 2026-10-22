@@ -93,4 +93,8 @@ public static class ActivityEventTypes
     public const string RemsApproved = "RemsApproved";
     public const string RemsRejected = "RemsRejected";
     public const string RemsFullyApproved = "RemsFullyApproved";
+
+    // The customer sync: what became of posting the request's new client to Maconomy.
+    public const string RemsMaconomyCustomerSynced = "RemsMaconomyCustomerSynced";
+    public const string RemsMaconomyCustomerSyncFailed = "RemsMaconomyCustomerSyncFailed";
 }

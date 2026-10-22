@@ -92,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<ISmtpAccountRepository, SmtpAccountRepository>();
         services.AddScoped<IMaconomyConnectionRepository, MaconomyConnectionRepository>();
+        services.AddScoped<IRemsMaconomyCustomerSyncRepository, RemsMaconomyCustomerSyncRepository>();
         services.AddScoped<ITenantBrandingRepository, TenantBrandingRepository>();
         services.AddScoped<ITenantEmailSettingsRepository, TenantEmailSettingsRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
@@ -148,6 +149,10 @@ public static class DependencyInjection
         // Transactional emails are queued and delivered on a Hangfire worker so requests never block on SMTP.
         services.AddScoped<Application.Abstractions.Email.IEmailDispatcher, Jobs.EmailDispatcher>();
         services.AddScoped<Jobs.EmailSendJob>();
+
+        // The Maconomy customer sync is queued the same way; the job class lives here so Workers can run it.
+        services.AddScoped<IMaconomyCustomerSyncQueue, Jobs.MaconomyCustomerSyncQueue>();
+        services.AddScoped<Jobs.MaconomyCustomerSyncJob>();
         return services;
     }
 

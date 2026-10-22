@@ -177,6 +177,33 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         _ => null,
     };
 
+    /// <summary>The specification 6 number a REMS entity type code is filed under, or null for a code Maconomy has no number for.</summary>
+    public static string? EntityTypeNumberOf(string? entityTypeCode)
+    {
+        var code = (entityTypeCode ?? string.Empty).Trim();
+        if (code.Length == 0)
+        {
+            return null;
+        }
+        foreach (var number in new[] { "1", "2", "3", "4", "5", "6" })
+        {
+            if (EntityTypeOf(number) is { } type && string.Equals(type.Code, code, StringComparison.OrdinalIgnoreCase))
+            {
+                return number;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>The specification 1 number a REMS industry code is filed under, or null for a code Maconomy has no number for.</summary>
+    public static string? IndustryNumberOf(string? industryCode)
+    {
+        var code = (industryCode ?? string.Empty).Trim();
+        return code.Length == 0
+            ? null
+            : Industries.FirstOrDefault(i => string.Equals(i.Code, code, StringComparison.OrdinalIgnoreCase)).Number;
+    }
+
     // Specification 1 is the customer's industry. THF numbers the values 17 to 38; the portal fills the
     // picker with the REMS.Industry code each stands for. Matched by the number when the value starts
     // with one ("17", "17-Manufacturing"), by the label otherwise.

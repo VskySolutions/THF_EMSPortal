@@ -91,6 +91,15 @@
         </q-td>
       </template>
 
+      <!-- Whether the client has been posted to Maconomy. Blank until a request is approved and has a
+           brand-new client to post. -->
+      <template #body-cell-maconomySync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomySyncStatus" :sync="cell.row.maconomySyncStatus" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <!-- Who holds the request. -->
       <template #body-cell-assignedAdmin="cell">
         <q-td :props="cell">
@@ -211,6 +220,8 @@ import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
+import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
+import { maconomySyncLabel } from "modules/rems/maconomySync";
 
 const notify = useNotify();
 const { confirm } = useConfirm();
@@ -275,6 +286,7 @@ const columns = computed(() => [
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
+  { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
   ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);

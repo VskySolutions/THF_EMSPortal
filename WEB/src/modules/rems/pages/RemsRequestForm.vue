@@ -7,6 +7,8 @@
           <!-- The row helper rather than the bare code, so a request nobody has picked up says so here
                exactly as it does in EMS Review instead of reading as though an admin is already on it. -->
           <app-option-badge v-if="request" :option="requestStatusOption(request)" />
+          <!-- Whether the approved client has reached Maconomy: a separate fact from the status beside it. -->
+          <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
 
           <!-- What the page is doing with what has been typed. -->
           <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
@@ -194,6 +196,13 @@
               <q-separator />
               <div class="rf-section__body">
                 <detail-grid :rows="clientRows" />
+                <!-- Posting the client to Maconomy. Standalone from the approval above it, so it has its own
+                     line and its own reason when it failed. Read-only here: Sync now lives on the Approvals
+                     list and the Maconomy settings page. Shown only on a request whose client is posted at all. -->
+                <div v-if="request?.maconomySync" class="rf-maconomy-sync q-mt-md">
+                  <maconomy-sync-chip :sync="request.maconomySync" />
+                  <span class="text-body2 text-grey-8">{{ maconomySyncNote }}</span>
+                </div>
                 <!-- The client's other businesses, and whether each has been turned into its own request
                      yet. -->
                 <additional-entities-panel
@@ -458,7 +467,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } 
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
 import { useNotify } from "composables/useNotify";
-import { formatDateOnly } from "composables/useDateFormat";
+import { formatDateOnly, useDateFormat } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import {
@@ -475,6 +484,7 @@ import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
 import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
 import DetailGrid from "modules/rems/components/DetailGrid.vue";
+import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
 import ClientInformationFields from "modules/rems/components/ClientInformationFields.vue";
 import AdditionalEntitiesPanel from "modules/rems/components/AdditionalEntitiesPanel.vue";
 import ApprovalHistory from "modules/rems/components/ApprovalHistory.vue";
@@ -1376,6 +1386,33 @@ watch(clientForm, () => markDirty("client"), { deep: true });
 // `setupForm` is two writes, so it is two flags rather than one deep watcher: the CSE and the entity type
 // go to the EMS form record together, the industry to the engagement.
 watch([() => setupForm.cseUserId, () => setupForm.entityType], () => markDirty("form"));
+// ---- Posting the client to Maconomy ----
+// Standalone from the approval: the request page only reads the outcome. Sync now is on the Approvals list
+// and the Maconomy settings page.
+const dateFmt = useDateFormat();
+
+const maconomySyncNote = computed(() => {
+  const s = request.value?.maconomySync;
+  if (!s) return "";
+  const when = s.syncedOnUtc ? ` on ${dateFmt.formatDateTime(s.syncedOnUtc)}` : "";
+  switch (s.status) {
+    case "synced":
+      return `Created in Maconomy${when}.`;
+    case "linked":
+      return `A Maconomy customer with this client's email already existed; linked to it${when}.`;
+    case "failed":
+      return s.failureReason || "The last attempt failed.";
+    case "pending":
+      return "Queued for posting to Maconomy.";
+    case "syncing":
+      return "Posting to Maconomy now.";
+    default:
+      return s.syncEnabled
+        ? "Not posted to Maconomy yet. Sync now is on the Approvals list and the Maconomy settings page."
+        : "Not posted to Maconomy: the customer sync is switched off. Start it under Tenant Settings → Maconomy, then sync by hand.";
+  }
+});
+
 watch(() => setupForm.industry, () => markDirty("industry"));
 
 const saveChip = computed(() => ({
@@ -1823,3 +1860,12 @@ body.rf-dragging {
   user-select: none;
 }
 </style>
+/* The Maconomy line under the client details: chip, note and the Sync now button on one row, wrapping on a
+   phone. */
+.rf-maconomy-sync {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+

@@ -19,6 +19,12 @@ public static class ApiErrorCodes
     public const string MaconomyAuthFailed = "MACONOMY_AUTH_FAILED";
     /// <summary>Maconomy could not be reached, timed out, or answered an error.</summary>
     public const string MaconomyUnavailable = "MACONOMY_UNAVAILABLE";
+    /// <summary>The customer sync is switched off for the tenant, so Sync now is refused.</summary>
+    public const string MaconomySyncOff = "MACONOMY_SYNC_OFF";
+    /// <summary>The request is not one whose client is posted: not approved, not a brand-new client, or already a Maconomy customer.</summary>
+    public const string MaconomySyncNotEligible = "MACONOMY_SYNC_NOT_ELIGIBLE";
+    /// <summary>An attempt for this request is already under way.</summary>
+    public const string MaconomySyncRunning = "MACONOMY_SYNC_RUNNING";
 
     // Permission Groups
     public const string DuplicateGroupName = "DUPLICATE_GROUP_NAME";
