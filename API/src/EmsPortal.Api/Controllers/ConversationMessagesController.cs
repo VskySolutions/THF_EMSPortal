@@ -37,9 +37,8 @@ public sealed class ConversationMessagesController : ControllerBase
     private readonly IActivityEventWriter _activity;
     private readonly INotificationDispatcher _notifications;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IRemsApprovalRepository _approvals;
-    private readonly IRemsRepository _rems;
-    private readonly IRemsEngagementRepository _engagements;
+    private readonly IRemsApprovalTaskRepository _approvals;
+    private readonly IRemsRequestRepository _rems;
 
     public ConversationMessagesController(
         IConversationMessageRepository messages,
@@ -47,9 +46,8 @@ public sealed class ConversationMessagesController : ControllerBase
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
         IUnitOfWork unitOfWork,
-        IRemsApprovalRepository approvals,
-        IRemsRepository rems,
-        IRemsEngagementRepository engagements)
+        IRemsApprovalTaskRepository approvals,
+        IRemsRequestRepository rems)
     {
         _messages = messages;
         _users = users;
@@ -58,7 +56,6 @@ public sealed class ConversationMessagesController : ControllerBase
         _unitOfWork = unitOfWork;
         _approvals = approvals;
         _rems = rems;
-        _engagements = engagements;
     }
 
     [HttpGet]
@@ -208,17 +205,20 @@ public sealed class ConversationMessagesController : ControllerBase
         {
             return true;
         }
+        if (rems.DepartmentDirectorId == me || rems.EngagementExecutiveId == me || rems.BillingManagerId == me)
+        {
+            return true;
+        }
         if (await _approvals.IsApproverOnRequestAsync(entityId, me, cancellationToken))
         {
             return true;
         }
 
-        var engagement = await _engagements.GetByRemsIdAsync(entityId, cancellationToken);
-        return engagement is not null
-            && (engagement.DepartmentDirectorId == me
-                || engagement.EngagementExecutiveId == me
-                || engagement.BillingManagerId == me
-                || engagement.CommissionSplits.Any(s => !s.Deleted && s.EmployeeId == me));
+        // The commission splits are not on the light load, so only a caller every cheaper rule has refused
+        // pays for the full graph.
+        var workspace = await _rems.GetWorkspaceAsync(entityId, cancellationToken);
+        return workspace is not null
+            && workspace.CommissionSplits.Any(s => !s.Deleted && s.EmployeeId == me);
     }
 
     private async Task NotifyMentionsAsync(ConversationMessage message, IReadOnlyCollection<Guid> mentionIds, CancellationToken cancellationToken)

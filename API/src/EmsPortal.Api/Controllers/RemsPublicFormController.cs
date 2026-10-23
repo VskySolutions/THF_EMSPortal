@@ -1,5 +1,7 @@
 using System.Globalization;
 using EmsPortal.Api.Models.Rems;
+using EmsPortal.Api.RateLimiting;
+using EmsPortal.Api.Rems;
 using EmsPortal.Api.Validators.Rems;
 using EmsPortal.Application.Abstractions.Email;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
@@ -15,13 +17,16 @@ using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.RateLimiting;
-using EmsPortal.Api.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
-/// <summary>The public, unauthenticated REMS client onboarding form (WO-113).</summary>
+/// <summary>
+/// The public, unauthenticated REMS client onboarding form (WO-113). There is no form row and no stored
+/// payload: the invite lives on the request, and what the client types is written straight onto the
+/// client master through <see cref="RemsClientIntake"/>.
+/// </summary>
 [ApiController]
 [Route("api/rems/public/forms")]
 [AllowAnonymous]
@@ -38,12 +43,8 @@ public sealed class RemsPublicFormController : ControllerBase
 
     private static readonly RemsFormPayloadValidator PayloadValidator = new();
 
-    private readonly IRemsFormRepository _forms;
-    private readonly IRemsRepository _rems;
-    private readonly IRemsClientRepository _clients;
-    private readonly IRemsEngagementRepository _engagements;
-    private readonly IAddressRepository _addresses;
-    private readonly IPersonRepository _persons;
+    private readonly IRemsRequestRepository _requests;
+    private readonly RemsClientIntake _intake;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITenantContext _tenantContext;
@@ -60,12 +61,8 @@ public sealed class RemsPublicFormController : ControllerBase
     private string _lockedEmail = string.Empty;
 
     public RemsPublicFormController(
-        IRemsFormRepository forms,
-        IRemsRepository rems,
-        IRemsClientRepository clients,
-        IRemsEngagementRepository engagements,
-        IAddressRepository addresses,
-        IPersonRepository persons,
+        IRemsRequestRepository requests,
+        RemsClientIntake intake,
         IUserRepository users,
         IUnitOfWork unitOfWork,
         ITenantContext tenantContext,
@@ -78,13 +75,8 @@ public sealed class RemsPublicFormController : ControllerBase
         ILogger<RemsPublicFormController> logger,
         IMaconomyClientDirectory maconomy)
     {
-        _maconomy = maconomy;
-        _forms = forms;
-        _rems = rems;
-        _clients = clients;
-        _engagements = engagements;
-        _addresses = addresses;
-        _persons = persons;
+        _requests = requests;
+        _intake = intake;
         _users = users;
         _unitOfWork = unitOfWork;
         _tenantContext = tenantContext;
@@ -95,48 +87,53 @@ public sealed class RemsPublicFormController : ControllerBase
         _optionSets = optionSets;
         _codes = codes;
         _logger = logger;
+        _maconomy = maconomy;
     }
 
     // -------------------- Load --------------------
 
     /// <summary>
     /// Resolve the public form and return its load state (WO-113): <c>Invalid</c> (bad link),
-    /// <c>Unavailable</c> (request deleted, cancelled, or not yet sent).
+    /// <c>Unavailable</c> (request deleted, or not yet sent).
     /// </summary>
     [HttpGet("{inviteCode}")]
     [ProducesResponseType<ApiResponse<RemsPublicFormResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Load(string inviteCode, CancellationToken cancellationToken)
     {
-        var form = await LoadFormAsync(inviteCode, cancellationToken);
-        if (form is null)
+        var request = await LoadFormAsync(inviteCode, cancellationToken);
+        if (request is null)
         {
             return Ok(ApiResponseFactory.Success(new RemsPublicFormResponse(RemsPublicFormStates.Invalid), "REMS form resolved."));
         }
 
-        var rems = form.Rems!;
-        if (IsUnavailable(form))
+        if (IsUnavailable(request))
         {
             return Ok(ApiResponseFactory.Success(new RemsPublicFormResponse(RemsPublicFormStates.Unavailable), "REMS form resolved."));
         }
 
-        return form.Status switch
+        var client = request.Client!;
+        if (RemsDerived.IsFormSubmitted(request))
         {
-            RemsFormStatus.Submitted => Ok(ApiResponseFactory.Success(
-                new RemsPublicFormResponse(RemsPublicFormStates.Submitted, ClientName: rems.ClientDisplayName),
-                "REMS form resolved.")),
+            return Ok(ApiResponseFactory.Success(
+                new RemsPublicFormResponse(RemsPublicFormStates.Submitted, ClientName: client.ClientName),
+                "REMS form resolved."));
+        }
 
-            RemsFormStatus.Sent => Ok(ApiResponseFactory.Success(
-                new RemsPublicFormResponse(
-                    RemsPublicFormStates.Editable,
-                    EntityType: form.EntityType!.Value,
-                    Prefill: BuildPrefill(rems, form.EntityType!.Value),
-                    DraftPayload: RemsFormPayloadJson.TryDeserialize(CurrentDraft(form)?.DraftPayload),
-                    ReferralSources: await ResolvePublicOptionsAsync(rems.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken)),
-                "REMS form resolved.")),
+        // Saved: built but not yet sent — the link is not active until the Admin sends it.
+        if (!IsEditable(request))
+        {
+            return Ok(ApiResponseFactory.Success(new RemsPublicFormResponse(RemsPublicFormStates.Unavailable), "REMS form resolved."));
+        }
 
-            // Draft / Saved: built but not yet sent — the link is not active until the Admin sends it.
-            _ => Ok(ApiResponseFactory.Success(new RemsPublicFormResponse(RemsPublicFormStates.Unavailable), "REMS form resolved.")),
-        };
+        var entityType = EntityTypeOf(request)!;
+        return Ok(ApiResponseFactory.Success(
+            new RemsPublicFormResponse(
+                RemsPublicFormStates.Editable,
+                EntityType: entityType,
+                Prefill: BuildPrefill(client, entityType),
+                DraftPayload: DraftPayload(request, entityType),
+                ReferralSources: await ResolvePublicOptionsAsync(request.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken)),
+            "REMS form resolved."));
     }
 
     /// <summary>
@@ -168,42 +165,25 @@ public sealed class RemsPublicFormController : ControllerBase
 
     // -------------------- Draft (auto-save / explicit save) --------------------
 
-    /// <summary>Upsert the single in-progress draft (WO-113).</summary>
+    /// <summary>Save the in-progress draft (WO-113): the client rows are the draft, there is no copy.</summary>
     [HttpPut("{inviteCode}/draft")]
     [ProducesResponseType<ApiResponse<RemsDraftSavedResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SaveDraft(string inviteCode, [FromBody] RemsFormPayloadV1 payload, CancellationToken cancellationToken)
     {
-        var form = await LoadFormAsync(inviteCode, cancellationToken);
-        if (form is null)
+        var request = await LoadFormAsync(inviteCode, cancellationToken);
+        if (request is null)
         {
             return FormNotFound();
         }
-        if (!IsEditable(form))
+        if (!IsEditable(request))
         {
             return NotEditable();
         }
 
         var now = DateTime.UtcNow;
-        var json = RemsFormPayloadJson.Serialize(payload);
-        var draft = CurrentDraft(form);
-        if (draft is null)
-        {
-            draft = new REMSFormDraft
-            {
-                Id = Guid.NewGuid(),
-                TenantId = form.TenantId, // EXPLICIT — no tenant stamping in the public context.
-                REMSFormId = form.Id,
-                DraftPayload = json,
-                LastSavedOnUtc = now,
-            };
-            await _forms.AddDraftAsync(draft, cancellationToken);
-        }
-        else
-        {
-            draft.DraftPayload = json;
-            draft.LastSavedOnUtc = now;
-            _forms.UpdateDraft(draft);
-        }
+        await _intake.ApplyAsync(request, payload, EntityTypeOf(request)!, cancellationToken);
+        request.FormLastSavedOnUtc = now;
+        _requests.Update(request);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Ok(ApiResponseFactory.Success(new RemsDraftSavedResponse(now), "Draft saved."));
@@ -212,7 +192,7 @@ public sealed class RemsPublicFormController : ControllerBase
     // -------------------- Review --------------------
 
     /// <summary>
-    /// Validate the supplied (or stored) payload against the full entity-type rules and return the
+    /// Validate the supplied (or saved) payload against the full entity-type rules and return the
     /// read-only review presentation.
     /// </summary>
     [HttpPost("{inviteCode}/review")]
@@ -223,24 +203,25 @@ public sealed class RemsPublicFormController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RemsFormPayloadV1? payload,
         CancellationToken cancellationToken)
     {
-        var form = await LoadFormAsync(inviteCode, cancellationToken);
-        if (form is null)
+        var request = await LoadFormAsync(inviteCode, cancellationToken);
+        if (request is null)
         {
             return FormNotFound();
         }
-        if (!IsEditable(form))
+        if (!IsEditable(request))
         {
             return NotEditable();
         }
 
-        var effective = ResolvePayload(payload, form);
-        var validation = PayloadValidator.Validate(effective, form.EntityType!.Value);
+        var entityType = EntityTypeOf(request)!;
+        var effective = ResolvePayload(payload, request, entityType);
+        var validation = PayloadValidator.Validate(effective, entityType);
         if (!validation.IsValid)
         {
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        var model = BuildReviewModel(form.Rems!, effective!, form.EntityType!.Value);
+        var model = BuildReviewModel(effective!, entityType);
         return Ok(ApiResponseFactory.Success(model, "REMS form review ready."));
     }
 
@@ -255,42 +236,41 @@ public sealed class RemsPublicFormController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RemsFormPayloadV1? payload,
         CancellationToken cancellationToken)
     {
-        var form = await LoadFormAsync(inviteCode, cancellationToken);
-        if (form is null)
+        var request = await LoadFormAsync(inviteCode, cancellationToken);
+        if (request is null)
         {
             return FormNotFound();
         }
 
-        var rems = form.Rems!;
-
         // Idempotency: an already-submitted form returns the thank-you state — never a duplicate, never a reset.
-        if (form.Status == RemsFormStatus.Submitted)
+        if (RemsDerived.IsFormSubmitted(request))
         {
             return Ok(ApiResponseFactory.Success(
-                new RemsPublicFormResponse(RemsPublicFormStates.Submitted, ClientName: rems.ClientDisplayName),
+                new RemsPublicFormResponse(RemsPublicFormStates.Submitted, ClientName: request.Client?.ClientName),
                 "REMS form already submitted."));
         }
-        if (!IsEditable(form))
+        if (!IsEditable(request))
         {
             return NotEditable();
         }
 
-        var effective = ResolvePayload(payload, form);
+        var entityType = EntityTypeOf(request)!;
+        var effective = ResolvePayload(payload, request, entityType);
 
         // Re-validate everything server-side (AC-REMS-024.8) before any write.
-        var validation = PayloadValidator.Validate(effective, form.EntityType!.Value);
+        var validation = PayloadValidator.Validate(effective, entityType);
         if (!validation.IsValid)
         {
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        await SubmitTransactionAsync(form, effective!, cancellationToken);
-        await DispatchPostSubmitAsync(form, effective!, cancellationToken);
+        await SubmitTransactionAsync(request, effective!, entityType, cancellationToken);
+        await DispatchPostSubmitAsync(request, effective!, cancellationToken);
 
         return Ok(ApiResponseFactory.Success(
             new RemsPublicFormResponse(
                 RemsPublicFormStates.Submitted,
-                ClientName: NullIfBlank(effective!.EffectiveClientName) ?? rems.ClientDisplayName),
+                ClientName: NullIfBlank(effective!.EffectiveClientName) ?? request.Client!.ClientName),
             "REMS form submitted."));
     }
 
@@ -305,364 +285,51 @@ public sealed class RemsPublicFormController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsPublicCancelResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Cancel(string inviteCode, CancellationToken cancellationToken)
     {
-        var form = await LoadFormAsync(inviteCode, cancellationToken);
-        if (form is null)
+        var request = await LoadFormAsync(inviteCode, cancellationToken);
+        if (request is null)
         {
             return FormNotFound();
         }
 
-        // Intentionally non-destructive: no state change, no draft deletion — the client may resume later.
+        // Intentionally non-destructive: no state change, nothing cleared — the client may resume later.
         return Ok(ApiResponseFactory.Success(new RemsPublicCancelResponse(true), "Cancellation acknowledged."));
     }
 
     // -------------------- Submit transaction --------------------
 
-    private async Task SubmitTransactionAsync(REMSForm form, RemsFormPayloadV1 payload, CancellationToken cancellationToken)
+    private async Task SubmitTransactionAsync(
+        RemsRequest request, RemsFormPayloadV1 payload, string entityType, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
 
-        // Build the ENTIRE object graph up front (stable, pre-generated ids).
-        var engagement = await _engagements.GetByRemsIdAsync(form.REMSId, cancellationToken);
-        // The referral source is a foreign key to an option item, so the CODE the client picked is resolved
-        // before the graph is staged.
-        var referralSourceId = await _codes.IdOfAsync(
-            EntityType.Rems, RemsOptionSetKeys.ReferralSource, payload.ReferralSource, cancellationToken);
-        var graph = BuildSubmitGraph(form, payload, now, engagement?.Id, referralSourceId);
+        // The client's answers are in, so the request passes to the Admin the initiator named. The engagement
+        // setup was filled before any of this, so what happens next is review, not setup.
+        var submittedStatusId = await _codes.RequireRemsIdAsync(
+            RemsOptionSetKeys.Status, RemsRequestStatuses.AdminReview, cancellationToken);
 
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            // 2. Immutable submission snapshot (the (TenantId, REMSFormId) unique index is the duplicate backstop).
-            await _forms.AddSubmissionAsync(graph.Submission, ct);
+            // The answers go onto the client master; the request only records when they arrived.
+            await _intake.ApplyAsync(request, payload, entityType, ct);
+            request.FormSubmittedOnUtc = now;
+            request.FormLastSavedOnUtc = now;
 
-            // 4-7. The materialised client aggregate. Addresses/Persons are inserted before the rows that
-            // reference them so the FKs resolve within the one transaction.
-            foreach (var address in graph.Addresses)
+            var previousStatusId = request.StatusId;
+            request.StatusId = submittedStatusId;
+            _requests.Update(request);
+            await _requests.AddStatusHistoryAsync(new RemsStatusHistory
             {
-                await _addresses.AddAsync(address, ct);
-            }
-            foreach (var person in graph.Persons)
-            {
-                await _persons.AddAsync(person, ct);
-            }
+                Id = Guid.NewGuid(),
+                TenantId = request.TenantId, // EXPLICIT — no tenant stamping in the public context.
+                REMSId = request.Id,
+                FromStatusId = previousStatusId,
+                ToStatusId = submittedStatusId,
+                ChangedByUserId = null, // the client is not a user
+                ChangedOnUtc = now,
+            }, ct);
 
-            await _clients.AddAsync(graph.Client, ct);
-            foreach (var entity in graph.Entities)
-            {
-                await _clients.AddEntityAsync(entity, ct);
-            }
-            foreach (var entityAddress in graph.EntityAddresses)
-            {
-                await _clients.AddEntityAddressAsync(entityAddress, ct);
-            }
-            foreach (var contact in graph.Contacts)
-            {
-                await _clients.AddEntityContactAsync(contact, ct);
-            }
-            foreach (var additional in graph.AdditionalEntities)
-            {
-                await _rems.AddAdditionalEntityAsync(additional, ct);
-            }
-            // After the entity and the Persons above, both of which these rows point at.
-            foreach (var individual in graph.AdditionalIndividuals)
-            {
-                await _rems.AddAdditionalIndividualAsync(individual, ct);
-            }
-            if (graph.GovernmentDetail is not null)
-            {
-                await _engagements.AddGovernmentDetailAsync(graph.GovernmentDetail, ct);
-            }
-
-            // 3.
-            form.Status = RemsFormStatus.Submitted;
-            form.SubmittedOnUtc = now;
-            form.InviteLockedOnUtc ??= now;
-            // The client's answers are in, so the request passes to the Admin the initiator named. The
-            // engagement setup was filled before any of this, so what happens next is review, not setup.
-            form.Rems!.StatusId = await _codes.RequireRemsIdAsync(
-                RemsOptionSetKeys.Status, RemsRequestStatuses.AdminReview, ct);
-
-            // 8. Commit.
             await _unitOfWork.SaveChangesAsync(ct);
         }, cancellationToken);
-    }
-
-    /// <summary>
-    /// Materialises the whole submit graph (submission, client, entities, addresses, contacts,
-    /// engagements.
-    /// </summary>
-    private SubmitGraph BuildSubmitGraph(
-        REMSForm form, RemsFormPayloadV1 payload, DateTime now, Guid? engagementId, Guid? referralSourceId)
-    {
-        var tenantId = form.TenantId;
-        var isBusiness = RemsFormPayloadValidator.IsBusinessGroup(form.EntityType!.Value);
-        var isGovernment = string.Equals(form.EntityType!.Value, RemsFormPayloadValidator.Government, StringComparison.Ordinal);
-
-        var submissionId = Guid.NewGuid();
-        var clientId = Guid.NewGuid();
-        var graph = new SubmitGraph
-        {
-            Submission = new REMSFormSubmission
-            {
-                Id = submissionId,
-                TenantId = tenantId,
-                REMSFormId = form.Id,
-                SubmittedPayload = RemsFormPayloadJson.Serialize(payload),
-                SubmittedOnUtc = now,
-            },
-        };
-
-        // Billing ADDRESSES are not staged here — they are the main entity's, and there may be several (see
-        // StageEntityAddresses).
-        graph.Client = new REMSClient
-        {
-            Id = clientId,
-            TenantId = tenantId,
-            REMSId = form.REMSId,
-            SourceFormSubmissionId = submissionId,
-            // EffectiveClientName, not ClientName: an individual gives their name in two boxes now, and
-            // the joined echo beside them is the client's to send rather than ours to trust.
-            Name = Clean(payload.EffectiveClientName) ?? string.Empty,
-            Email = _lockedEmail, // LOCKED to the request's customer email.
-            MobileNumber = Clean(payload.MobileNumber),
-            ReferralSourceId = referralSourceId,
-            ReferralSourceDetail = Clean(payload.ReferralSourceDetail),
-            BillingContactName = Clean(payload.BillingContactName),
-            BillingEmail = Clean(payload.BillingEmail),
-        };
-
-        // Main entity + its addresses, role contacts and (Government) contract detail.
-        var mainEntityId = Guid.NewGuid();
-        graph.Entities.Add(new REMSEntity
-        {
-            Id = mainEntityId,
-            TenantId = tenantId,
-            REMSClientId = clientId,
-            Name = Clean(payload.EffectiveClientName) ?? string.Empty,
-            EIN = isBusiness ? Clean(payload.Ein) : null,
-            IsMainEntity = true,
-        });
-        StageEntityAddresses(
-            graph, tenantId, mainEntityId,
-            payload.PhysicalAddress, payload.EffectiveMailingAddress, payload.EffectiveBillingAddresses);
-        StageRoleContacts(
-            graph, tenantId, form.REMSId, form.EntityType!.Value, mainEntityId, payload.Roles,
-            payload.AdditionalBillingContacts);
-        // Everyone else on this client's return.
-        if (string.Equals(form.EntityType!.Value, RemsFormPayloadValidator.Individual, StringComparison.Ordinal))
-        {
-            StageAdditionalIndividuals(graph, tenantId, form.REMSId, mainEntityId, payload.AdditionalIndividuals);
-        }
-
-        // Guarded on the engagement existing: a request written before the setup moved to the front could
-        // reach here without one, and a contract detail with nothing to hang off would fail the insert.
-        if (isGovernment && engagementId is { } governmentEngagementId)
-        {
-            graph.GovernmentDetail = new REMSEngagementGovernmentDetail
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                REMSEngagementId = governmentEngagementId,
-                ContractStartDate = payload.ContractStartDate,
-                ContractEndDate = payload.ContractEndDate,
-                OriginalTerm = Clean(payload.OriginalTerm),
-                RenewalTerms = Clean(payload.RenewalTerms),
-                PurchaseOrderStartDate = payload.PoStartDate,
-                PurchaseOrderEndDate = payload.PoEndDate,
-            };
-        }
-
-        // The client's other businesses, as contacts on the REQUEST rather than entities under the client.
-        var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "main" };
-        var fallbackIndex = 0;
-        foreach (var related in payload.RelatedEntities)
-        {
-            graph.AdditionalEntities.Add(new REMSAdditionalEntity
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                REMSId = form.REMSId,
-                SourceKey = UniqueEntityKey(related.SourceKey, usedKeys, ref fallbackIndex),
-                FullName = Clean(related.FullName) ?? string.Empty,
-                EmailAddress = Clean(related.EmailAddress),
-                PhoneNumber = Clean(related.PhoneNumber),
-            });
-        }
-
-        return graph;
-    }
-
-    /// <summary>Stages the entity's physical and mailing addresses and every billing address the client gave.</summary>
-    private static void StageEntityAddresses(
-        SubmitGraph graph, Guid tenantId, Guid entityId,
-        RemsAddressPayload? physical, RemsAddressPayload? mailing,
-        IReadOnlyList<RemsAddressPayload> billing)
-    {
-        Stage(physical is { HasAny: true }, physical, AddressType.Office, RemsAddressType.Physical);
-        Stage(mailing is { HasAny: true }, mailing, AddressType.Other, RemsAddressType.Mailing);
-        foreach (var row in billing)
-        {
-            Stage(row is { HasAnyContent: true }, row, AddressType.Billing, RemsAddressType.Billing);
-        }
-
-        void Stage(bool present, RemsAddressPayload? payload, AddressType addressType, RemsAddressType remsType)
-        {
-            if (!present || payload is null)
-            {
-                return;
-            }
-            var address = NewAddress(payload, addressType);
-            graph.Addresses.Add(address);
-            graph.EntityAddresses.Add(NewEntityAddress(tenantId, entityId, address.Id, remsType));
-        }
-    }
-
-    /// <summary>
-    /// Stages the other people on an individual client's return — a spouse, a child, anyone else the
-    /// firm is preparing for.
-    /// </summary>
-    private static void StageAdditionalIndividuals(
-        SubmitGraph graph, Guid tenantId, Guid sourceRemsId, Guid entityId,
-        IReadOnlyList<RemsAdditionalIndividualPayload> individuals)
-    {
-        var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var fallbackIndex = 0;
-        foreach (var individual in individuals)
-        {
-            if (individual is not { HasAny: true })
-            {
-                continue;
-            }
-
-            var person = new Person
-            {
-                Id = Guid.NewGuid(),
-                PersonCode = "PER-" + Guid.NewGuid().ToString("N").ToUpperInvariant(),
-                TenantId = tenantId,
-                SourceEntityType = EntityType.Rems,
-                SourceEntityId = sourceRemsId,
-                FirstName = Clean(individual.FirstName) ?? string.Empty,
-                LastName = Clean(individual.LastName) ?? string.Empty,
-                // The particle onto the Person's own column, not just into the display name.
-                Suffix = Clean(individual.Suffix),
-                DisplayName = Clean(individual.DisplayName) ?? string.Empty,
-                PrimaryEmail = Clean(individual.Email),
-                MobileNumber = Clean(individual.Phone),
-                IsActive = true,
-                LastProfileUpdatedOn = DateTime.UtcNow,
-            };
-            graph.Persons.Add(person);
-
-            graph.AdditionalIndividuals.Add(new REMSAdditionalIndividual
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                REMSId = sourceRemsId,
-                REMSEntityId = entityId,
-                PersonId = person.Id,
-                SourceKey = UniqueIndividualKey(individual.SourceKey, usedKeys, ref fallbackIndex),
-                RelationType = Clean(individual.Type) ?? string.Empty,
-                FilingType = individual.EffectiveFilingType,
-                FirstName = person.FirstName,
-                LastName = person.LastName,
-                Suffix = person.Suffix,
-                Email = person.PrimaryEmail,
-                PhoneNumber = person.MobileNumber,
-                IsMinor = individual.EffectiveIsMinor,
-                BillingPreference = individual.EffectiveBillingPreference,
-                // Only where the form asked. A name left behind a control the rules had since disabled is
-                // an answer nobody gave.
-                BillingFirstName = individual.AsksBillingName ? Clean(individual.BillingFirstName) : null,
-                BillingLastName = individual.AsksBillingName ? Clean(individual.BillingLastName) : null,
-            });
-        }
-    }
-
-    private static void StageRoleContacts(
-        SubmitGraph graph, Guid tenantId, Guid sourceRemsId, string entityType, Guid entityId,
-        RemsRolesPayload? roles, IReadOnlyList<RemsRolePayload>? additionalBillingContacts = null)
-    {
-        if (roles is null)
-        {
-            return;
-        }
-
-        foreach (var (role, roleName, isRequired) in EnumerateRoles(entityType, roles.Normalized()))
-        {
-            Stage(role, roleName, isRequired);
-        }
-
-        // The extra billing contacts an older payload carries.
-        foreach (var extra in additionalBillingContacts ?? Array.Empty<RemsRolePayload>())
-        {
-            Stage(extra, nameof(RemsContactRole.BillingContact), isRequired: false);
-        }
-
-        void Stage(RemsRolePayload? role, string roleName, bool isRequired)
-        {
-            if (role is not { HasAny: true })
-            {
-                return;
-            }
-
-            var person = BuildContactPerson(tenantId, sourceRemsId, role);
-            graph.Persons.Add(person);
-            graph.Contacts.Add(new REMSEntityContact
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                REMSEntityId = entityId,
-                PersonId = person.Id,
-                ContactRole = roleName,
-                IsRequired = isRequired,
-            });
-        }
-    }
-
-    /// <summary>
-    /// Satisfies the required <c>REMSEntityContact.PersonId</c> FK by creating a minimal tenant-scoped
-    /// <see cref="Person"/> from the role's name / email / phone.
-    /// </summary>
-    private static Person BuildContactPerson(Guid tenantId, Guid sourceRemsId, RemsRolePayload role)
-    {
-        // The form asks for the two parts, so the Person is filed under what the client actually typed into
-        // them.
-        var first = role.EffectiveFirstName;
-        var last = role.EffectiveLastName;
-        return new Person
-        {
-            Id = Guid.NewGuid(),
-            PersonCode = "PER-" + Guid.NewGuid().ToString("N").ToUpperInvariant(),
-            TenantId = tenantId,
-            SourceEntityType = EntityType.Rems,
-            SourceEntityId = sourceRemsId,
-            // The generational particle the client gave for this contact.
-            Suffix = Clean(role.Suffix),
-            FirstName = first,
-            LastName = last,
-            DisplayName = Clean(role.NameWithSuffix) ?? first,
-            PrimaryEmail = Clean(role.Email),
-            MobileNumber = Clean(role.Phone),
-            IsActive = true,
-            LastProfileUpdatedOn = DateTime.UtcNow,
-        };
-    }
-
-    // No engagement is minted on submit: the initiator fills the engagement setup before the client is ever
-    // contacted.
-
-    /// <summary>The staged submit graph — every row carries an explicit TenantId and a pre-generated id.</summary>
-    private sealed class SubmitGraph
-    {
-        public required REMSFormSubmission Submission { get; init; }
-        public REMSClient Client { get; set; } = null!;
-        public List<Address> Addresses { get; } = new();
-        public List<Person> Persons { get; } = new();
-        public List<REMSEntity> Entities { get; } = new();
-        public List<REMSEntityAddress> EntityAddresses { get; } = new();
-        public List<REMSEntityContact> Contacts { get; } = new();
-        public List<REMSAdditionalEntity> AdditionalEntities { get; } = new();
-        public List<REMSAdditionalIndividual> AdditionalIndividuals { get; } = new();
-        public REMSEngagementGovernmentDetail? GovernmentDetail { get; set; }
     }
 
     // -------------------- Post-commit (best-effort) --------------------
@@ -671,12 +338,12 @@ public sealed class RemsPublicFormController : ControllerBase
     /// After the submission is durably committed, notify the assigned Admin and CSE in-app and by
     /// email (AC-REMS ...).
     /// </summary>
-    private async Task DispatchPostSubmitAsync(REMSForm form, RemsFormPayloadV1 payload, CancellationToken cancellationToken)
+    private async Task DispatchPostSubmitAsync(RemsRequest request, RemsFormPayloadV1 payload, CancellationToken cancellationToken)
     {
-        var rems = form.Rems!;
+        var client = request.Client!;
         // Assigned admin, CSE, and the requester — the customer coming back is the milestone the person who
         // raised the request is waiting on.
-        var recipients = new[] { rems.AdminAssignedToId, rems.CSEId, rems.CreatedById }
+        var recipients = new[] { request.AdminAssignedToId, request.CSEId, request.CreatedById }
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .Distinct()
@@ -690,59 +357,59 @@ public sealed class RemsPublicFormController : ControllerBase
                     userId,
                     NotificationType.RemsFormSubmitted,
                     "A REMS onboarding form was submitted",
-                    $"{rems.REMSNumber} — {rems.ClientDisplayName}",
+                    $"{request.RemsNumber} — {client.ClientName}",
                     EntityType.Rems,
-                    rems.Id), cancellationToken);
+                    request.Id), cancellationToken);
             }
 
             // Nobody has claimed this request, so the answers that just landed are on no admin's desk in
             // particular.
-            if (rems.AdminAssignedToId is null)
+            if (request.AdminAssignedToId is null)
             {
                 var admins = await _users.ListByTenantRolesAsync(
-                    form.TenantId, new[] { Roles.Admin, Roles.SuperAdmin }, cancellationToken);
+                    request.TenantId, new[] { Roles.Admin, Roles.SuperAdmin }, cancellationToken);
                 foreach (var admin in admins.Where(a => !recipients.Contains(a.Id)))
                 {
                     await _notifications.DispatchAsync(new CreateNotificationDto(
                         admin.Id,
                         NotificationType.RemsRequestAssigned,
                         "A REMS request is waiting for pickup",
-                        $"{rems.REMSNumber} — {rems.ClientDisplayName}",
+                        $"{request.RemsNumber} — {client.ClientName}",
                         EntityType.Rems,
-                        rems.Id), cancellationToken);
+                        request.Id), cancellationToken);
                 }
             }
 
             await _activity.WriteAsync(
-                new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsFormSubmitted), cancellationToken);
+                new CreateActivityEventDto(EntityType.Rems, request.Id, ActivityEventTypes.RemsFormSubmitted), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             // External "form submitted" email to the Admin + CSE. Enqueued on a worker; never throws/blocks.
             var model = new RemsFormSubmittedEmail(
-                Clean(payload.EffectiveClientName) ?? rems.ClientDisplayName,
-                rems.REMSNumber,
-                $"{_baseUrl.TrimEnd('/')}/rems/requests/{rems.Id}",
-                (form.SubmittedOnUtc ?? DateTime.UtcNow).ToString("f", CultureInfo.InvariantCulture) + " UTC");
+                Clean(payload.EffectiveClientName) ?? client.ClientName,
+                request.RemsNumber,
+                $"{_baseUrl.TrimEnd('/')}/rems/requests/{request.Id}",
+                (request.FormSubmittedOnUtc ?? DateTime.UtcNow).ToString("f", CultureInfo.InvariantCulture) + " UTC");
 
             foreach (var userId in recipients)
             {
                 var user = await _users.GetByIdAsync(userId, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(user?.Email))
                 {
-                    _emailNotifier.SendFormSubmitted(form.TenantId, user!.Email, model);
+                    _emailNotifier.SendFormSubmitted(request.TenantId, user!.Email, model);
                 }
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
-                ex, "REMS form {FormId} was submitted, but post-commit notification/email dispatch failed.", form.Id);
+                ex, "The form on REMS request {RemsId} was submitted, but post-commit notification/email dispatch failed.", request.Id);
         }
     }
 
     // -------------------- Review model --------------------
 
-    private RemsReviewModel BuildReviewModel(REMS rems, RemsFormPayloadV1 payload, string entityType)
+    private RemsReviewModel BuildReviewModel(RemsFormPayloadV1 payload, string entityType)
     {
         var contact = new RemsReviewContact(
             Clean(payload.EffectiveClientName), Clean(payload.ClientSuffix),
@@ -810,94 +477,107 @@ public sealed class RemsPublicFormController : ControllerBase
     // -------------------- Helpers --------------------
 
     /// <summary>
-    /// Loads the form by invite code (unscoped) and, once resolved, pins the tenant context to its
-    /// tenant.
+    /// Loads the request by invite code (unscoped, with the client's whole graph) and, once resolved, pins
+    /// the tenant context to its tenant and works out the email the form is locked to.
     /// </summary>
-    private async Task<REMSForm?> LoadFormAsync(string inviteCode, CancellationToken cancellationToken)
+    private async Task<RemsRequest?> LoadFormAsync(string inviteCode, CancellationToken cancellationToken)
     {
-        var form = await _forms.GetByInviteCodeUnscopedAsync(inviteCode?.Trim() ?? string.Empty, cancellationToken);
-        if (form is not null && form.TenantId != Guid.Empty)
+        var request = await _requests.GetByInviteCodeUnscopedAsync(inviteCode?.Trim() ?? string.Empty, cancellationToken);
+        if (request is null)
+        {
+            return null;
+        }
+
+        if (request.TenantId != Guid.Empty)
         {
             // Establish the resolved tenant so DbContext stamping and the notification/activity writers behave
             // exactly as they do for an authenticated request. Every write also sets TenantId explicitly.
-            _tenantContext.Set(form.TenantId, string.Empty);
+            _tenantContext.Set(request.TenantId, string.Empty);
         }
 
-        if (form?.Rems is { } rems)
+        var client = request.Client;
+        // No REMS controller ran first here, so a Maconomy customer's card is fetched explicitly.
+        await _maconomy.HydrateAsync(client, cancellationToken);
+        _lockedEmail = NullIfBlank(request.InviteRecipientEmail) ?? NullIfBlank(client?.ClientEmail) ?? string.Empty;
+        if (_lockedEmail.Length == 0 && client is { IsMaconomyClient: true })
         {
-            // No REMS controller ran first here, so a Maconomy customer's details are fetched explicitly.
-            await _maconomy.HydrateAsync(rems.ClientPerson, cancellationToken);
-            _lockedEmail = rems.CustomerEmail ?? string.Empty;
-            if (_lockedEmail.Length == 0 && rems.ClientPerson is { IsMaconomyClient: true })
-            {
-                // Maconomy cannot be read: the address the form was last sent to is the one it is locked to.
-                _lockedEmail = (await _forms.ListEmailEventsAsync(form.Id, cancellationToken))
-                    .Where(e => e.EventType is RemsFormEmailEventType.Sent or RemsFormEmailEventType.Reminder
-                        && !string.IsNullOrWhiteSpace(e.RecipientEmail))
-                    .OrderByDescending(e => e.OccurredOnUtc)
-                    .Select(e => e.RecipientEmail)
-                    .FirstOrDefault() ?? string.Empty;
-            }
+            // Maconomy cannot be read: the address the form was last sent to is the one it is locked to.
+            _lockedEmail = (await _requests.ListEmailEventsAsync(request.Id, cancellationToken))
+                .Where(e => e.EventType is RemsFormEmailEventType.Sent or RemsFormEmailEventType.Reminder
+                    && !string.IsNullOrWhiteSpace(e.RecipientEmail))
+                .OrderByDescending(e => e.OccurredOnUtc)
+                .Select(e => e.RecipientEmail)
+                .FirstOrDefault() ?? string.Empty;
         }
 
-        return form;
+        return request;
     }
 
     /// <summary>The locked prefill for the editable form.</summary>
-    private RemsPublicPrefill BuildPrefill(REMS rems, string entityType)
+    private RemsPublicPrefill BuildPrefill(Client client, string entityType)
     {
-        var person = rems.ClientPerson;
-        if (person is { IsMaconomyClient: true })
+        if (client.IsMaconomyClient)
         {
             // Maconomy holds one name string. For a person it is nearly always "LAST, FIRST", so that is
             // offered split — a starting point the client corrects, not an answer.
-            var whole = person.Maconomy?.Name.Trim() ?? string.Empty;
+            var whole = client.Maconomy?.Name.Trim() ?? string.Empty;
             var comma = whole.IndexOf(',');
             var individual = RemsClientEntityType.IsIndividual(entityType);
             return new RemsPublicPrefill(
                 whole,
                 individual && comma > 0 ? whole[(comma + 1)..].Trim() : string.Empty,
                 individual && comma > 0 ? whole[..comma].Trim() : string.Empty,
-                null, _lockedEmail, rems.CustomerMobileNumber);
+                null, _lockedEmail, client.ClientPhone);
         }
 
         // STRAIGHT OFF THE CLIENT'S OWN RECORD, no splitting.
-        var first = person?.IsOrganisation == true ? string.Empty : person?.FirstName ?? string.Empty;
-        var last = person?.IsOrganisation == true ? string.Empty : person?.LastName ?? string.Empty;
-        var name = person?.IsOrganisation == true
-            ? person.CorporateName?.Trim() ?? string.Empty
+        var person = client.Person;
+        var first = client.IsOrganisation ? string.Empty : person?.FirstName ?? string.Empty;
+        var last = client.IsOrganisation ? string.Empty : person?.LastName ?? string.Empty;
+        var name = client.IsOrganisation
+            ? client.LegalName?.Trim() ?? string.Empty
             : string.Join(" ", new[] { first, last }.Where(p => p.Length > 0));
         return new RemsPublicPrefill(
-            name, first, last, rems.ClientNameSuffix,
-            rems.CustomerEmail ?? string.Empty, rems.CustomerMobileNumber);
+            name, first, last, client.IsOrganisation ? null : person?.Suffix,
+            _lockedEmail, client.ClientPhone);
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    /// <summary>The link is dead when the request is gone/deleted or the form was cancelled.</summary>
-    private static bool IsUnavailable(REMSForm form)
-        => form.Rems is null || form.Rems.Deleted || form.Status == RemsFormStatus.Cancelled;
+    /// <summary>The entity type the form is filled in under: the client's, locked when the request named it.</summary>
+    private static string? EntityTypeOf(RemsRequest request) => NullIfBlank(request.Client?.EntityType?.Value);
 
-    /// <summary>Editable == sent-and-live: the only state that accepts draft saves, review and submit.</summary>
-    private static bool IsEditable(REMSForm form)
-        => !IsUnavailable(form) && form.Status == RemsFormStatus.Sent;
+    /// <summary>The link is dead when the request is gone/deleted or has no client to write to.</summary>
+    private static bool IsUnavailable(RemsRequest request)
+        => request.Deleted || request.Client is null;
 
     /// <summary>
-    /// The single active draft for the form (query filters were ignored on load, so exclude
-    /// soft-deleted).
+    /// Editable == sent-and-live under a known entity type: the only state that accepts draft saves, review
+    /// and submit.
     /// </summary>
-    private static REMSFormDraft? CurrentDraft(REMSForm form)
-        => form.Drafts.FirstOrDefault(d => !d.Deleted);
+    private static bool IsEditable(RemsRequest request)
+        => !IsUnavailable(request)
+            && RemsDerived.FormStatusOf(request) == RemsFormStatus.Sent
+            && EntityTypeOf(request) is not null;
 
-    /// <summary>The payload to act on: the request body when supplied, else the stored draft.</summary>
-    private static RemsFormPayloadV1? ResolvePayload(RemsFormPayloadV1? body, REMSForm form)
-        => body ?? RemsFormPayloadJson.TryDeserialize(CurrentDraft(form)?.DraftPayload);
+    /// <summary>
+    /// The in-progress draft, read back off the client rows: there is one once a save has written them, or
+    /// once anything is on file for the client at all. Null until then, so a fresh form opens empty.
+    /// </summary>
+    private RemsFormPayloadV1? DraftPayload(RemsRequest request, string entityType)
+        => request.FormLastSavedOnUtc is not null || RemsClientIntake.HasFormContent(request.Client!)
+            ? RemsClientIntake.ToPayload(request, entityType, _lockedEmail)
+            : null;
+
+    /// <summary>The payload to act on: the request body when supplied, else the saved draft.</summary>
+    private RemsFormPayloadV1? ResolvePayload(RemsFormPayloadV1? body, RemsRequest request, string entityType)
+        => body ?? DraftPayload(request, entityType);
 
     /// <summary>The relevant (role, canonical role name, required?) tuples for an industry group.</summary>
     private static IEnumerable<(RemsRolePayload? Role, string RoleName, bool IsRequired)> EnumerateRoles(
         string entityType, RemsRolesPayload roles)
     {
-        // Mirrors RemsFormPayloadValidator's branches — the roles it REQUIRES are staged as required here.
+        // Mirrors RemsFormPayloadValidator's branches — the roles it REQUIRES are shown as required here.
         // if/else rather than a switch because the business branch matches a family of codes.
         if (entityType == RemsFormPayloadValidator.Individual)
         {
@@ -911,7 +591,7 @@ public sealed class RemsPublicFormController : ControllerBase
             // Owed by every business but a commercial one, which may give a financial contact or not.
             yield return (roles.FinancialContact, nameof(RemsContactRole.FinancialContact),
                 entityType != RemsFormPayloadValidator.Commercial);
-            // Trust and Estate only. Yielded for the whole family — a null role stages nothing, and an
+            // Trust and Estate only. Yielded for the whole family — a null role shows nothing, and an
             // answer given before the entity type changed is still an answer (as with the retired roles).
             yield return (roles.TrustEstateContact, nameof(RemsContactRole.TrustEstateContact), false);
             yield return (roles.OtherContact, nameof(RemsContactRole.OtherContact), false);
@@ -927,79 +607,6 @@ public sealed class RemsPublicFormController : ControllerBase
             yield return (roles.BillingContact, nameof(RemsContactRole.BillingContact), false);   // retired
         }
     }
-
-    /// <summary>
-    /// A per-request-unique source key for a declared individual, on the same terms as <see
-    /// cref="UniqueEntityKey"/> — the unique index on (tenant, request.
-    /// </summary>
-    private static string UniqueIndividualKey(string? supplied, HashSet<string> used, ref int fallbackIndex)
-    {
-        var candidate = supplied?.Trim();
-        if (string.IsNullOrEmpty(candidate) || used.Contains(candidate))
-        {
-            do
-            {
-                candidate = $"individual-{++fallbackIndex}";
-            }
-            while (used.Contains(candidate));
-        }
-
-        candidate = candidate.Length > 64 ? candidate[..64] : candidate;
-        used.Add(candidate);
-        return candidate;
-    }
-
-    /// <summary>
-    /// A per-client-unique, non-"main" source key for a related entity; never trusts the client value
-    /// blindly.
-    /// </summary>
-    private static string UniqueEntityKey(string? supplied, HashSet<string> used, ref int fallbackIndex)
-    {
-        var candidate = supplied?.Trim();
-        if (string.IsNullOrEmpty(candidate) || string.Equals(candidate, "main", StringComparison.OrdinalIgnoreCase) || used.Contains(candidate))
-        {
-            do
-            {
-                candidate = $"related-{++fallbackIndex}";
-            }
-            while (used.Contains(candidate));
-        }
-
-        // Cap to the column length (64) and record it as taken.
-        candidate = candidate.Length > 64 ? candidate[..64] : candidate;
-        used.Add(candidate);
-        return candidate;
-    }
-
-    private static Address NewAddress(RemsAddressPayload payload, AddressType type) => new()
-    {
-        Id = Guid.NewGuid(),
-        AddressType = type,
-        AddressLine1 = Clean(payload.Street),
-        AddressLine2 = Clean(payload.AddressLine2),
-        CityName = Clean(payload.City),
-        StateCode = Clean(payload.StateCode),
-        StateName = Clean(payload.State),
-        CountryCode = Clean(payload.CountryCode),
-        CountryName = Clean(payload.CountryName),
-        PostalCode = Clean(payload.Zip),
-        // Who the post is addressed to. Null on a physical or mailing node, which is asked for a place
-        // and nothing more; filled on a billing one, where the form asks both halves of the answer.
-        Suffix = Clean(payload.Suffix),
-        FirstName = Clean(payload.FirstName),
-        LastName = Clean(payload.LastName),
-        Email = Clean(payload.Email),
-        PhoneNumber = Clean(payload.Phone),
-    };
-
-    private static REMSEntityAddress NewEntityAddress(Guid tenantId, Guid entityId, Guid addressId, RemsAddressType type) => new()
-    {
-        Id = Guid.NewGuid(),
-        TenantId = tenantId,
-        REMSEntityId = entityId,
-        AddressId = addressId,
-        AddressType = type,
-    };
 
     private static RemsAddressPayload? NonEmpty(RemsAddressPayload? address) => address is { HasAny: true } ? address : null;
 

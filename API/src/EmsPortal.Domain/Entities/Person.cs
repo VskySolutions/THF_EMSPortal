@@ -47,33 +47,6 @@ public class Person : AuditableEntity
     /// </summary>
     public string? Suffix { get; set; }
 
-    /// <summary>
-    /// Whether this row stands for a human being or an organisation — see <see cref="Enums.PartyType"/>.
-    /// It decides which field holds the name, and it is what the client picker filters on when a request
-    /// is for an individual. Defaults to <see cref="Enums.PartyType.Individual"/>, which is what every row
-    /// written before the column existed is.
-    /// </summary>
-    public PartyType PartyType { get; set; } = PartyType.Individual;
-
-    /// <summary>
-    /// The ORGANISATION's legal name, for a person record that stands for a company rather than a human —
-    /// "Falcon Manufacturing Group". Null on everybody else, which is nearly everybody.
-    /// <para>
-    /// It exists because a REMS client is a Person whatever kind of entity they are, and an entity type
-    /// other than Individual has no first or last name to put in the two boxes above. Splitting
-    /// "Falcon Manufacturing Group" across them produced a first name of "Falcon" and a surname of
-    /// "Manufacturing Group", which is how a company ended up filed under a person's name and sorted
-    /// under F.
-    /// </para>
-    /// <para>
-    /// One column rather than a second table because the two are the same record from every other angle:
-    /// the same email and phone, the same addresses, the same provenance, the same picker. What differs
-    /// is only which field holds the name — see <see cref="IsOrganisation"/> and
-    /// <see cref="ClientDisplayName"/>.
-    /// </para>
-    /// </summary>
-    public string? CorporateName { get; set; }
-
     public string FirstName { get; set; } = string.Empty;
     public string? MiddleName { get; set; }
     public string LastName { get; set; } = string.Empty;
@@ -92,85 +65,11 @@ public class Person : AuditableEntity
             : DisplayName;
 
     /// <summary>
-    /// Whether this record stands for a company rather than a human. Reads the declared
-    /// <see cref="PartyType"/> — NOT whether <see cref="CorporateName"/> happens to be filled in, so a
-    /// half-completed organisation is still an organisation and a person who somehow acquired a corporate
-    /// name is still a person.
-    /// </summary>
-    [NotMapped]
-    public bool IsOrganisation => PartyType == PartyType.Organisation;
-
-    /// <summary>
-    /// The name as a CLIENT is filed and read across the platform: <c>LastName FirstName Suffix</c> for a
-    /// person — "Smith John Jr." — and the plain corporate name for an organisation.
-    ///
-    /// <para>
-    /// SURNAME FIRST, which is not how <see cref="FullName"/> reads and is deliberate. A client list is
-    /// scanned and searched by family name, so that is what has to be at the left edge of the column and
-    /// what an alphabetical sort has to order on. FullName stays as it was — it is how a person is
-    /// ADDRESSED, and an email that opened "Dear Smith John" would be worse than the sort was.
-    /// </para>
-    /// <para>
-    /// The suffix comes last, as it does everywhere else the platform writes a name (see
-    /// <see cref="Suffix"/>): it is a particle on the name, not part of the family name, and "Smith Jr."
-    /// in a surname column is somebody nobody finds by searching for their name.
-    /// </para>
-    /// <para>
-    /// Falls back to <see cref="DisplayName"/> for a record that carries neither a corporate name nor a
-    /// surname — a contact captured from one free-text box before the split existed.
-    /// </para>
-    /// <para>
-    /// COMPUTED BY THE DATABASE (a persisted computed column — see <c>PersonConfiguration</c>), which is
-    /// why it has no body here and no setter. Every REMS list searches, sorts and pages on the client's
-    /// name, and all of that has to happen in SQL over the whole set rather than over the twenty rows
-    /// already fetched. The alternative was this CASE expression written out at eight query sites, where
-    /// the eighth would eventually disagree with the other seven. Here the database is the only thing
-    /// that composes it, so it cannot drift and it can be indexed.
-    /// </para>
-    /// <para>
-    /// It is therefore EMPTY on an entity that has not been saved yet. Nothing should read it before the
-    /// round trip; compose the name from the parts if you need it in-flight.
-    /// </para>
+    /// The name as a CLIENT is filed and read: <c>LastName FirstName Suffix</c>, surname first so client lists scan and
+    /// sort by family name; falls back to <see cref="DisplayName"/>. Computed and persisted by the database (see
+    /// <c>PersonConfiguration</c>) so every REMS query searches and sorts it in SQL; empty until the row is saved.
     /// </summary>
     public string ClientDisplayName { get; private set; } = string.Empty;
-
-    // ---- A client that is a Maconomy customer ----
-
-    /// <summary>
-    /// The Maconomy customer this client is, when they were picked from Maconomy. It is ALL the portal
-    /// holds about them: the name, email and phone columns stay empty and are read from Maconomy by this
-    /// number. Unique per tenant.
-    /// </summary>
-    public string? MaconomyCustomerNumber { get; set; }
-
-    /// <summary>What Maconomy says about that customer, set on each read and never saved. Null when it could not be read.</summary>
-    [NotMapped]
-    public MaconomyClientDetails? Maconomy { get; set; }
-
-    [NotMapped]
-    public bool IsMaconomyClient => !string.IsNullOrWhiteSpace(MaconomyCustomerNumber);
-
-    /// <summary>
-    /// The client's name wherever it is READ: Maconomy's for a Maconomy customer, the record's own
-    /// otherwise. SQL cannot see the first, so lists search and sort it through the client directory.
-    /// </summary>
-    // A client the portal itself posted to Maconomy keeps the name it was typed with, which beats the
-    // placeholder while Maconomy cannot be read; one picked from Maconomy has no typed name to fall back on.
-    [NotMapped]
-    public string ClientName => IsMaconomyClient
-        ? Maconomy?.Name ?? (ClientDisplayName.Length > 0 ? ClientDisplayName : MaconomyPlaceholderName(MaconomyCustomerNumber!))
-        : ClientDisplayName;
-
-    /// <summary>What stands in for the name while Maconomy cannot be read: the one thing the portal does hold.</summary>
-    public static string MaconomyPlaceholderName(string customerNumber) => $"Maconomy customer {customerNumber.Trim()}";
-
-    /// <summary>The email to reach the client at: Maconomy's for a Maconomy customer.</summary>
-    [NotMapped]
-    public string? ClientEmail => IsMaconomyClient ? Maconomy?.Email ?? PrimaryEmail : PrimaryEmail;
-
-    /// <summary>The client's telephone: Maconomy's for a Maconomy customer.</summary>
-    [NotMapped]
-    public string? ClientPhone => IsMaconomyClient ? Maconomy?.Phone ?? MobileNumber : MobileNumber;
 
     // ---- Contact information ----
     public string? PrimaryEmail { get; set; }

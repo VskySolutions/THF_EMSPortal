@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Domain.Entities;
@@ -29,16 +30,19 @@ public sealed class RemsEmailEventsController : ControllerBase
     /// <summary>Request header carrying the shared webhook secret.</summary>
     public const string SecretHeaderName = "X-Rems-Webhook-Secret";
 
-    private readonly IRemsFormRepository _forms;
+    /// <summary>What the FailureReason column holds.</summary>
+    private const int FailureReasonMax = 1000;
+
+    private readonly IRemsRequestRepository _requests;
     private readonly string _webhookSecret;
     private readonly ILogger<RemsEmailEventsController> _logger;
 
     public RemsEmailEventsController(
-        IRemsFormRepository forms,
+        IRemsRequestRepository requests,
         IOptions<RemsWebhookOptions> webhookOptions,
         ILogger<RemsEmailEventsController> logger)
     {
-        _forms = forms;
+        _requests = requests;
         _webhookSecret = webhookOptions.Value.Secret ?? string.Empty;
         _logger = logger;
     }
@@ -95,7 +99,7 @@ public sealed class RemsEmailEventsController : ControllerBase
 
     /// <summary>
     /// Resolves one event: skip (ignore) anything malformed or unmatched; skip (duplicate) anything
-    /// already recorded; otherwise append a new email event stamped with the anchor's tenant + form.
+    /// already recorded; otherwise append a new email event stamped with the anchor's tenant + request.
     /// </summary>
     private async Task<IngestOutcome> ProcessAsync(RemsEmailEventNotification evt, CancellationToken cancellationToken)
     {
@@ -110,34 +114,37 @@ public sealed class RemsEmailEventsController : ControllerBase
         }
 
         // Correlate to the anchoring Sent event (unscoped — no tenant context on a webhook) to resolve the
-        // owning tenant + form. An unmatched message id is skipped without changing REMS state.
-        var anchor = await _forms.GetSentEventByProviderMessageIdUnscopedAsync(providerMessageId, cancellationToken);
+        // owning tenant + request. An unmatched message id is skipped without changing REMS state.
+        var anchor = await _requests.GetSentEventByProviderMessageIdUnscopedAsync(providerMessageId, cancellationToken);
         if (anchor is null)
         {
             return IngestOutcome.Ignored;
         }
 
         // Idempotency: the filtered unique index (TenantId, ProviderMessageId, EventType) is the guard.
-        if (await _forms.EmailEventExistsAsync(anchor.TenantId, providerMessageId, eventType, cancellationToken))
+        if (await _requests.EmailEventExistsAsync(anchor.TenantId, providerMessageId, eventType, cancellationToken))
         {
             return IngestOutcome.Duplicate;
         }
 
-        var emailEvent = new REMSFormEmailEvent
+        var emailEvent = new RemsEmailEvent
         {
             Id = Guid.NewGuid(),
-            REMSFormId = anchor.REMSFormId,
+            REMSId = anchor.REMSId,
             // Inserted from an unauthenticated context: the DbContext StampTenant is a no-op with no resolved
             // tenant, so the tenant is set EXPLICITLY from the anchor and is therefore never Guid.Empty.
             TenantId = anchor.TenantId,
+            EmailTemplateId = anchor.EmailTemplateId,
             ProviderMessageId = providerMessageId,
             EventType = eventType,
             RecipientEmail = evt.RecipientEmail.Trim(),
+            Subject = anchor.Subject,
             OccurredOnUtc = ToUtc(occurredOn),
-            ProviderPayload = evt.RawProviderPayload(),
+            // The provider's payload is not kept; a failure keeps the one line of it worth reading.
+            FailureReason = eventType == RemsFormEmailEventType.Failed ? FailureReasonOf(evt.ProviderPayload) : null,
         };
 
-        var inserted = await _forms.TryAppendProviderEmailEventAsync(emailEvent, cancellationToken);
+        var inserted = await _requests.TryAppendProviderEmailEventAsync(emailEvent, cancellationToken);
         return inserted ? IngestOutcome.Processed : IngestOutcome.Duplicate;
     }
 
@@ -171,6 +178,39 @@ public sealed class RemsEmailEventsController : ControllerBase
 
     private static bool TryMapEventType(string? value, out RemsFormEmailEventType eventType)
         => Enum.TryParse(value, ignoreCase: true, out eventType) && Enum.IsDefined(eventType);
+
+    /// <summary>
+    /// A short reason for a failure, read off the provider's payload: the payload itself when it is one
+    /// string, else the first of the usual reason fields; null where it says nothing readable.
+    /// </summary>
+    private static string? FailureReasonOf(JsonElement? payload)
+    {
+        if (payload is not { } element)
+        {
+            return null;
+        }
+
+        string? reason = null;
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            reason = element.GetString();
+        }
+        else if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in new[] { "message", "reason", "error", "description", "detail" })
+            {
+                if (element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(value.GetString()))
+                {
+                    reason = value.GetString();
+                    break;
+                }
+            }
+        }
+
+        reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        return reason is { Length: > FailureReasonMax } ? reason[..FailureReasonMax] : reason;
+    }
 
     private static DateTime ToUtc(DateTime value) => value.Kind switch
     {

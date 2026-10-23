@@ -1,6 +1,7 @@
 using EmsPortal.Api.Approval;
 using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models.Rems;
+using EmsPortal.Api.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
@@ -18,7 +19,10 @@ namespace EmsPortal.Api.Controllers;
 
 /// <summary>
 /// REMS engagement workspace backend (WO-114 Part A + B): the submitted-form view, the editable
-/// client/entity/engagement workspace, the audit/government/tax conditional details.
+/// client/entity/engagement workspace, the audit/government/tax conditional details. The request is one
+/// row now: the engagement is its setup columns and the entity is its client, so the id on an
+/// <c>engagements/{id}</c> route is the REMS id and the id on an <c>entities/{entityId}</c> route is the
+/// client id.
 /// </summary>
 [ApiController]
 [LoadMaconomyClients]
@@ -34,19 +38,17 @@ namespace EmsPortal.Api.Controllers;
 public sealed class RemsEngagementController : ControllerBase
 {
     private const string CodeEngagementLocked = "REMS_ENGAGEMENT_LOCKED";
-    private const string CodeCopyInvalid = "REMS_COPY_INVALID";
     // STATIC-APPROVAL-POLICY
     private const string CodeCommissionReserved = "REMS_COMMISSION_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
     private const string TaxFormSetKey = "REMS.TaxForm";
+    private const string PrimaryContactCode = "primary_client_contact";
 
-    private readonly IRemsRepository _rems;
+    private readonly IRemsRequestRepository _requests;
     /// <summary>Only to answer whether an initiator has cover arranged — see RemsSetupAccess.CanWork.</summary>
     private readonly IRemsDelegationRepository _delegations;
-    private readonly IRemsFormRepository _forms;
-    private readonly IRemsClientRepository _clients;
-    private readonly IRemsEngagementRepository _engagements;
+    private readonly IClientRepository _clients;
     private readonly IRemsSettingsRepository _settings;
     private readonly IAddressRepository _addresses;
     private readonly IPersonRepository _persons;
@@ -58,15 +60,14 @@ public sealed class RemsEngagementController : ControllerBase
     private readonly IOptionCodeResolver _codes;
     // STATIC-APPROVAL-POLICY
     private readonly IRemsApprovalPolicy _policy;
-    private readonly IRemsMaconomyCustomerSyncRepository _syncs;
     private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IMaconomyClientDirectory _directory;
+    private readonly RemsClientIntake _intake;
 
     public RemsEngagementController(
-        IRemsRepository rems,
+        IRemsRequestRepository requests,
         IRemsDelegationRepository delegations,
-        IRemsFormRepository forms,
-        IRemsClientRepository clients,
-        IRemsEngagementRepository engagements,
+        IClientRepository clients,
         IRemsSettingsRepository settings,
         IAddressRepository addresses,
         IPersonRepository persons,
@@ -77,17 +78,17 @@ public sealed class RemsEngagementController : ControllerBase
         IActivityEventWriter activity,
         IOptionCodeResolver codes,
         IRemsApprovalPolicy policy,
-        IRemsMaconomyCustomerSyncRepository syncs,
-        IMaconomyCustomerSyncService customerSync)
+        IMaconomyCustomerSyncService customerSync,
+        IMaconomyClientDirectory directory,
+        RemsClientIntake intake)
     {
         _policy = policy;
-        _syncs = syncs;
         _customerSync = customerSync;
-        _rems = rems;
+        _directory = directory;
+        _intake = intake;
+        _requests = requests;
         _delegations = delegations;
-        _forms = forms;
         _clients = clients;
-        _engagements = engagements;
         _settings = settings;
         _addresses = addresses;
         _persons = persons;
@@ -138,7 +139,7 @@ public sealed class RemsEngagementController : ControllerBase
             ? RemsClientFormAssignment.Mine
             : RemsClientFormAssignment.All;
 
-        var (items, total) = await _forms.ListClientFormsAsync(
+        var (items, total) = await _requests.ListClientFormsAsync(
             new RemsClientFormQuery(
                 search, submitted, requestStatus, me, slice, new SortRequest(sortBy, descending), page, limit,
                 assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
@@ -157,7 +158,7 @@ public sealed class RemsEngagementController : ControllerBase
         // Whether this caller can prise a request loose from whoever holds it — the remedy when the admin
         // on it is away. Ordinary admins give back only their own.
         var elevated = RemsSetupAccess.IsElevated(User);
-        var syncs = await _syncs.ListByRemsIdsAsync(items.Select(i => i.RemsId).ToList(), cancellationToken);
+        var syncStatuses = await SyncStatusesAsync(items, cancellationToken);
 
         var rows = items.Select(i => new RemsClientFormRow(
             i.RemsId, i.RemsNumber, i.ClientName, i.ClientNameSuffix,
@@ -167,24 +168,22 @@ public sealed class RemsEngagementController : ControllerBase
             CanPickUp: mayAssign && i.AdminAssignedToId is null,
             CanHandBack: mayAssign && i.AdminAssignedToId is { } holder && (elevated || holder == me),
             NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
-            MaconomySyncStatus: syncs.TryGetValue(i.RemsId, out var sync)
-                ? RemsMaconomySyncViews.StatusOf(sync, _customerSync.IsStale(sync))
-                : null));
+            MaconomySyncStatus: syncStatuses.TryGetValue(i.RemsId, out var sync) ? sync : null));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }
 
-    /// <summary>The quick-filter counts for the EMS Review list, under the same filters.</summary>
     /// <summary>The clients across the queue, for its Client filter — whoever the list could narrow to.</summary>
     [HttpGet("client-forms/clients")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ClientFormClients(CancellationToken cancellationToken)
     {
-        var clients = await _forms.ListClientFormClientsAsync(cancellationToken);
+        var clients = await _requests.ListClientFormClientsAsync(cancellationToken);
         return Ok(ApiResponseFactory.Success(clients, "EMS Review clients retrieved."));
     }
 
+    /// <summary>The quick-filter counts for the EMS Review list, under the same filters.</summary>
     [HttpGet("client-forms/quick-counts")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<RemsClientFormQuickCounts>>(StatusCodes.Status200OK)]
@@ -213,7 +212,7 @@ public sealed class RemsEngagementController : ControllerBase
         var slice = string.Equals(assignment?.Trim(), "mine", StringComparison.OrdinalIgnoreCase)
             ? RemsClientFormAssignment.Mine
             : RemsClientFormAssignment.All;
-        var counts = await _forms.CountClientFormQuickFiltersAsync(
+        var counts = await _requests.CountClientFormQuickFiltersAsync(
             new RemsClientFormQuery(
                 search, submitted, requestStatus, me, slice, SortRequest.Default, Page: 1, Limit: 1,
                 assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
@@ -223,15 +222,15 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload
-    /// as plain fields — distinct from the editable workspace data.
+    /// The submitted-form view (AC-REMS-013.2/3): the client's answers as plain fields, rebuilt from the
+    /// client's rows — distinct from the editable workspace data.
     /// </summary>
     [HttpGet("requests/{remsId:guid}/submission")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsRead)]
     [ProducesResponseType<ApiResponse<RemsSubmissionView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Submission(Guid remsId, CancellationToken cancellationToken)
     {
-        var rems = await _rems.GetByIdAsync(remsId, cancellationToken);
+        var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
         if (rems is null)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
@@ -242,15 +241,14 @@ public sealed class RemsEngagementController : ControllerBase
             return notAllowed;
         }
 
-        var form = await _forms.GetWithSubmissionsByRemsIdAsync(remsId, cancellationToken);
-        var submission = form?.Submissions.OrderByDescending(s => s.SubmittedOnUtc).FirstOrDefault();
-        if (form is null || submission is null)
+        if (rems.FormSubmittedOnUtc is null || rems.Client is null)
         {
             return NotFound(ApiResponseFactory.NotFound("This request has no submitted form."));
         }
 
+        await HydrateAsync(rems, cancellationToken);
         return Ok(ApiResponseFactory.Success(
-            await BuildSubmissionViewAsync(rems, form, submission, cancellationToken),
+            await BuildSubmissionViewAsync(rems, cancellationToken),
             "REMS submitted form retrieved."));
     }
 
@@ -261,7 +259,7 @@ public sealed class RemsEngagementController : ControllerBase
     public async Task<IActionResult> UpdateSubmission(
         Guid remsId, [FromBody] RemsFormPayloadV1? payload, CancellationToken cancellationToken)
     {
-        var rems = await _rems.GetByIdAsync(remsId, cancellationToken);
+        var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
         if (rems is null)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
@@ -282,9 +280,7 @@ public sealed class RemsEngagementController : ControllerBase
                 "The client's submitted form cannot be corrected while the engagement is pending approval or approved."));
         }
 
-        var form = await _forms.GetWithSubmissionsByRemsIdAsync(remsId, cancellationToken);
-        var submission = form?.Submissions.OrderByDescending(s => s.SubmittedOnUtc).FirstOrDefault();
-        if (form is null || submission is null)
+        if (rems.FormSubmittedOnUtc is null || rems.Client is null)
         {
             return NotFound(ApiResponseFactory.NotFound("This request has no submitted form."));
         }
@@ -295,53 +291,60 @@ public sealed class RemsEngagementController : ControllerBase
                 ApiErrorCodes.ValidationFailed, "Validation failed.", "payload: No form data was supplied."));
         }
 
+        await HydrateAsync(rems, cancellationToken);
+        var entityType = rems.Client.EntityType?.Value ?? string.Empty;
+
         // Not the Admin's to change: the email is the address the invite went to, and the version pins the
-        // shape the stored JSON is read back in.
-        // For a Maconomy customer while Maconomy cannot be read, the address already on the submission.
-        payload.Email = rems.CustomerEmail
-            ?? RemsFormPayloadJson.TryDeserialize(submission.SubmittedPayload)?.Email;
+        // shape the payload is read in.
+        payload.Email = rems.Client.ClientEmail;
         payload.Version = 1;
 
-        var validation = new RemsFormPayloadValidator().Validate(payload, form.EntityType!.Value);
+        var validation = new RemsFormPayloadValidator().Validate(payload, entityType);
         if (!validation.IsValid)
         {
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        // Mutated, not Update()d.
-        submission.SubmittedPayload = RemsFormPayloadJson.Serialize(payload);
+        // The rows are the record: the correction is written straight onto the client.
+        await _intake.ApplyAsync(rems, payload, entityType, cancellationToken);
         await _activity.WriteAsync(
             new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsFormCorrected),
             cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var refreshed = await _requests.GetWorkspaceAsync(remsId, cancellationToken) ?? rems;
+        await HydrateAsync(refreshed, cancellationToken);
         return Ok(ApiResponseFactory.Success(
-            await BuildSubmissionViewAsync(rems, form, submission, cancellationToken),
+            await BuildSubmissionViewAsync(refreshed, cancellationToken),
             "REMS submitted form updated."));
     }
 
     /// <summary>
     /// The submitted-form view, with the correction trail resolved and this caller's own right to
-    /// correct it.
+    /// correct it. A correction is a staff write to the client row after the client's own submission.
     /// </summary>
-    private async Task<RemsSubmissionView> BuildSubmissionViewAsync(
-        REMS rems, REMSForm form, REMSFormSubmission submission, CancellationToken cancellationToken)
+    private async Task<RemsSubmissionView> BuildSubmissionViewAsync(RemsRequest rems, CancellationToken cancellationToken)
     {
-        var payload = RemsFormPayloadJson.TryDeserialize(submission.SubmittedPayload) ?? new RemsFormPayloadV1();
+        var client = rems.Client!;
+        var entityType = client.EntityType?.Value ?? string.Empty;
+        var payload = RemsClientIntake.ToPayload(rems, entityType, client.ClientEmail ?? string.Empty);
+        var submittedOn = rems.FormSubmittedOnUtc!.Value;
 
         string? editedBy = null;
-        if (submission.UpdatedById is { } editorId)
+        DateTime? editedOn = null;
+        if (client.UpdatedOnUtc > submittedOn && client.UpdatedById is { } editorId)
         {
             var names = await _users.GetFullNamesAsync(new[] { editorId }, cancellationToken);
             editedBy = names.TryGetValue(editorId, out var name) ? name : "an admin";
+            editedOn = client.UpdatedOnUtc;
         }
 
         return new RemsSubmissionView(
-            submission.Id, rems.Id, rems.REMSNumber, form.EntityType!.Value, rems.CustomerEmail,
-            rems.ClientNameSuffix,
-            submission.SubmittedOnUtc, payload,
+            rems.Id, rems.Id, rems.RemsNumber, entityType, client.ClientEmail,
+            client.Person?.Suffix,
+            submittedOn, payload,
             editedBy,
-            editedBy is null ? null : submission.UpdatedOnUtc,
+            editedOn,
             CanEdit: User.HasPermission(Permissions.RemsEngagementsManage) && !IsFrozenForApproval(rems.Status!.Value));
     }
 
@@ -358,7 +361,7 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementWorkspace>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Workspace(Guid remsId, CancellationToken cancellationToken)
     {
-        var rems = await _rems.GetByIdAsync(remsId, cancellationToken);
+        var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
         if (rems is null)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
@@ -369,17 +372,7 @@ public sealed class RemsEngagementController : ControllerBase
             return notAllowed;
         }
 
-        // Null until the client submits their intake form. Everything below tolerates that.
-        var client = await _clients.GetByRemsIdAsync(remsId, cancellationToken);
-
-        // One engagement, belonging to the request rather than to any entity.
-        var engagement = await _engagements.GetByRemsIdAsync(remsId, cancellationToken);
-        var engagements = engagement is null ? Array.Empty<REMSEngagement>() : new[] { engagement };
-        var engagementIds = engagements.Select(e => e.Id).ToList();
-
-        var audit = (await _engagements.ListAuditDetailsAsync(engagementIds, cancellationToken)).ToDictionary(d => d.REMSEngagementId);
-        var government = (await _engagements.ListGovernmentDetailsAsync(engagementIds, cancellationToken)).ToDictionary(d => d.REMSEngagementId);
-        var tax = (await _engagements.ListTaxDetailsAsync(engagementIds, cancellationToken)).ToDictionary(d => d.REMSEngagementId);
+        await HydrateAsync(rems, cancellationToken);
 
         // The department → director map travels with the workspace so the setup form can name the director
         // a department maps to as soon as it is picked, instead of waiting for the save to come back.
@@ -387,7 +380,7 @@ public sealed class RemsEngagementController : ControllerBase
         var directorRows = settings?.DepartmentDirectors.Where(d => !d.Deleted).ToList() ?? new();
 
         var names = await _users.GetFullNamesAsync(
-            CollectUserIds(engagements).Concat(directorRows.Select(d => d.DirectorUserId)), cancellationToken);
+            CollectUserIds(rems).Concat(directorRows.Select(d => d.DirectorUserId)), cancellationToken);
 
         var departmentDirectors = directorRows
             .OrderBy(d => d.Department!.Value)
@@ -396,24 +389,41 @@ public sealed class RemsEngagementController : ControllerBase
                 new RemsUserRef(d.DirectorUserId, names.TryGetValue(d.DirectorUserId, out var n) ? n : string.Empty)))
             .ToList();
 
-        // The other businesses this client named, with the request each has produced. Resolved to REMS
-        // numbers in one lookup so a row can link to what it created rather than just claiming it exists.
-        var additionalRows = await _rems.ListAdditionalEntitiesAsync(remsId, cancellationToken);
-        var createdNumbers = await _rems.GetNumbersAsync(
-            additionalRows.Where(a => a.CreatedREMSId.HasValue).Select(a => a.CreatedREMSId!.Value).ToList(),
-            cancellationToken);
-        var additionalEntities = additionalRows
-            .Select(a => new RemsAdditionalEntityView(
-                a.Id, a.FullName, a.EmailAddress, a.PhoneNumber, a.CreatedREMSId,
-                a.CreatedREMSId is { } createdId && createdNumbers.TryGetValue(createdId, out var n) ? n : null))
-            .ToList();
+        var additionalEntities = await AdditionalEntitiesAsync(rems, cancellationToken);
 
-        var formState = (await _rems.GetFormStatesAsync(new[] { remsId }, cancellationToken)).FirstOrDefault();
-
-        var workspace = RemsWorkspaceMapper.Workspace(
-            rems, client, engagement, audit, government, tax, names,
-            formState?.EntityType, additionalEntities, departmentDirectors);
+        var workspace = RemsWorkspaceMapper.Workspace(rems, names, additionalEntities, departmentDirectors);
         return Ok(ApiResponseFactory.Success(workspace, "REMS engagement workspace retrieved."));
+    }
+
+    /// <summary>
+    /// The other businesses this client named, with the request each has produced. Resolved to REMS
+    /// numbers in one lookup so a row can link to what it created rather than just claiming it exists.
+    /// </summary>
+    private async Task<IReadOnlyList<RemsAdditionalEntityView>> AdditionalEntitiesAsync(RemsRequest rems, CancellationToken cancellationToken)
+    {
+        if (rems.Client is not { } client)
+        {
+            return Array.Empty<RemsAdditionalEntityView>();
+        }
+
+        var related = (await _requests.ListRelatedClientsAsync(new[] { rems.Id }, cancellationToken))
+            .Where(r => r.CreatedRemsId.HasValue)
+            .ToList();
+        var createdNumbers = await _requests.GetNumbersAsync(
+            related.Select(r => r.CreatedRemsId!.Value).ToList(), cancellationToken);
+
+        // The rows are keyed by relationship; the mapper wants them by the related client.
+        var relatedClientIds = client.Relationships.Where(r => !r.Deleted).ToDictionary(r => r.Id, r => r.RelatedClientId);
+        var raisedFor = new Dictionary<Guid, (Guid RemsId, string RemsNumber)>();
+        foreach (var row in related)
+        {
+            if (relatedClientIds.TryGetValue(row.Id, out var relatedClientId))
+            {
+                var createdId = row.CreatedRemsId!.Value;
+                raisedFor[relatedClientId] = (createdId, createdNumbers.TryGetValue(createdId, out var number) ? number : string.Empty);
+            }
+        }
+        return RemsWorkspaceMapper.AdditionalEntities(client, raisedFor);
     }
 
     // -------------------- Part A: client + entity editing --------------------
@@ -424,19 +434,40 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsClientView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateClient(Guid remsId, [FromBody] UpdateRemsClientRequest request, CancellationToken cancellationToken)
     {
-        if (await GuardSetupOwnerAsync(remsId, cancellationToken) is { } denied)
+        var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
+        if (rems is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
+        }
+
+        if (await GuardSetupOwnerAsync(rems, cancellationToken) is { } denied)
         {
             return denied;
         }
 
-        var client = await _clients.GetByRemsIdAsync(remsId, cancellationToken);
+        var client = rems.Client;
         if (client is null)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS client not found."));
         }
 
-        if (request.Name is not null) client.Name = request.Name.Trim();
-        if (request.MobileNumber is not null) client.MobileNumber = Normalize(request.MobileNumber);
+        if (Normalize(request.Name) is { } name)
+        {
+            if (client.IsOrganisation)
+            {
+                client.LegalName = name;
+            }
+            else if (client.Person is { } person)
+            {
+                var (first, last) = SplitName(name);
+                person.FirstName = first;
+                person.LastName = last;
+                person.DisplayName = name;
+                person.LastProfileUpdatedOn = DateTime.UtcNow;
+                _persons.Update(person);
+            }
+        }
+        if (request.MobileNumber is not null) client.PrimaryPhone = Normalize(request.MobileNumber);
         // The wire carries the CODE; the column is a foreign key to the option item it names. An unknown
         // code resolves to null rather than being stored as-is -- there is nothing to point at.
         if (request.ReferralSource is not null)
@@ -444,119 +475,185 @@ public sealed class RemsEngagementController : ControllerBase
             client.ReferralSourceId = await _codes.IdOfAsync(
                 EntityType.Rems, RemsOptionSetKeys.ReferralSource, request.ReferralSource, cancellationToken);
         }
-        if (request.BillingContactName is not null) client.BillingContactName = Normalize(request.BillingContactName);
-        if (request.BillingEmail is not null) client.BillingEmail = Normalize(request.BillingEmail);
 
-        // Billing ADDRESSES are not edited here. They are the main entity's rows rather than the client's,
-        // there may be several of them, and they are written by the client's own intake form.
+        // The billing name and email are the first billing contact's person; supplied blank, the contact goes.
+        if (request.BillingContactName is not null || request.BillingEmail is not null)
+        {
+            await UpsertBillingContactAsync(rems, client, request.BillingContactName, request.BillingEmail, cancellationToken);
+        }
+
+        // Billing ADDRESSES are not edited here. There may be several of them, and they are written by the
+        // client's own intake form.
         _clients.Update(client);
         await _activity.WriteAsync(new CreateActivityEventDto(EntityType.Rems, remsId, ActivityEventTypes.RemsEngagementUpdated), cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var refreshed = await _clients.GetByRemsIdAsync(remsId, cancellationToken) ?? client;
-        var view = new RemsClientView(
-            refreshed.Id, refreshed.Name, refreshed.Email, refreshed.MobileNumber,
-            refreshed.ReferralSource?.Value,
-            refreshed.BillingContactName, refreshed.BillingEmail);
-        return Ok(ApiResponseFactory.Success(view, "REMS client updated."));
+        var refreshed = await _clients.GetByIdAsync(client.Id, cancellationToken) ?? client;
+        await _directory.HydrateAsync(refreshed, cancellationToken);
+        return Ok(ApiResponseFactory.Success(RemsWorkspaceMapper.ClientView(refreshed), "REMS client updated."));
     }
 
-    /// <summary>Replace an entity's physical/mailing addresses (AC-REMS-014).</summary>
+    private async Task UpsertBillingContactAsync(
+        RemsRequest rems, Client client, string? nameInput, string? emailInput, CancellationToken cancellationToken)
+    {
+        var billing = RemsWorkspaceMapper.BillingContact(client);
+        var name = nameInput is null ? Normalize(billing?.Person?.DisplayName) : Normalize(nameInput);
+        var email = emailInput is null ? Normalize(billing?.Person?.PrimaryEmail) : Normalize(emailInput);
+
+        if (name is null && email is null)
+        {
+            if (billing is not null)
+            {
+                client.Contacts.Remove(billing);
+                _clients.RemoveContact(billing);
+            }
+            return;
+        }
+
+        var input = new RemsEntityContactInput { Name = name, Email = email };
+        if (billing?.Person is { } person)
+        {
+            ApplyContactPerson(person, input);
+            _persons.Update(person);
+            return;
+        }
+
+        var created = NewContactPerson(input, client.TenantId, rems.Id);
+        await _persons.AddAsync(created, cancellationToken);
+        var contact = new ClientContact
+        {
+            Id = Guid.NewGuid(),
+            TenantId = client.TenantId,
+            ClientId = client.Id,
+            PersonId = created.Id,
+            ContactRoleId = await _codes.RequireRemsIdAsync(RemsOptionSetKeys.ContactRole, RemsContactRoles.BillingContactCode, cancellationToken),
+            Person = created,
+        };
+        client.Contacts.Add(contact);
+        await _clients.AddContactAsync(contact, cancellationToken);
+    }
+
+    /// <summary>Replace an entity's physical/mailing addresses (AC-REMS-014). The entity is the client.</summary>
     [HttpPut("entities/{entityId:guid}/addresses")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsEntityAddressView>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateEntityAddresses(
         Guid entityId, [FromBody] UpdateRemsEntityAddressesRequest request, CancellationToken cancellationToken)
     {
-        var entity = await _clients.GetEntityAsync(entityId, cancellationToken);
-        if (entity is null)
+        var client = await _clients.GetByIdAsync(entityId, cancellationToken);
+        if (client is null)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS entity not found."));
         }
 
-        if (await GuardSetupOwnerAsync(entity.Client!.REMSId, cancellationToken) is { } denied)
+        var rems = await RequestOfClientAsync(client.Id, cancellationToken);
+        if (rems is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
+        }
+        if (await GuardSetupOwnerAsync(rems, cancellationToken) is { } denied)
         {
             return denied;
         }
 
-        await UpsertEntityAddressAsync(entity, RemsAddressType.Physical, request.PhysicalAddress, cancellationToken);
-        await UpsertEntityAddressAsync(entity, RemsAddressType.Mailing, request.MailingAddress, cancellationToken);
+        await UpsertClientAddressAsync(client, RemsAddressTypes.Physical, request.PhysicalAddress, cancellationToken);
+        await UpsertClientAddressAsync(client, RemsAddressTypes.Mailing, request.MailingAddress, cancellationToken);
 
         await _activity.WriteAsync(new CreateActivityEventDto(
-            EntityType.Rems, entity.Client!.REMSId, ActivityEventTypes.RemsEngagementUpdated), cancellationToken);
+            EntityType.Rems, rems.Id, ActivityEventTypes.RemsEngagementUpdated), cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var refreshed = await _clients.GetEntityAsync(entityId, cancellationToken) ?? entity;
-        var rows = refreshed.Addresses.Where(a => !a.Deleted)
-            .Select(a => new RemsEntityAddressView(a.Id, a.AddressType.ToString(), RemsWorkspaceMapper.Address(a.Address)!));
+        var refreshed = await _clients.GetByIdAsync(entityId, cancellationToken) ?? client;
+        var rows = refreshed.Addresses.Where(a => !a.Deleted && a.Address is not null)
+            .OrderBy(a => a.AddressType?.SortOrder).ThenBy(a => a.CreatedOnUtc)
+            .Select(RemsWorkspaceMapper.EntityAddress);
         return Ok(ApiResponseFactory.Success(rows, "REMS entity addresses updated."));
     }
 
-    /// <summary>Replace an entity's contacts (AC-REMS-014).</summary>
+    /// <summary>Replace an entity's contacts (AC-REMS-014). The entity is the client.</summary>
     [HttpPut("entities/{entityId:guid}/contacts")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsEntityContactView>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateEntityContacts(
         Guid entityId, [FromBody] UpdateRemsEntityContactsRequest request, CancellationToken cancellationToken)
     {
-        var entity = await _clients.GetEntityAsync(entityId, cancellationToken);
-        if (entity is null)
+        var client = await _clients.GetByIdAsync(entityId, cancellationToken);
+        if (client is null)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS entity not found."));
         }
 
-        if (await GuardSetupOwnerAsync(entity.Client!.REMSId, cancellationToken) is { } denied)
+        var rems = await RequestOfClientAsync(client.Id, cancellationToken);
+        if (rems is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
+        }
+        if (await GuardSetupOwnerAsync(rems, cancellationToken) is { } denied)
         {
             return denied;
         }
 
-        var existing = entity.Contacts.Where(c => !c.Deleted).ToList();
-        var desiredRoles = request.Contacts.Select(c => c.Role.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // Remove contacts whose role is no longer present.
-        foreach (var contact in existing.Where(c => !desiredRoles.Contains(c.ContactRole)))
-        {
-            _clients.RemoveEntityContact(contact);
-        }
-
-        // Upsert each supplied contact by role.
+        // The wire still names roles by their old enum names; each must be a value on the REMS.ContactRole
+        // list before anything is written.
+        var desired = new List<(string Code, Guid RoleId, RemsEntityContactInput Input)>();
         foreach (var input in request.Contacts)
         {
-            var role = input.Role.Trim();
-            var contact = existing.FirstOrDefault(c => string.Equals(c.ContactRole, role, StringComparison.OrdinalIgnoreCase));
+            if (RemsContactRoles.CodeOf(input.Role) is not { } code)
+            {
+                return BadRequest(ApiResponseFactory.Error(
+                    ApiErrorCodes.ValidationFailed, "Validation failed.", $"contacts: '{input.Role}' is not a REMS contact role."));
+            }
+            desired.Add((code, await _codes.RequireRemsIdAsync(RemsOptionSetKeys.ContactRole, code, cancellationToken), input));
+        }
+
+        var existing = client.Contacts.Where(c => !c.Deleted).ToList();
+        var desiredRoleIds = desired.Select(d => d.RoleId).ToHashSet();
+
+        // Remove contacts whose role is no longer present.
+        foreach (var contact in existing.Where(c => !desiredRoleIds.Contains(c.ContactRoleId)).ToList())
+        {
+            client.Contacts.Remove(contact);
+            _clients.RemoveContact(contact);
+        }
+
+        // Upsert each supplied contact by role. IsRequired is a rule of the entity type now, not stored.
+        foreach (var (code, roleId, input) in desired)
+        {
+            var contact = existing.FirstOrDefault(c => c.ContactRoleId == roleId);
             if (contact is null)
             {
-                var person = NewContactPerson(input, entity.Client!.REMSId);
+                var person = NewContactPerson(input, client.TenantId, rems.Id);
                 await _persons.AddAsync(person, cancellationToken);
-                await _clients.AddEntityContactAsync(new REMSEntityContact
+                contact = new ClientContact
                 {
                     Id = Guid.NewGuid(),
-                    REMSEntityId = entity.Id,
+                    TenantId = client.TenantId,
+                    ClientId = client.Id,
                     PersonId = person.Id,
-                    ContactRole = role,
-                    IsRequired = input.IsRequired,
-                }, cancellationToken);
+                    ContactRoleId = roleId,
+                    IsPrimary = code == PrimaryContactCode,
+                    Person = person,
+                };
+                client.Contacts.Add(contact);
+                await _clients.AddContactAsync(contact, cancellationToken);
+                existing.Add(contact);
             }
-            else
+            else if (contact.Person is { } person)
             {
-                contact.IsRequired = input.IsRequired;
-                if (contact.Person is { } person)
-                {
-                    ApplyContactPerson(person, input);
-                    _persons.Update(person);
-                }
+                ApplyContactPerson(person, input);
+                _persons.Update(person);
             }
         }
 
         await _activity.WriteAsync(new CreateActivityEventDto(
-            EntityType.Rems, entity.Client!.REMSId, ActivityEventTypes.RemsEngagementUpdated), cancellationToken);
+            EntityType.Rems, rems.Id, ActivityEventTypes.RemsEngagementUpdated), cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var refreshed = await _clients.GetEntityAsync(entityId, cancellationToken) ?? entity;
+        var refreshed = await _clients.GetByIdAsync(entityId, cancellationToken) ?? client;
+        var entityType = refreshed.EntityType?.Value;
         var rows = refreshed.Contacts.Where(c => !c.Deleted)
-            .Select(c => new RemsEntityContactView(
-                c.Id, c.ContactRole, c.IsRequired, c.Person?.DisplayName, c.Person?.PrimaryEmail,
-                c.Person?.MobileNumber, c.Person?.Suffix));
+            .OrderBy(c => c.ContactRole?.SortOrder).ThenBy(c => c.CreatedOnUtc)
+            .Select(c => RemsWorkspaceMapper.EntityContact(c, entityType));
         return Ok(ApiResponseFactory.Success(rows, "REMS entity contacts updated."));
     }
 
@@ -568,19 +665,10 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementUpdateResult>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateEngagement(Guid id, [FromBody] UpdateRemsEngagementRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         // Any supplied team member must resolve to a real user.
@@ -595,10 +683,10 @@ public sealed class RemsEngagementController : ControllerBase
         // Each of the three is an option-set item, referenced by id.
         var incomingDepartment = Normalize(request.Department);
         var departmentChanged = request.Department is not null
-            && !string.Equals(incomingDepartment, engagement.Department?.Value, StringComparison.Ordinal);
+            && !string.Equals(incomingDepartment, rems.Department?.Value, StringComparison.Ordinal);
         if (request.Department is not null)
         {
-            engagement.DepartmentId =
+            rems.DepartmentId =
                 await _codes.RemsIdAsync(RemsOptionSetKeys.Department, incomingDepartment, cancellationToken);
         }
 
@@ -606,54 +694,56 @@ public sealed class RemsEngagementController : ControllerBase
         // group for reporting.
         if (request.ServiceLine is not null)
         {
-            engagement.ServiceLineId = await _codes.RemsIdAsync(
+            rems.ServiceLineId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.ServiceLine, Normalize(request.ServiceLine), cancellationToken);
         }
         if (request.JobTemplate is not null)
         {
-            engagement.JobTemplateId = await _codes.RemsIdAsync(
+            rems.JobTemplateId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.JobTemplate, Normalize(request.JobTemplate), cancellationToken);
         }
-        if (request.Industry is not null)
+        // The industry is the client's trade, so it lives on the client.
+        if (request.Industry is not null && rems.Client is { } client)
         {
-            engagement.IndustryId = await _codes.RemsIdAsync(
+            client.IndustryId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.Industry, Normalize(request.Industry), cancellationToken);
+            _clients.Update(client);
         }
 
         // The department the director is mapped from is the one being SAVED, which on this request may be
         // the incoming code rather than what the row still holds.
         var mappedDirector = await MappedDirectorAsync(
-            request.Department is not null ? incomingDepartment : engagement.Department?.Value, cancellationToken);
+            request.Department is not null ? incomingDepartment : rems.Department?.Value, cancellationToken);
         if (request.DepartmentDirectorId.HasValue)
         {
-            engagement.DepartmentDirectorId = request.DepartmentDirectorId;
+            rems.DepartmentDirectorId = request.DepartmentDirectorId;
         }
-        else if (departmentChanged || engagement.DepartmentDirectorId is null)
+        else if (departmentChanged || rems.DepartmentDirectorId is null)
         {
             // Prefill from the tenant department-director map (may be null = unassigned placeholder).
-            engagement.DepartmentDirectorId = mappedDirector;
+            rems.DepartmentDirectorId = mappedDirector;
         }
 
-        if (request.EngagementExecutiveId.HasValue) engagement.EngagementExecutiveId = request.EngagementExecutiveId;
-        if (request.BillingManagerId.HasValue) engagement.BillingManagerId = request.BillingManagerId;
-        if (request.FirstYearFeeEstimate.HasValue) engagement.FirstYearFeeEstimate = request.FirstYearFeeEstimate;
+        if (request.EngagementExecutiveId.HasValue) rems.EngagementExecutiveId = request.EngagementExecutiveId;
+        if (request.BillingManagerId.HasValue) rems.BillingManagerId = request.BillingManagerId;
+        if (request.FirstYearFeeEstimate.HasValue) rems.FirstYearFeeEstimate = request.FirstYearFeeEstimate;
         // Assurance's own fee, kept apart from the first-year estimate above rather than sharing a column with
         // it: they are different questions.
-        if (request.EngagementFee.HasValue) engagement.EngagementFee = request.EngagementFee;
-        if (request.RealizationPercentage.HasValue) engagement.RealizationPercentage = request.RealizationPercentage;
+        if (request.EngagementFee.HasValue) rems.EngagementFee = request.EngagementFee;
+        if (request.RealizationPercentage.HasValue) rems.RealizationPercentage = request.RealizationPercentage;
         // The billing schedule: how often, and how it actually works.
         if (request.BillingPeriod is not null)
         {
-            engagement.BillingPeriodId = await _codes.RemsIdAsync(
+            rems.BillingPeriodId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.BillingPeriod, Normalize(request.BillingPeriod), cancellationToken);
         }
         if (request.BillingProcessDescription is not null)
         {
-            engagement.BillingProcessDescription = Normalize(request.BillingProcessDescription);
+            rems.BillingProcessDescription = Normalize(request.BillingProcessDescription);
         }
 
-        _engagements.Update(engagement);
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        _requests.Update(rems);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
@@ -669,41 +759,18 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> LinkClientAcceptanceForm(Guid id, [FromBody] LinkClientAcceptanceFormRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
         if (await _media.GetByIdAsync(request.MediaId, cancellationToken) is null)
         {
             return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "Unknown mediaId."));
         }
 
-        var detail = await _engagements.GetAuditDetailAsync(id, cancellationToken);
-        if (detail is null)
-        {
-            await _engagements.AddAuditDetailAsync(new REMSEngagementAuditDetail
-            {
-                Id = Guid.NewGuid(),
-                REMSEngagementId = id,
-                ClientAcceptanceFormMediaId = request.MediaId,
-            }, cancellationToken);
-        }
-        else
-        {
-            detail.ClientAcceptanceFormMediaId = request.MediaId;
-        }
-
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        await SetFileAsync(rems, RemsFileKind.ClientAcceptanceForm, request.MediaId, cancellationToken);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
@@ -716,28 +783,17 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UnlinkClientAcceptanceForm(Guid id, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         // Idempotent: an engagement with no form on file is already in the state the caller asked for, and
         // answering 404 to "there is nothing there" would make a double-click read as an error.
-        var detail = await _engagements.GetAuditDetailAsync(id, cancellationToken);
-        if (detail?.ClientAcceptanceFormMediaId is not null)
+        if (RemoveFiles(rems, RemsFileKind.ClientAcceptanceForm))
         {
-            detail.ClientAcceptanceFormMediaId = null;
-            await LogEngagementUpdatedAsync(engagement, cancellationToken);
+            await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
@@ -754,19 +810,10 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateGovernmentDetail(Guid id, [FromBody] UpdateRemsGovernmentDetailRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         // The rate card's levels are codes off the REMS.PersonnelLevel list, resolved before anything is
@@ -789,44 +836,37 @@ public sealed class RemsEngagementController : ControllerBase
             desiredRates[levelId.Value] = billRate;
         }
 
-        var detail = await _engagements.GetGovernmentDetailAsync(id, cancellationToken);
-        if (detail is null)
-        {
-            detail = new REMSEngagementGovernmentDetail { Id = Guid.NewGuid(), REMSEngagementId = id };
-            await _engagements.AddGovernmentDetailAsync(detail, cancellationToken);
-        }
+        // The firm's side of the contract sits on the request; blanks included.
+        rems.ContractNumber = Normalize(request.ContractNumber);
+        rems.IsFloridaOnePercentFeeApplicable = request.FloridaOnePercentStateFeeApplies;
+        rems.PurchaseOrderNumber = Normalize(request.PurchaseOrderNumber);
+        rems.PurchaseOrderAmount = request.PurchaseOrderAmount;
 
-        detail.ContractNumber = Normalize(request.ContractNumber);
-        detail.FloridaOnePercentStateFeeApplies = request.FloridaOnePercentStateFeeApplies;
-        detail.ContractStartDate = request.ContractStartDate;
-        detail.ContractEndDate = request.ContractEndDate;
-        detail.OriginalTerm = Normalize(request.OriginalTerm);
-        detail.RenewalTerms = Normalize(request.RenewalTerms);
-        detail.PurchaseOrderStartDate = request.PurchaseOrderStartDate;
-        detail.PurchaseOrderEndDate = request.PurchaseOrderEndDate;
-        // GCS. Every field on this record is written from the request, blanks included.
-        detail.PurchaseOrderNumber = Normalize(request.PurchaseOrderNumber);
-        detail.PurchaseOrderAmount = request.PurchaseOrderAmount;
+        await WriteContractAsync(rems, request, cancellationToken);
 
         // Reconcile the rate card by level: a level the request no longer prices comes off, one it newly
         // prices goes on, and the rest just take the rate they were sent.
-        var existingRates = detail.PersonnelRates.Where(r => !r.Deleted).ToList();
+        var existingRates = rems.PersonnelRates.Where(r => !r.Deleted).ToList();
         foreach (var rate in existingRates.Where(r => !desiredRates.ContainsKey(r.PersonnelLevelId)))
         {
-            _engagements.RemovePersonnelRate(rate);
+            rems.PersonnelRates.Remove(rate);
+            _requests.RemovePersonnelRate(rate);
         }
         foreach (var (levelId, billRate) in desiredRates)
         {
             var rate = existingRates.FirstOrDefault(r => r.PersonnelLevelId == levelId);
             if (rate is null)
             {
-                await _engagements.AddPersonnelRateAsync(new REMSEngagementPersonnelRate
+                var created = new RemsPersonnelRate
                 {
                     Id = Guid.NewGuid(),
-                    REMSEngagementGovernmentDetailId = detail.Id,
+                    TenantId = rems.TenantId,
+                    REMSId = rems.Id,
                     PersonnelLevelId = levelId,
                     BillRatePerHour = billRate,
-                }, cancellationToken);
+                };
+                rems.PersonnelRates.Add(created);
+                await _requests.AddPersonnelRateAsync(created, cancellationToken);
             }
             else
             {
@@ -834,11 +874,49 @@ public sealed class RemsEngagementController : ControllerBase
             }
         }
 
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        _requests.Update(rems);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
         return Ok(ApiResponseFactory.Success(view!, "Government audit detail updated."));
+    }
+
+    /// <summary>
+    /// The contract dates and terms are what the client declared, on the contract the request runs under:
+    /// the one it points at, else the client's current one, else a new current one when there is anything
+    /// to put on it.
+    /// </summary>
+    private async Task WriteContractAsync(RemsRequest rems, UpdateRemsGovernmentDetailRequest request, CancellationToken cancellationToken)
+    {
+        var client = rems.Client!;
+        var contract = rems.Contract ?? client.Contracts.FirstOrDefault(c => !c.Deleted && c.IsCurrent);
+        if (contract is null)
+        {
+            var any = request.ContractStartDate is not null || request.ContractEndDate is not null
+                || Normalize(request.OriginalTerm) is not null || Normalize(request.RenewalTerms) is not null
+                || request.PurchaseOrderStartDate is not null || request.PurchaseOrderEndDate is not null;
+            if (!any)
+            {
+                return;
+            }
+            contract = new ClientContract { Id = Guid.NewGuid(), TenantId = rems.TenantId, ClientId = client.Id, IsCurrent = true };
+            client.Contracts.Add(contract);
+            await _clients.AddContractAsync(contract, cancellationToken);
+        }
+        if (rems.ContractId != contract.Id)
+        {
+            rems.ContractId = contract.Id;
+            rems.Contract = contract;
+        }
+
+        contract.ContractStartDate = request.ContractStartDate;
+        contract.ContractEndDate = request.ContractEndDate;
+        contract.OriginalTerm = Normalize(request.OriginalTerm);
+        contract.RenewalTerms = Normalize(request.RenewalTerms);
+        contract.PurchaseOrderStartDate = request.PurchaseOrderStartDate;
+        contract.PurchaseOrderEndDate = request.PurchaseOrderEndDate;
+        _clients.UpdateContract(contract);
     }
 
     /// <summary>Set the ASSURANCE detail: the client's fiscal year end.</summary>
@@ -847,31 +925,18 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateAuditDetail(Guid id, [FromBody] UpdateRemsAuditDetailRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
+            return refusal!;
         }
 
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
-        }
+        // The fiscal year end is the client's, whichever department asks for it.
+        var client = rems.Client!;
+        client.FiscalYearEnd = request.ClientFiscalYearEnd;
+        _clients.Update(client);
 
-        var detail = await _engagements.GetAuditDetailAsync(id, cancellationToken);
-        if (detail is null)
-        {
-            detail = new REMSEngagementAuditDetail { Id = Guid.NewGuid(), REMSEngagementId = id };
-            await _engagements.AddAuditDetailAsync(detail, cancellationToken);
-        }
-
-        detail.ClientFiscalYearEnd = request.ClientFiscalYearEnd;
-
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
@@ -884,34 +949,18 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> LinkPurchaseOrder(Guid id, [FromBody] LinkPurchaseOrderRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
         if (await _media.GetByIdAsync(request.MediaId, cancellationToken) is null)
         {
             return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", "Unknown mediaId."));
         }
 
-        var detail = await _engagements.GetGovernmentDetailAsync(id, cancellationToken);
-        if (detail is null)
-        {
-            detail = new REMSEngagementGovernmentDetail { Id = Guid.NewGuid(), REMSEngagementId = id };
-            await _engagements.AddGovernmentDetailAsync(detail, cancellationToken);
-        }
-        detail.PurchaseOrderMediaId = request.MediaId;
-
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        await SetFileAsync(rems, RemsFileKind.PurchaseOrder, request.MediaId, cancellationToken);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
@@ -924,28 +973,17 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UnlinkPurchaseOrder(Guid id, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         // Idempotent, exactly as the client-acceptance form's removal is: an engagement carrying no order is
         // already in the state the caller asked.
-        var detail = await _engagements.GetGovernmentDetailAsync(id, cancellationToken);
-        if (detail?.PurchaseOrderMediaId is not null)
+        if (RemoveFiles(rems, RemsFileKind.PurchaseOrder))
         {
-            detail.PurchaseOrderMediaId = null;
-            await LogEngagementUpdatedAsync(engagement, cancellationToken);
+            await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
@@ -962,19 +1000,10 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateTaxDetail(Guid id, [FromBody] UpdateRemsTaxDetailRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         // Validate the tax-form ids against the REMS.TaxForm option set.
@@ -989,51 +1018,93 @@ public sealed class RemsEngagementController : ControllerBase
             }
         }
 
-        var detail = await _engagements.GetTaxDetailAsync(id, cancellationToken);
-        if (detail is null)
-        {
-            detail = new REMSEngagementTaxDetail { Id = Guid.NewGuid(), REMSEngagementId = id };
-            await _engagements.AddTaxDetailAsync(detail, cancellationToken);
-        }
+        var client = rems.Client!;
+        client.FiscalYearEnd = request.FiscalYearEnd;
+        _clients.Update(client);
 
-        detail.FiscalYearEnd = request.FiscalYearEnd;
-        // The rule fills in what was left blank and steps aside for what was typed.
-        if (request.FiscalYearEnd is { } fye)
-        {
-            var schedule = RemsTaxDueDates.Effective(fye, request.OriginalDueDate, request.FirstExtensionDueDate);
-            detail.OriginalDueDate = schedule.OriginalDueDate;
-            detail.FirstExtensionDueDate = schedule.ExtendedDueDate;
-            detail.CalculatedDueDates = RemsTaxDueDates.EffectiveJson(fye, request.OriginalDueDate, request.FirstExtensionDueDate);
-        }
-        else
-        {
-            detail.OriginalDueDate = null;
-            detail.FirstExtensionDueDate = null;
-            detail.CalculatedDueDates = null;
-        }
+        // Every date is a row: the rule fills in what was left blank and steps aside for what was typed,
+        // and a typed date is remembered as an override by whoever typed it.
+        await WriteTaxDueDatesAsync(rems, request, User.GetUserId(), cancellationToken);
 
         // Reconcile the tax-form checklist rows by TaxFormId.
-        var existingForms = detail.TaxForms.Where(f => !f.Deleted).ToList();
+        var existingForms = rems.TaxForms.Where(f => !f.Deleted).ToList();
         var desiredForms = request.TaxFormIds.Distinct().ToList();
         foreach (var form in existingForms.Where(f => !desiredForms.Contains(f.TaxFormId)))
         {
-            _engagements.RemoveTaxForm(form);
+            rems.TaxForms.Remove(form);
+            _requests.RemoveTaxForm(form);
         }
         foreach (var formId in desiredForms.Where(f => existingForms.All(x => x.TaxFormId != f)))
         {
-            await _engagements.AddTaxFormAsync(new REMSEngagementTaxForm
+            var created = new RemsTaxForm
             {
                 Id = Guid.NewGuid(),
-                REMSEngagementTaxDetailId = detail.Id,
+                TenantId = rems.TenantId,
+                REMSId = rems.Id,
                 TaxFormId = formId,
-            }, cancellationToken);
+            };
+            rems.TaxForms.Add(created);
+            await _requests.AddTaxFormAsync(created, cancellationToken);
         }
 
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
         return Ok(ApiResponseFactory.Success(view!, "Tax engagement detail updated."));
+    }
+
+    private async Task WriteTaxDueDatesAsync(RemsRequest rems, UpdateRemsTaxDetailRequest request, Guid? me, CancellationToken cancellationToken)
+    {
+        var rows = rems.TaxDueDates.Where(d => !d.Deleted).ToList();
+        if (request.FiscalYearEnd is not { } fye)
+        {
+            foreach (var row in rows)
+            {
+                rems.TaxDueDates.Remove(row);
+                _requests.RemoveTaxDueDate(row);
+            }
+            return;
+        }
+
+        var schedule = RemsTaxDueDates.Effective(fye, request.OriginalDueDate, request.FirstExtensionDueDate);
+        await UpsertTaxDueDateAsync(rems, rows, RemsTaxDueDateKind.Original, schedule.OriginalDueDate, request.OriginalDueDate is not null, me, cancellationToken);
+        await UpsertTaxDueDateAsync(rems, rows, RemsTaxDueDateKind.FirstExtension, schedule.ExtendedDueDate, request.FirstExtensionDueDate is not null, me, cancellationToken);
+    }
+
+    private async Task UpsertTaxDueDateAsync(
+        RemsRequest rems, List<RemsTaxDueDate> rows, RemsTaxDueDateKind kind, DateOnly dueOn, bool overridden, Guid? me,
+        CancellationToken cancellationToken)
+    {
+        var ofKind = rows.Where(d => d.Kind == kind).OrderBy(d => d.CreatedOnUtc).ToList();
+        var row = ofKind.FirstOrDefault();
+        if (row is null)
+        {
+            row = new RemsTaxDueDate
+            {
+                Id = Guid.NewGuid(),
+                TenantId = rems.TenantId,
+                REMSId = rems.Id,
+                Kind = kind,
+                DueOn = dueOn,
+                IsOverridden = overridden,
+                OverriddenByUserId = overridden ? me : null,
+            };
+            rems.TaxDueDates.Add(row);
+            await _requests.AddTaxDueDateAsync(row, cancellationToken);
+            return;
+        }
+
+        row.DueOn = dueOn;
+        row.IsOverridden = overridden;
+        row.OverriddenByUserId = overridden ? me : null;
+        _requests.UpdateTaxDueDate(row);
+        // One row per kind; anything beyond the first is a leftover.
+        foreach (var extra in ofKind.Skip(1))
+        {
+            rems.TaxDueDates.Remove(extra);
+            _requests.RemoveTaxDueDate(extra);
+        }
     }
 
     // -------------------- Part B: marketing, commission --------------------
@@ -1047,19 +1118,10 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SetMarketing(Guid id, [FromBody] SetRemsMarketingRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         var valid = await ResolveOptionItemIdsAsync(MarketingSetKey, cancellationToken);
@@ -1071,22 +1133,26 @@ public sealed class RemsEngagementController : ControllerBase
         }
 
         var desired = request.MarketingMethodIds.Distinct().ToList();
-        var existing = engagement.MarketingMethods.Where(m => !m.Deleted).ToList();
+        var existing = rems.MarketingMethods.Where(m => !m.Deleted).ToList();
         foreach (var method in existing.Where(m => !desired.Contains(m.MarketingMethodId)))
         {
-            _engagements.RemoveMarketingMethod(method);
+            rems.MarketingMethods.Remove(method);
+            _requests.RemoveMarketingMethod(method);
         }
         foreach (var methodId in desired.Where(m => existing.All(x => x.MarketingMethodId != m)))
         {
-            await _engagements.AddMarketingMethodAsync(new REMSEngagementMarketingMethod
+            var created = new RemsMarketingMethod
             {
                 Id = Guid.NewGuid(),
-                REMSEngagementId = id,
+                TenantId = rems.TenantId,
+                REMSId = rems.Id,
                 MarketingMethodId = methodId,
-            }, cancellationToken);
+            };
+            rems.MarketingMethods.Add(created);
+            await _requests.AddMarketingMethodAsync(created, cancellationToken);
         }
 
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
@@ -1102,19 +1168,10 @@ public sealed class RemsEngagementController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsEngagementView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SetCommission(Guid id, [FromBody] SetRemsCommissionRequest request, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetWithContextAsync(id, cancellationToken);
-        if (engagement is null)
+        var (rems, refusal) = await OpenForEditAsync(id, cancellationToken);
+        if (rems is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        if (await GuardSetupOwnerAsync(engagement.REMSId, cancellationToken) is { } denied)
-        {
-            return denied;
-        }
-        if (!IsEditable(engagement))
-        {
-            return EngagementLocked();
+            return refusal!;
         }
 
         // Every recipient must resolve to a real user.
@@ -1130,7 +1187,7 @@ public sealed class RemsEngagementController : ControllerBase
         // STATIC-APPROVAL-POLICY: the seats approve at their own stage and may not also be paid commission.
         var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
         if (policy.StaticRouting
-            && request.Splits.Select(s => s.EmployeeId).Intersect(RemsStaticApprovalRoute.ReservedUserIds(engagement, policy)).Any())
+            && request.Splits.Select(s => s.EmployeeId).Intersect(RemsStaticApprovalRoute.ReservedUserIds(rems, policy)).Any())
         {
             return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
                 CodeCommissionReserved,
@@ -1138,25 +1195,29 @@ public sealed class RemsEngagementController : ControllerBase
                 "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request."));
         }
 
-        var existing = engagement.CommissionSplits.Where(s => !s.Deleted).ToList();
+        var existing = rems.CommissionSplits.Where(s => !s.Deleted).ToList();
         var desiredByEmployee = request.Splits.ToDictionary(s => s.EmployeeId, s => s.Percentage);
 
         foreach (var split in existing.Where(s => !desiredByEmployee.ContainsKey(s.EmployeeId)))
         {
-            _engagements.RemoveCommissionSplit(split);
+            rems.CommissionSplits.Remove(split);
+            _requests.RemoveCommissionSplit(split);
         }
         foreach (var (employeeId, percentage) in desiredByEmployee)
         {
             var split = existing.FirstOrDefault(s => s.EmployeeId == employeeId);
             if (split is null)
             {
-                await _engagements.AddCommissionSplitAsync(new REMSEngagementCommissionSplit
+                var created = new RemsCommissionSplit
                 {
                     Id = Guid.NewGuid(),
-                    REMSEngagementId = id,
+                    TenantId = rems.TenantId,
+                    REMSId = rems.Id,
                     EmployeeId = employeeId,
                     CommissionPercentage = percentage,
-                }, cancellationToken);
+                };
+                rems.CommissionSplits.Add(created);
+                await _requests.AddCommissionSplitAsync(created, cancellationToken);
             }
             else if (split.CommissionPercentage != percentage)
             {
@@ -1164,7 +1225,7 @@ public sealed class RemsEngagementController : ControllerBase
             }
         }
 
-        await LogEngagementUpdatedAsync(engagement, cancellationToken);
+        await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
@@ -1177,11 +1238,11 @@ public sealed class RemsEngagementController : ControllerBase
     /// An engagement is editable only while it is Draft or has been Rejected (a fresh rework); locked
     /// once routed for approval or approved.
     /// </summary>
-    private static bool IsEditable(REMSEngagement engagement)
-        => engagement.Status is RemsEngagementStatus.Draft or RemsEngagementStatus.Rejected;
+    private static bool IsEditable(RemsRequest rems)
+        => RemsDerived.EngagementStatusOf(rems) is RemsEngagementStatus.Draft or RemsEngagementStatus.Rejected;
 
     /// <summary>The refusal for reading a request's setup, or null to carry on.</summary>
-    private IActionResult? GuardCanRead(REMS rems)
+    private IActionResult? GuardCanRead(RemsRequest rems)
     {
         if (User.GetUserId() is not { } me)
         {
@@ -1195,17 +1256,11 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>The refusal for WRITING a request's setup, or null to carry on.</summary>
-    private async Task<IActionResult?> GuardSetupOwnerAsync(Guid remsId, CancellationToken cancellationToken)
+    private async Task<IActionResult?> GuardSetupOwnerAsync(RemsRequest rems, CancellationToken cancellationToken)
     {
         if (User.GetUserId() is not { } me)
         {
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
-        }
-
-        var rems = await _rems.GetByIdAsync(remsId, cancellationToken);
-        if (rems is null)
-        {
-            return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
         }
 
         return RemsSetupAccess.CanWork(
@@ -1215,6 +1270,67 @@ public sealed class RemsEngagementController : ControllerBase
                 ApiResponseFactory.Forbidden(RemsSetupAccess.WorkDeniedReason(rems)));
     }
 
+    /// <summary>
+    /// The request an engagement route names, loaded whole and cleared for writing; otherwise the refusal
+    /// to send back.
+    /// </summary>
+    private async Task<(RemsRequest? Request, IActionResult? Refusal)> OpenForEditAsync(Guid remsId, CancellationToken cancellationToken)
+    {
+        var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
+        if (rems is null)
+        {
+            return (null, NotFound(ApiResponseFactory.NotFound("REMS engagement not found.")));
+        }
+        if (await GuardSetupOwnerAsync(rems, cancellationToken) is { } denied)
+        {
+            return (null, denied);
+        }
+        if (!IsEditable(rems))
+        {
+            return (null, EngagementLocked());
+        }
+        return (rems, null);
+    }
+
+    /// <summary>
+    /// The request a client edit is made under. A client can have several requests now; the newest is
+    /// the one being worked, and it is what the write guard and the activity log speak of.
+    /// </summary>
+    private async Task<RemsRequest?> RequestOfClientAsync(Guid clientId, CancellationToken cancellationToken)
+        => (await _requests.ListByClientAsync(clientId, cancellationToken)).FirstOrDefault();
+
+    /// <summary>
+    /// A Maconomy customer's name and contact come from the directory rather than the row; the client and
+    /// the parties it declared are read with that in place.
+    /// </summary>
+    private async Task HydrateAsync(RemsRequest rems, CancellationToken cancellationToken)
+    {
+        await _directory.HydrateAsync(rems.Client, cancellationToken);
+        foreach (var relationship in rems.Client?.Relationships.Where(r => !r.Deleted) ?? Enumerable.Empty<ClientRelationship>())
+        {
+            await _directory.HydrateAsync(relationship.RelatedClient, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// The sync chip per list row. The state lives on the client now and the row does not carry it, so
+    /// the rows that can show one — a Maconomy customer's, or an approved request's — are read back.
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> SyncStatusesAsync(IReadOnlyList<RemsClientFormItem> items, CancellationToken cancellationToken)
+    {
+        var statuses = new Dictionary<Guid, string>();
+        foreach (var item in items.Where(i => i.MaconomyCustomerNumber is not null || i.RequestStatus == RemsRequestStatuses.Approved))
+        {
+            var rems = await _requests.GetByIdAsync(item.RemsId, cancellationToken);
+            // Only the status word is read here; the flags For() also works out belong to the request page.
+            if (rems?.Client is { } client
+                && RemsMaconomySyncViews.For(rems, _customerSync.IsStale(client), enabled: false, canManage: false) is { } view)
+            {
+                statuses[item.RemsId] = view.Status;
+            }
+        }
+        return statuses;
+    }
 
     private async Task<Guid?> MappedDirectorAsync(string? department, CancellationToken cancellationToken)
     {
@@ -1230,38 +1346,32 @@ public sealed class RemsEngagementController : ControllerBase
             .FirstOrDefault(d => d.Department!.Value.Trim().ToLowerInvariant() == normalized)?.DirectorUserId;
     }
 
-    private Task LogEngagementUpdatedAsync(REMSEngagement engagement, CancellationToken cancellationToken)
+    private Task LogEngagementUpdatedAsync(Guid remsId, CancellationToken cancellationToken)
         => _activity.WriteAsync(
-            new CreateActivityEventDto(EntityType.Rems, engagement.REMSId, ActivityEventTypes.RemsEngagementUpdated),
+            new CreateActivityEventDto(EntityType.Rems, remsId, ActivityEventTypes.RemsEngagementUpdated),
             cancellationToken);
 
-    private async Task<RemsEngagementView?> BuildEngagementViewAsync(Guid engagementId, CancellationToken cancellationToken)
+    private async Task<RemsEngagementView?> BuildEngagementViewAsync(Guid remsId, CancellationToken cancellationToken)
     {
-        var engagement = await _engagements.GetByIdAsync(engagementId, cancellationToken);
-        if (engagement is null)
+        var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
+        if (rems is null)
         {
             return null;
         }
 
-        var audit = await _engagements.GetAuditDetailAsync(engagementId, cancellationToken);
-        var government = await _engagements.GetGovernmentDetailAsync(engagementId, cancellationToken);
-        var tax = await _engagements.GetTaxDetailAsync(engagementId, cancellationToken);
-        var names = await _users.GetFullNamesAsync(CollectUserIds(new[] { engagement }), cancellationToken);
-        return RemsWorkspaceMapper.Engagement(engagement, audit, government, tax, names);
+        var names = await _users.GetFullNamesAsync(CollectUserIds(rems), cancellationToken);
+        return RemsWorkspaceMapper.Engagement(rems, names);
     }
 
-    private static IReadOnlyCollection<Guid> CollectUserIds(IEnumerable<REMSEngagement> engagements)
+    private static IReadOnlyCollection<Guid> CollectUserIds(RemsRequest rems)
     {
         var ids = new HashSet<Guid>();
-        foreach (var e in engagements)
+        if (rems.DepartmentDirectorId is { } d) ids.Add(d);
+        if (rems.EngagementExecutiveId is { } x) ids.Add(x);
+        if (rems.BillingManagerId is { } b) ids.Add(b);
+        foreach (var s in rems.CommissionSplits.Where(s => !s.Deleted))
         {
-            if (e.DepartmentDirectorId is { } d) ids.Add(d);
-            if (e.EngagementExecutiveId is { } x) ids.Add(x);
-            if (e.BillingManagerId is { } b) ids.Add(b);
-            foreach (var s in e.CommissionSplits.Where(s => !s.Deleted))
-            {
-                ids.Add(s.EmployeeId);
-            }
+            ids.Add(s.EmployeeId);
         }
         return ids;
     }
@@ -1273,105 +1383,77 @@ public sealed class RemsEngagementController : ControllerBase
         return set?.Items.Where(i => !i.Deleted).Select(i => i.Id).ToHashSet() ?? new HashSet<Guid>();
     }
 
-    /// <summary>Upserts a shared <see cref="Address"/> from the input (creating one when <paramref name="existingId"/> is null); returns the id, or null when blank.</summary>
-    private async Task<Guid?> UpsertAddressAsync(Guid? existingId, RemsAddressInput input, AddressType type, CancellationToken cancellationToken)
+    /// <summary>Replaces the request's file of a kind with the given media; there is at most one of each kind.</summary>
+    private async Task SetFileAsync(RemsRequest rems, RemsFileKind kind, Guid mediaId, CancellationToken cancellationToken)
     {
-        if (!input.HasAny)
+        RemoveFiles(rems, kind);
+        var file = new RemsFile
         {
-            return existingId; // nothing supplied — leave the current address untouched.
-        }
-
-        if (existingId is { } id && await _addresses.GetByIdAsync(id, cancellationToken) is { } address)
-        {
-            ApplyAddress(address, input);
-            _addresses.Update(address);
-            return address.Id;
-        }
-
-        var created = NewAddress(input, type);
-        await _addresses.AddAsync(created, cancellationToken);
-        return created.Id;
+            Id = Guid.NewGuid(),
+            TenantId = rems.TenantId,
+            REMSId = rems.Id,
+            MediaId = mediaId,
+            Kind = kind,
+        };
+        rems.Files.Add(file);
+        await _requests.AddFileAsync(file, cancellationToken);
     }
 
-    /// <summary>Upserts (or, when blank, removes) an entity address of a given type from a supplied input.</summary>
-    private async Task UpsertEntityAddressAsync(REMSEntity entity, RemsAddressType type, RemsAddressInput? input, CancellationToken cancellationToken)
+    /// <summary>Takes every file of a kind off the request; true when there was one.</summary>
+    private bool RemoveFiles(RemsRequest rems, RemsFileKind kind)
+    {
+        var files = rems.Files.Where(f => !f.Deleted && f.Kind == kind).ToList();
+        foreach (var file in files)
+        {
+            rems.Files.Remove(file);
+            _requests.RemoveFile(file);
+        }
+        return files.Count > 0;
+    }
+
+    /// <summary>Upserts (or, when blank, removes) the client's address of a kind from a supplied input.</summary>
+    private async Task UpsertClientAddressAsync(Client client, string kind, RemsAddressInput? input, CancellationToken cancellationToken)
     {
         if (input is null)
         {
             return; // not supplied — leave unchanged.
         }
 
-        var existing = entity.Addresses.FirstOrDefault(a => !a.Deleted && a.AddressType == type);
+        var typeId = await _codes.RequireRemsIdAsync(RemsOptionSetKeys.AddressType, kind, cancellationToken);
+        var existing = client.Addresses.Where(a => !a.Deleted && a.AddressTypeId == typeId).OrderBy(a => a.CreatedOnUtc).FirstOrDefault();
         if (!input.HasAny)
         {
             if (existing is not null)
             {
-                _clients.RemoveEntityAddress(existing);
+                client.Addresses.Remove(existing);
+                _clients.RemoveAddress(existing);
             }
             return;
         }
 
-        if (existing?.Address is { } address)
+        var address = existing?.Address ?? (existing is null ? null : await _addresses.GetByIdAsync(existing.AddressId, cancellationToken));
+        if (address is not null)
         {
             ApplyAddress(address, input);
             _addresses.Update(address);
+            return;
         }
-        else
-        {
-            var created = NewAddress(input, AddressTypeFor(type));
-            await _addresses.AddAsync(created, cancellationToken);
-            await _clients.AddEntityAddressAsync(new REMSEntityAddress
-            {
-                Id = Guid.NewGuid(),
-                REMSEntityId = entity.Id,
-                AddressId = created.Id,
-                AddressType = type,
-            }, cancellationToken);
-        }
-    }
 
-    /// <summary>
-    /// Clones a source <see cref="Address"/> onto a target entity's address slot (upsert by type) —
-    /// used by copy-from.
-    /// </summary>
-    private async Task UpsertEntityAddressFromAsync(REMSEntity entity, RemsAddressType type, Address source, CancellationToken cancellationToken)
-    {
-        var existing = entity.Addresses.FirstOrDefault(a => !a.Deleted && a.AddressType == type);
-        if (existing?.Address is { } address)
+        var created = new Address { Id = Guid.NewGuid(), AddressType = RemsAddressTypes.PlatformTypeOf(kind) };
+        ApplyAddress(created, input);
+        await _addresses.AddAsync(created, cancellationToken);
+        var link = new ClientAddress
         {
-            address.AddressLine1 = source.AddressLine1;
-            address.CityName = source.CityName;
-            address.StateName = source.StateName;
-            address.PostalCode = source.PostalCode;
-            _addresses.Update(address);
-        }
-        else
-        {
-            var created = new Address
-            {
-                Id = Guid.NewGuid(),
-                AddressType = AddressTypeFor(type),
-                AddressLine1 = source.AddressLine1,
-                CityName = source.CityName,
-                StateName = source.StateName,
-                PostalCode = source.PostalCode,
-            };
-            await _addresses.AddAsync(created, cancellationToken);
-            await _clients.AddEntityAddressAsync(new REMSEntityAddress
-            {
-                Id = Guid.NewGuid(),
-                REMSEntityId = entity.Id,
-                AddressId = created.Id,
-                AddressType = type,
-            }, cancellationToken);
-        }
-    }
-
-    private static Address NewAddress(RemsAddressInput input, AddressType type)
-    {
-        var address = new Address { Id = Guid.NewGuid(), AddressType = type };
-        ApplyAddress(address, input);
-        return address;
+            Id = Guid.NewGuid(),
+            TenantId = client.TenantId,
+            ClientId = client.Id,
+            AddressId = created.Id,
+            AddressTypeId = typeId,
+            IsCurrent = true,
+            Address = created,
+        };
+        client.Addresses.Add(link);
+        await _clients.AddAddressAsync(link, cancellationToken);
     }
 
     /// <summary>
@@ -1390,19 +1472,17 @@ public sealed class RemsEngagementController : ControllerBase
         address.PostalCode = Normalize(input.Zip);
     }
 
-    private static AddressType AddressTypeFor(RemsAddressType type)
-        => type == RemsAddressType.Physical ? AddressType.Office : AddressType.Other;
-
     /// <param name="sourceRemsId">
     /// The request whose engagement setup captured this contact, recorded as the person's provenance —
     /// otherwise they are indistinguishable in the Person list from somebody onboarded deliberately.
     /// </param>
-    private static Person NewContactPerson(RemsEntityContactInput input, Guid sourceRemsId)
+    private static Person NewContactPerson(RemsEntityContactInput input, Guid tenantId, Guid sourceRemsId)
     {
         var person = new Person
         {
             Id = Guid.NewGuid(),
             PersonCode = "PER-" + Guid.NewGuid().ToString("N").ToUpperInvariant(),
+            TenantId = tenantId,
             IsActive = true,
             SourceEntityType = EntityType.Rems,
             SourceEntityId = sourceRemsId,
@@ -1437,9 +1517,6 @@ public sealed class RemsEngagementController : ControllerBase
     private IActionResult EngagementLocked()
         => StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
             CodeEngagementLocked, "This engagement is locked.", "The engagement cannot be edited while it is pending approval or approved."));
-
-    private IActionResult CopyInvalid(string message)
-        => StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(CodeCopyInvalid, message, message));
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

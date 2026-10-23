@@ -41,7 +41,7 @@ public sealed class BrandingController : ControllerBase
     private readonly ITenantRepository _tenants;
     private readonly IUserRepository _users;
     private readonly IMediaRepository _media;
-    private readonly IRemsFormRepository _remsForms;
+    private readonly IRemsRequestRepository _rems;
     private readonly IFileStorage _fileStorage;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -50,7 +50,7 @@ public sealed class BrandingController : ControllerBase
         ITenantRepository tenants,
         IUserRepository users,
         IMediaRepository media,
-        IRemsFormRepository remsForms,
+        IRemsRequestRepository rems,
         IFileStorage fileStorage,
         IUnitOfWork unitOfWork,
         IOptions<LimitsOptions> limits)
@@ -60,7 +60,7 @@ public sealed class BrandingController : ControllerBase
         _tenants = tenants;
         _users = users;
         _media = media;
-        _remsForms = remsForms;
+        _rems = rems;
         _fileStorage = fileStorage;
         _unitOfWork = unitOfWork;
     }
@@ -106,8 +106,8 @@ public sealed class BrandingController : ControllerBase
     [ProducesResponseType<ApiResponse<PublicBrandingResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetForPublicForm(string inviteCode, CancellationToken cancellationToken)
     {
-        var form = await _remsForms.GetByInviteCodeUnscopedAsync(inviteCode?.Trim() ?? string.Empty, cancellationToken);
-        var found = form is null ? null : await _tenants.GetByIdAsync(form.TenantId, cancellationToken);
+        var request = await _rems.GetByInviteCodeUnscopedAsync(inviteCode?.Trim() ?? string.Empty, cancellationToken);
+        var found = request is null ? null : await _tenants.GetByIdAsync(request.TenantId, cancellationToken);
 
         return Ok(ApiResponseFactory.Success(await ToPublicAsync(found, cancellationToken), "Branding retrieved."));
     }

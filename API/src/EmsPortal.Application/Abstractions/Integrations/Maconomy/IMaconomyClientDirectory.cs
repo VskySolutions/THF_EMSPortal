@@ -18,8 +18,6 @@ public interface IMaconomyClientDirectory
     /// </summary>
     Task EnsureLoadedAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
-    /// <summary>Sets <see cref="Person.Maconomy"/> on a client that is a Maconomy customer, loading first. For a read that happens outside a REMS controller.</summary>
-    Task HydrateAsync(Person? client, CancellationToken cancellationToken = default);
     /// <summary>Attaches the Maconomy customer card to a linked client; a no-op for one that is not linked.</summary>
     Task HydrateAsync(Client? client, CancellationToken cancellationToken = default);
 

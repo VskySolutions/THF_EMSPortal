@@ -92,7 +92,6 @@ public static class DependencyInjection
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<ISmtpAccountRepository, SmtpAccountRepository>();
         services.AddScoped<IMaconomyConnectionRepository, MaconomyConnectionRepository>();
-        services.AddScoped<IRemsMaconomyCustomerSyncRepository, RemsMaconomyCustomerSyncRepository>();
         services.AddScoped<ITenantBrandingRepository, TenantBrandingRepository>();
         services.AddScoped<ITenantEmailSettingsRepository, TenantEmailSettingsRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
@@ -119,12 +118,7 @@ public static class DependencyInjection
 
         // REMS (WO-110) repositories and per-tenant request-number generation.
         services.AddScoped<MaconomyClientReader>();
-        services.AddScoped<IRemsRepository, RemsRepository>();
-        services.AddScoped<IRemsFormRepository, RemsFormRepository>();
-        services.AddScoped<IRemsClientRepository, RemsClientRepository>();
-        services.AddScoped<IRemsEngagementRepository, RemsEngagementRepository>();
         services.AddScoped<IRemsDelegationRepository, RemsDelegationRepository>();
-        services.AddScoped<IRemsApprovalRepository, RemsApprovalRepository>();
         services.AddScoped<IRemsSettingsRepository, RemsSettingsRepository>();
         // REMS data model v2: the client master, the request as one row, and tasks without a round table.
         services.AddScoped<IClientRepository, ClientRepository>();

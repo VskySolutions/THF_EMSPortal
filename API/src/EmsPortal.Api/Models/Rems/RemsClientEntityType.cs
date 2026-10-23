@@ -11,24 +11,4 @@ internal static class RemsClientEntityType
 {
     public static bool IsIndividual(string? code)
         => string.Equals(code, RemsFormPayloadValidator.Individual, StringComparison.Ordinal);
-
-    /// <summary>
-    /// A person is always an Individual. An organisation holds the type it was last filed under; one
-    /// filed as an Individual contradicts its own record, so it reads as holding none.
-    /// </summary>
-    public static string? Of(Person client, string? lastFiledUnder)
-    {
-        // A Maconomy customer's type is Maconomy's; where it gives none, the one they were last filed under.
-        if (client.IsMaconomyClient)
-        {
-            return client.Maconomy?.EntityType ?? lastFiledUnder;
-        }
-
-        if (!client.IsOrganisation)
-        {
-            return RemsFormPayloadValidator.Individual;
-        }
-
-        return IsIndividual(lastFiledUnder) ? null : lastFiledUnder;
-    }
 }

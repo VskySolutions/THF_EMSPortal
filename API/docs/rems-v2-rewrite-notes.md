@@ -1,9 +1,8 @@
 # REMS data model v2 — rewrite notes for the controller work
 
 Branch `feat/rems-data-model-v2`, catalog `THF_EMSPortal_New`. The database already holds the new model with
-the dev data migrated (`API/scripts/rems-v2-migrate.sql`). The old tables sit in the `legacy` schema and the old
-entity classes (`REMS`, `REMSForm`, `REMSEngagement`, …) still compile so untouched controllers keep building;
-both go at the end. **The API contract is frozen**: every route, every request/response record in
+the dev data migrated (`API/scripts/rems-v2-migrate.sql`). The legacy tables and the old entity classes are gone (migration `RemsLegacyModelRemoved`); this note
+is kept as the map from the old model to the new one. **The API contract is frozen**: every route, every request/response record in
 `Models/Rems/*.cs` and every status code stays exactly as it is. Only what sits beneath them changes.
 
 ## The model, old → new
@@ -30,9 +29,9 @@ both go at the end. **The API contract is frozen**: every route, every request/r
 | `RemsSettings` | same class, table `REMS_Settings` + `DeclineThreshold`, `TaxFeeCeilingWithoutShareholder`, `IsStaticRouting`, `ChecklistTemplates` | `RemsDepartmentDirector` unchanged (table renamed). |
 | `REMSDelegation` | same class, table `REMS_Delegation`, columns `IsPrepareAllowed`/`IsSendAllowed` (C# props still `CanPrepare`/`CanSend`) | |
 
-New classes live in `EmsPortal.Domain/Entities/Rems/V2/`. DbSets on `EmsPortalDbContext`: `Clients`, `ClientAddresses`, `ClientContacts`,
-`ClientRelationships`, `ClientContracts`, `RemsRequests`, `RemsRequestFiles`, `RemsEmailEvents`, `RemsStatusHistory`, `RemsApprovers`,
-`RemsCommissionSplits`, `RemsRequestApprovalTasks`, `RemsRequestChecklistItems`, `RemsPersonnelRates`, `RemsMarketingMethods`,
+New classes live in `EmsPortal.Domain/Entities/Rems/`. DbSets on `EmsPortalDbContext`: `Clients`, `ClientAddresses`, `ClientContacts`,
+`ClientRelationships`, `ClientContracts`, `RemsRequests`, `RemsFiles`, `RemsEmailEvents`, `RemsStatusHistory`, `RemsApprovers`,
+`RemsCommissionSplits`, `RemsApprovalTasks`, `RemsApprovalChecklistItems`, `RemsPersonnelRates`, `RemsMarketingMethods`,
 `RemsTaxForms`, `RemsTaxDueDates`, `RemsChecklistTemplates`. Controllers do not use the DbContext; they use the repositories.
 
 ## Repositories (Application/Abstractions/Persistence)

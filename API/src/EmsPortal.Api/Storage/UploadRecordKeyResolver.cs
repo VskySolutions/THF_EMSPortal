@@ -21,10 +21,10 @@ public interface IUploadRecordKeyResolver
 /// </remarks>
 public sealed class UploadRecordKeyResolver : IUploadRecordKeyResolver
 {
-    private readonly IRemsRepository _rems;
+    private readonly IRemsRequestRepository _rems;
     private readonly IPersonRepository _persons;
 
-    public UploadRecordKeyResolver(IRemsRepository rems, IPersonRepository persons)
+    public UploadRecordKeyResolver(IRemsRequestRepository rems, IPersonRepository persons)
     {
         _rems = rems;
         _persons = persons;
@@ -41,7 +41,7 @@ public sealed class UploadRecordKeyResolver : IUploadRecordKeyResolver
         {
             // A request raised before numbering, or a person seeded without a code, still needs a
             // folder — the id stands in rather than the upload failing.
-            EntityType.Rems => Fallback((await _rems.GetByIdAsync(entityId, cancellationToken))?.REMSNumber, entityId),
+            EntityType.Rems => Fallback((await _rems.GetByIdAsync(entityId, cancellationToken))?.RemsNumber, entityId),
             EntityType.Person or EntityType.Client => Fallback((await _persons.GetByIdAsync(entityId, cancellationToken))?.PersonCode, entityId),
             _ => entityId.ToString("N"),
         };

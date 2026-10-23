@@ -21,13 +21,11 @@ internal sealed class PersonConfiguration : IEntityTypeConfiguration<Person>
         builder.Property(p => p.Suffix).HasMaxLength(16);
         // Which shape this row is. Stored as the enum's int, like SourceEntityType beside it — the
         // application branches on it absolutely and there is no third kind of party to add.
-        builder.Property(p => p.PartyType).HasConversion<int>();
         // An organisation's legal name. Longer than a person's name field because it is a whole legal
         // name — "Coastal Assurance Claims Services LLC" — not one part of one.
-        builder.Property(p => p.CorporateName).HasMaxLength(200);
         // "Every individual client, by surname" — the client picker's read, and the one place the type is
         // used to narrow rather than merely to render.
-        builder.HasIndex(p => new { p.TenantId, p.PartyType, p.LastName });
+        builder.HasIndex(p => new { p.TenantId, p.LastName });
 
         // THE CLIENT NAME, composed once, by the database.
         //
@@ -48,20 +46,14 @@ internal sealed class PersonConfiguration : IEntityTypeConfiguration<Person>
             .HasComputedColumnSql(
                 """
                 COALESCE(NULLIF(LTRIM(RTRIM(
-                    CASE WHEN [PartyType] = 1 THEN ISNULL([CorporateName], N'')
-                         ELSE ISNULL(NULLIF(LTRIM(RTRIM([LastName])), N''), N'')
+                    ISNULL(NULLIF(LTRIM(RTRIM([LastName])), N''), N'')
                             + CASE WHEN NULLIF(LTRIM(RTRIM([FirstName])), N'') IS NULL THEN N''
                                    ELSE N' ' + LTRIM(RTRIM([FirstName])) END
                             + CASE WHEN NULLIF(LTRIM(RTRIM([Suffix])), N'') IS NULL THEN N''
-                                   ELSE N' ' + LTRIM(RTRIM([Suffix])) END
-                    END)), N''), [DisplayName])
+                                   ELSE N' ' + LTRIM(RTRIM([Suffix])) END)), N''), [DisplayName])
                 """,
                 stored: true);
         // One client per Maconomy customer in a tenant: a second pick of the same customer finds the first.
-        builder.Property(p => p.MaconomyCustomerNumber).HasMaxLength(64);
-        builder.HasIndex(p => new { p.TenantId, p.MaconomyCustomerNumber })
-            .IsUnique()
-            .HasFilter("[MaconomyCustomerNumber] IS NOT NULL AND [Deleted] = 0");
 
         builder.Property(p => p.FirstName).HasMaxLength(100);
         builder.Property(p => p.MiddleName).HasMaxLength(100);

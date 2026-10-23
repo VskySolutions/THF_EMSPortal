@@ -43,3 +43,31 @@ internal sealed class RemsDepartmentDirectorConfiguration : IEntityTypeConfigura
         builder.HasIndex(d => new { d.TenantId, d.DepartmentId }).IsUnique().HasFilter("[Deleted] = 0");
     }
 }
+
+internal sealed class RemsDelegationConfiguration : IEntityTypeConfiguration<REMSDelegation>
+{
+    public void Configure(EntityTypeBuilder<REMSDelegation> builder)
+    {
+        builder.ToTable("REMS_Delegation", t => t.HasCheckConstraint(
+            "CK_REMSDelegation_Dates",
+            "[StartsOn] IS NULL OR [EndsOn] IS NULL OR [EndsOn] >= [StartsOn]"));
+        builder.HasKey(d => d.Id);
+        builder.Property(d => d.CanPrepare).HasColumnName("IsPrepareAllowed");
+        builder.Property(d => d.CanSend).HasColumnName("IsSendAllowed");
+
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(d => d.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(d => d.TenantId);
+
+        builder.HasOne(d => d.Principal).WithMany().HasForeignKey(d => d.PrincipalUserId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(d => d.Delegate).WithMany().HasForeignKey(d => d.DelegateUserId).OnDelete(DeleteBehavior.Restrict);
+
+        // One live grant per pair. Re-granting with different rights edits the row rather than stacking a
+        // second one, so there is never a question of which of two grants applies.
+        builder.HasIndex(d => new { d.TenantId, d.PrincipalUserId, d.DelegateUserId })
+            .IsUnique()
+            .HasFilter("[Deleted] = 0");
+
+        // "Who can I act for?" — the read behind the acting-as picker.
+        builder.HasIndex(d => new { d.TenantId, d.DelegateUserId });
+    }
+}

@@ -154,7 +154,7 @@ internal sealed class RemsCommissionSplitConfiguration : IEntityTypeConfiguratio
     }
 }
 
-internal sealed class RemsRequestApprovalTaskConfiguration : IEntityTypeConfiguration<RemsApprovalTask>
+internal sealed class RemsApprovalTaskConfiguration : IEntityTypeConfiguration<RemsApprovalTask>
 {
     public void Configure(EntityTypeBuilder<RemsApprovalTask> builder)
     {
@@ -175,7 +175,7 @@ internal sealed class RemsRequestApprovalTaskConfiguration : IEntityTypeConfigur
     }
 }
 
-internal sealed class RemsRequestChecklistItemConfiguration : IEntityTypeConfiguration<RemsApprovalChecklistItem>
+internal sealed class RemsApprovalChecklistItemConfiguration : IEntityTypeConfiguration<RemsApprovalChecklistItem>
 {
     public void Configure(EntityTypeBuilder<RemsApprovalChecklistItem> builder)
     {

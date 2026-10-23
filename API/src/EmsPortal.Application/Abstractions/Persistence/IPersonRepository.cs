@@ -21,25 +21,10 @@ public interface IPersonRepository
     /// Paginated list with optional free-text search (name, email, person code) and optional
     /// structured filters (owning tenant, whether the person is a user, active state.
     /// </summary>
-    /// <param name="partyType"> Narrows to people or to organisations. The REMS client picker's whole use for it: a request for an Individual must offer individuals, and a request for any other entity type must offer companies — offering the wrong kind is offering somebody a client they cannot file the request under. </param>
     Task<(IReadOnlyList<Person> Items, int Total)> ListAsync(
         string? search, Guid? tenantId, bool? isUser, bool? isActive, SortRequest sort, int page, int limit,
-        EntityType? sourceEntityType = null, PartyType? partyType = null,
+        EntityType? sourceEntityType = null,
         CancellationToken cancellationToken = default);
-
-    /// <summary>The client already holding this email address, if any.</summary>
-    Task<Person?> FindClientByEmailAsync(
-        string email, Guid? excludingPersonId, CancellationToken cancellationToken = default);
-
-    /// <summary>The client that is this Maconomy customer, in the active tenant.</summary>
-    Task<Person?> FindClientByMaconomyNumberAsync(string number, CancellationToken cancellationToken = default);
-
-    /// <summary>Which of these Maconomy customers are already clients in the active tenant: customer number → person id.</summary>
-    Task<IReadOnlyDictionary<string, Guid>> FindClientIdsByMaconomyNumbersAsync(
-        IReadOnlyCollection<string> numbers, CancellationToken cancellationToken = default);
-
-    /// <summary>Every Maconomy customer number the tenant's people hold, whatever tenant is active.</summary>
-    Task<IReadOnlyList<string>> ListMaconomyCustomerNumbersAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>Lightweight projection for the user-create Person dropdown (id, name, email, user-link flag).</summary>
     Task<IReadOnlyList<(Person Person, bool IsUser)>> ListSelectableAsync(

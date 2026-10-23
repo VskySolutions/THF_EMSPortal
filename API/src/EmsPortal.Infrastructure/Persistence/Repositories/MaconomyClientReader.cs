@@ -39,7 +39,7 @@ internal sealed class MaconomyClientReader
     public string Name(string? maconomyNumber, string stored)
         => string.IsNullOrEmpty(maconomyNumber)
             ? stored
-            : _directory.Find(TenantId, maconomyNumber)?.Name ?? Person.MaconomyPlaceholderName(maconomyNumber);
+            : _directory.Find(TenantId, maconomyNumber)?.Name ?? (stored.Length > 0 ? stored : Client.MaconomyPlaceholderName(maconomyNumber));
 
     public string? Email(string? maconomyNumber, string? stored)
         => string.IsNullOrEmpty(maconomyNumber) ? stored : _directory.Find(TenantId, maconomyNumber)?.Email;

@@ -132,7 +132,7 @@ public sealed class PersonsController : ControllerBase
         var names = await ResolveActorNamesAsync(items.SelectMany(p => new[] { p.CreatedById, p.UpdatedById }), cancellationToken);
         // A Maconomy client's row holds no name or contact details; ClientEmail/ClientPhone read Maconomy's.
         var summaries = items.Select(p => new PersonSummary(
-            p.Id, p.PersonCode, p.IsMaconomyClient ? p.ClientName : p.FullName, p.ClientEmail, p.ClientPhone,
+            p.Id, p.PersonCode, p.FullName, p.PrimaryEmail, p.MobileNumber,
             p.TenantId, p.Tenant?.Name,
             p.UserId is not null, p.IsActive,
             p.SourceEntityType?.ToString(), p.SourceEntityId,
@@ -154,8 +154,8 @@ public sealed class PersonsController : ControllerBase
             : (Guid?)null;
         var items = await _persons.ListSelectableAsync(scope, cancellationToken);
         var options = items.Select(x => new PersonSelectItem(
-            x.Person.Id, x.Person.IsMaconomyClient ? x.Person.ClientName : x.Person.FullName,
-            x.Person.ClientEmail, x.Person.ClientPhone, x.Person.CountryCode, x.Person.TenantId, x.IsUser));
+            x.Person.Id, x.Person.FullName,
+            x.Person.PrimaryEmail, x.Person.MobileNumber, x.Person.CountryCode, x.Person.TenantId, x.IsUser));
         return Ok(ApiResponseFactory.Success(options, "Persons retrieved."));
     }
 
@@ -180,12 +180,6 @@ public sealed class PersonsController : ControllerBase
         }
 
         // Their record holds the customer number alone, and an edit here would put details beside it.
-        if (person.IsMaconomyClient)
-        {
-            return Conflict(ApiResponseFactory.Error(
-                ApiErrorCodes.ValidationFailed, "This client is a Maconomy customer.",
-                $"The details of Maconomy customer {person.MaconomyCustomerNumber} are held in Maconomy and are changed there."));
-        }
 
         // Personal
         Apply(request.Suffix, v => person.Suffix = v);

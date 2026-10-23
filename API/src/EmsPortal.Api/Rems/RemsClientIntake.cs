@@ -13,7 +13,7 @@ namespace EmsPortal.Api.Rems;
 /// payload, whether the client is saving a draft, submitting, or staff are correcting the submission.
 /// There is no stored copy of the payload: the rows are the record.
 /// </summary>
-internal sealed class RemsClientIntake
+public sealed class RemsClientIntake
 {
     private readonly IClientRepository _clients;
     private readonly IPersonRepository _persons;

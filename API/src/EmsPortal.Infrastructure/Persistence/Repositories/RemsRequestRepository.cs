@@ -768,9 +768,9 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
     public void Remove(RemsRequest request) => _dbContext.RemsRequests.Remove(request);
 
     public async Task AddFileAsync(RemsFile file, CancellationToken cancellationToken = default)
-        => await _dbContext.RemsRequestFiles.AddAsync(file, cancellationToken);
+        => await _dbContext.RemsFiles.AddAsync(file, cancellationToken);
 
-    public void RemoveFile(RemsFile file) => _dbContext.RemsRequestFiles.Remove(file);
+    public void RemoveFile(RemsFile file) => _dbContext.RemsFiles.Remove(file);
 
     public async Task AddEmailEventAsync(RemsEmailEvent emailEvent, CancellationToken cancellationToken = default)
         => await _dbContext.RemsEmailEvents.AddAsync(emailEvent, cancellationToken);

@@ -55,7 +55,10 @@ public class Client : AuditableEntity
 
     /// <summary>The person's display name or the organisation's legal name; not a column.</summary>
     [NotMapped]
-    public string DisplayName => Person?.DisplayName ?? LegalName ?? string.Empty;
+    // Surname first for a person (the computed ClientDisplayName the lists sort on), the legal name for an organisation.
+    public string DisplayName => Person is { } person
+        ? (person.ClientDisplayName.Length > 0 ? person.ClientDisplayName : person.DisplayName)
+        : LegalName ?? string.Empty;
 
     [NotMapped]
     public bool IsOrganisation => PersonId is null;
@@ -71,8 +74,11 @@ public class Client : AuditableEntity
     /// <summary>What to call the client: the Maconomy card's name for a linked customer, the row's name otherwise.</summary>
     [NotMapped]
     public string ClientName => IsMaconomyClient
-        ? Maconomy?.Name ?? (DisplayName.Length > 0 ? DisplayName : Person.MaconomyPlaceholderName(MaconomyCustomerNumber!))
+        ? Maconomy?.Name ?? (DisplayName.Length > 0 ? DisplayName : MaconomyPlaceholderName(MaconomyCustomerNumber!))
         : DisplayName;
+
+    /// <summary>What stands in for the name while Maconomy cannot be read: the one thing the portal does hold.</summary>
+    public static string MaconomyPlaceholderName(string customerNumber) => $"Maconomy customer {customerNumber.Trim()}";
 
     [NotMapped]
     public string? ClientEmail => IsMaconomyClient ? Maconomy?.Email ?? PrimaryEmail : PrimaryEmail;

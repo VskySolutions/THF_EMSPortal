@@ -26,9 +26,9 @@ namespace EmsPortal.Api.Controllers;
 public sealed class RemsMaconomySyncController : ControllerBase
 {
     private readonly IMaconomyCustomerSyncService _sync;
-    private readonly IRemsApprovalRepository _approvals;
+    private readonly IRemsApprovalTaskRepository _approvals;
 
-    public RemsMaconomySyncController(IMaconomyCustomerSyncService sync, IRemsApprovalRepository approvals)
+    public RemsMaconomySyncController(IMaconomyCustomerSyncService sync, IRemsApprovalTaskRepository approvals)
     {
         _sync = sync;
         _approvals = approvals;
@@ -62,8 +62,8 @@ public sealed class RemsMaconomySyncController : ControllerBase
 
         try
         {
-            var sync = await _sync.SyncNowAsync(id, tenantId, me, cancellationToken);
-            var view = RemsMaconomySyncViews.From(sync, _sync.IsStale(sync), enabled: true, canManage: true);
+            var client = await _sync.SyncNowAsync(id, tenantId, me, cancellationToken);
+            var view = RemsMaconomySyncViews.From(client, _sync.IsStale(client), enabled: true, canManage: true);
             return Ok(ApiResponseFactory.Success(view, MessageFor(view)));
         }
         catch (MaconomyCustomerSyncException ex)

@@ -110,50 +110,24 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<ModifiedLogFieldConfig> ModifiedLogFieldConfigs => Set<ModifiedLogFieldConfig>();
 
     // ---- REMS (WO-110) ----
-    public DbSet<REMS> Rems => Set<REMS>();
-    public DbSet<REMSFiles> RemsFiles => Set<REMSFiles>();
-    public DbSet<REMSAdditionalEntity> RemsAdditionalEntities => Set<REMSAdditionalEntity>();
-    public DbSet<REMSAdditionalIndividual> RemsAdditionalIndividuals => Set<REMSAdditionalIndividual>();
-    public DbSet<REMSSendBack> RemsSendBacks => Set<REMSSendBack>();
     public DbSet<REMSDelegation> RemsDelegations => Set<REMSDelegation>();
-    public DbSet<REMSForm> RemsForms => Set<REMSForm>();
-    public DbSet<REMSFormDraft> RemsFormDrafts => Set<REMSFormDraft>();
-    public DbSet<REMSFormSubmission> RemsFormSubmissions => Set<REMSFormSubmission>();
-    public DbSet<REMSFormEmailEvent> RemsFormEmailEvents => Set<REMSFormEmailEvent>();
-    public DbSet<REMSClient> RemsClients => Set<REMSClient>();
-    public DbSet<REMSEntity> RemsEntities => Set<REMSEntity>();
-    public DbSet<REMSEntityAddress> RemsEntityAddresses => Set<REMSEntityAddress>();
-    public DbSet<REMSEntityContact> RemsEntityContacts => Set<REMSEntityContact>();
-    public DbSet<REMSEngagement> RemsEngagements => Set<REMSEngagement>();
-    public DbSet<REMSEngagementAuditDetail> RemsEngagementAuditDetails => Set<REMSEngagementAuditDetail>();
-    public DbSet<REMSEngagementGovernmentDetail> RemsEngagementGovernmentDetails => Set<REMSEngagementGovernmentDetail>();
-    public DbSet<REMSEngagementPersonnelRate> RemsEngagementPersonnelRates => Set<REMSEngagementPersonnelRate>();
-    public DbSet<REMSEngagementTaxDetail> RemsEngagementTaxDetails => Set<REMSEngagementTaxDetail>();
-    public DbSet<REMSEngagementTaxForm> RemsEngagementTaxForms => Set<REMSEngagementTaxForm>();
-    public DbSet<REMSEngagementMarketingMethod> RemsEngagementMarketingMethods => Set<REMSEngagementMarketingMethod>();
-    public DbSet<REMSEngagementCommissionSplit> RemsEngagementCommissionSplits => Set<REMSEngagementCommissionSplit>();
-    public DbSet<REMSEngagementApprover> RemsEngagementApprovers => Set<REMSEngagementApprover>();
-    public DbSet<REMSApprovalRound> RemsApprovalRounds => Set<REMSApprovalRound>();
-    public DbSet<REMSApprovalTask> RemsApprovalTasks => Set<REMSApprovalTask>();
-    public DbSet<REMSApprovalChecklistItem> RemsApprovalChecklistItems => Set<REMSApprovalChecklistItem>();
     public DbSet<RemsSettings> RemsSettings => Set<RemsSettings>();
     public DbSet<RemsDepartmentDirector> RemsDepartmentDirectors => Set<RemsDepartmentDirector>();
-    public DbSet<REMSMaconomyCustomerSync> RemsMaconomyCustomerSyncs => Set<REMSMaconomyCustomerSync>();
 
-    // ---- REMS data model v2: Client and REMS primaries. The REMS* sets above are the legacy model and go when the rewrite is done. ----
+    // ---- REMS data model v2: Client and REMS primaries ----
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<ClientAddress> ClientAddresses => Set<ClientAddress>();
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
     public DbSet<ClientRelationship> ClientRelationships => Set<ClientRelationship>();
     public DbSet<ClientContract> ClientContracts => Set<ClientContract>();
     public DbSet<RemsRequest> RemsRequests => Set<RemsRequest>();
-    public DbSet<RemsFile> RemsRequestFiles => Set<RemsFile>();
+    public DbSet<RemsFile> RemsFiles => Set<RemsFile>();
     public DbSet<RemsEmailEvent> RemsEmailEvents => Set<RemsEmailEvent>();
     public DbSet<RemsStatusHistory> RemsStatusHistory => Set<RemsStatusHistory>();
     public DbSet<RemsApprover> RemsApprovers => Set<RemsApprover>();
     public DbSet<RemsCommissionSplit> RemsCommissionSplits => Set<RemsCommissionSplit>();
-    public DbSet<RemsApprovalTask> RemsRequestApprovalTasks => Set<RemsApprovalTask>();
-    public DbSet<RemsApprovalChecklistItem> RemsRequestChecklistItems => Set<RemsApprovalChecklistItem>();
+    public DbSet<RemsApprovalTask> RemsApprovalTasks => Set<RemsApprovalTask>();
+    public DbSet<RemsApprovalChecklistItem> RemsApprovalChecklistItems => Set<RemsApprovalChecklistItem>();
     public DbSet<RemsPersonnelRate> RemsPersonnelRates => Set<RemsPersonnelRate>();
     public DbSet<RemsMarketingMethod> RemsMarketingMethods => Set<RemsMarketingMethod>();
     public DbSet<RemsTaxForm> RemsTaxForms => Set<RemsTaxForm>();
@@ -216,35 +190,9 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         // REMS (WO-110): every table is tenant-scoped. Most carry the combined ambient-tenant +
         // soft-delete filter; the two append-only tables (form submissions and email events) have no
         // logical delete and so use a tenant-only filter.
-        modelBuilder.Entity<REMS>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSFiles>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSForm>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSFormDraft>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSClient>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEntity>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEntityAddress>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEntityContact>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagement>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementAuditDetail>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementGovernmentDetail>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementPersonnelRate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementTaxDetail>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementTaxForm>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementMarketingMethod>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementCommissionSplit>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSEngagementApprover>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSApprovalRound>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSApprovalTask>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSApprovalChecklistItem>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<RemsSettings>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<RemsDepartmentDirector>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSFormSubmission>().HasQueryFilter(e => !_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<REMSFormEmailEvent>().HasQueryFilter(e => !_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<REMSAdditionalIndividual>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSAdditionalEntity>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSSendBack>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSDelegation>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<REMSMaconomyCustomerSync>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // REMS data model v2. Email events and status history are append-only, so they filter on tenant alone.
         modelBuilder.Entity<Client>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
@@ -450,71 +398,59 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                     break;
 
                 // ---- REMS (WO-110) ----
-                case REMS rems when rems.TenantId == Guid.Empty:
-                    rems.TenantId = _tenantContext.TenantId;
+                case Client client when client.TenantId == Guid.Empty:
+                    client.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSFiles remsFiles when remsFiles.TenantId == Guid.Empty:
-                    remsFiles.TenantId = _tenantContext.TenantId;
+                case ClientAddress clientAddress when clientAddress.TenantId == Guid.Empty:
+                    clientAddress.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSForm remsForm when remsForm.TenantId == Guid.Empty:
-                    remsForm.TenantId = _tenantContext.TenantId;
+                case ClientContact clientContact when clientContact.TenantId == Guid.Empty:
+                    clientContact.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSFormDraft remsFormDraft when remsFormDraft.TenantId == Guid.Empty:
-                    remsFormDraft.TenantId = _tenantContext.TenantId;
+                case ClientRelationship clientRelationship when clientRelationship.TenantId == Guid.Empty:
+                    clientRelationship.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSFormSubmission remsFormSubmission when remsFormSubmission.TenantId == Guid.Empty:
-                    remsFormSubmission.TenantId = _tenantContext.TenantId;
+                case ClientContract clientContract when clientContract.TenantId == Guid.Empty:
+                    clientContract.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSFormEmailEvent remsFormEmailEvent when remsFormEmailEvent.TenantId == Guid.Empty:
-                    remsFormEmailEvent.TenantId = _tenantContext.TenantId;
+                case RemsRequest remsRequest when remsRequest.TenantId == Guid.Empty:
+                    remsRequest.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSClient remsClient when remsClient.TenantId == Guid.Empty:
-                    remsClient.TenantId = _tenantContext.TenantId;
+                case RemsFile remsFile when remsFile.TenantId == Guid.Empty:
+                    remsFile.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSEntity remsEntity when remsEntity.TenantId == Guid.Empty:
-                    remsEntity.TenantId = _tenantContext.TenantId;
+                case RemsEmailEvent remsEmailEvent when remsEmailEvent.TenantId == Guid.Empty:
+                    remsEmailEvent.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSEntityAddress remsEntityAddress when remsEntityAddress.TenantId == Guid.Empty:
-                    remsEntityAddress.TenantId = _tenantContext.TenantId;
+                case RemsStatusHistory remsStatusHistory when remsStatusHistory.TenantId == Guid.Empty:
+                    remsStatusHistory.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSEntityContact remsEntityContact when remsEntityContact.TenantId == Guid.Empty:
-                    remsEntityContact.TenantId = _tenantContext.TenantId;
+                case RemsApprover remsApprover when remsApprover.TenantId == Guid.Empty:
+                    remsApprover.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSEngagement remsEngagement when remsEngagement.TenantId == Guid.Empty:
-                    remsEngagement.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementAuditDetail remsAuditDetail when remsAuditDetail.TenantId == Guid.Empty:
-                    remsAuditDetail.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementGovernmentDetail remsGovDetail when remsGovDetail.TenantId == Guid.Empty:
-                    remsGovDetail.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementPersonnelRate remsPersonnelRate when remsPersonnelRate.TenantId == Guid.Empty:
-                    remsPersonnelRate.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementTaxDetail remsTaxDetail when remsTaxDetail.TenantId == Guid.Empty:
-                    remsTaxDetail.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementTaxForm remsTaxForm when remsTaxForm.TenantId == Guid.Empty:
-                    remsTaxForm.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementMarketingMethod remsMarketingMethod when remsMarketingMethod.TenantId == Guid.Empty:
-                    remsMarketingMethod.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSEngagementCommissionSplit remsCommissionSplit when remsCommissionSplit.TenantId == Guid.Empty:
+                case RemsCommissionSplit remsCommissionSplit when remsCommissionSplit.TenantId == Guid.Empty:
                     remsCommissionSplit.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSEngagementApprover remsEngagementApprover when remsEngagementApprover.TenantId == Guid.Empty:
-                    remsEngagementApprover.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSApprovalRound remsApprovalRound when remsApprovalRound.TenantId == Guid.Empty:
-                    remsApprovalRound.TenantId = _tenantContext.TenantId;
-                    break;
-                case REMSApprovalTask remsApprovalTask when remsApprovalTask.TenantId == Guid.Empty:
+                case RemsApprovalTask remsApprovalTask when remsApprovalTask.TenantId == Guid.Empty:
                     remsApprovalTask.TenantId = _tenantContext.TenantId;
                     break;
-                case REMSApprovalChecklistItem remsChecklistItem when remsChecklistItem.TenantId == Guid.Empty:
-                    remsChecklistItem.TenantId = _tenantContext.TenantId;
+                case RemsApprovalChecklistItem remsApprovalChecklistItem when remsApprovalChecklistItem.TenantId == Guid.Empty:
+                    remsApprovalChecklistItem.TenantId = _tenantContext.TenantId;
+                    break;
+                case RemsPersonnelRate remsPersonnelRate when remsPersonnelRate.TenantId == Guid.Empty:
+                    remsPersonnelRate.TenantId = _tenantContext.TenantId;
+                    break;
+                case RemsMarketingMethod remsMarketingMethod when remsMarketingMethod.TenantId == Guid.Empty:
+                    remsMarketingMethod.TenantId = _tenantContext.TenantId;
+                    break;
+                case RemsTaxForm remsTaxForm when remsTaxForm.TenantId == Guid.Empty:
+                    remsTaxForm.TenantId = _tenantContext.TenantId;
+                    break;
+                case RemsTaxDueDate remsTaxDueDate when remsTaxDueDate.TenantId == Guid.Empty:
+                    remsTaxDueDate.TenantId = _tenantContext.TenantId;
+                    break;
+                case RemsChecklistTemplate remsChecklistTemplate when remsChecklistTemplate.TenantId == Guid.Empty:
+                    remsChecklistTemplate.TenantId = _tenantContext.TenantId;
                     break;
                 case RemsSettings remsSettings when remsSettings.TenantId == Guid.Empty:
                     remsSettings.TenantId = _tenantContext.TenantId;

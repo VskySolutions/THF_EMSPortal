@@ -103,14 +103,23 @@ public sealed class MaconomyController : ControllerBase
             return error;
         }
 
+        // The sync state is three columns on the client now; the request is only the one that made it
+        // postable, where that is still known. Attempts are no longer counted, and the last attempt is the
+        // moment the client's state last moved while one was pending, running or failed.
         IReadOnlyList<MaconomyUnsyncedRow> rows = (await _customerSync.ListUnsyncedAsync(tenant, cancellationToken))
-            .Select(s =>
+            .Select(row =>
             {
-                var stale = _customerSync.IsStale(s);
+                var client = row.Client;
+                var stale = _customerSync.IsStale(client);
+                var lastAttempt = client.MaconomySyncStatus is RemsMaconomyCustomerSyncStatus.Pending
+                    or RemsMaconomyCustomerSyncStatus.Syncing or RemsMaconomyCustomerSyncStatus.Failed
+                    ? client.UpdatedOnUtc
+                    : client.MaconomySyncedOnUtc;
                 return new MaconomyUnsyncedRow(
-                    s.Id, s.REMSId, s.Rems?.REMSNumber ?? string.Empty, s.Rems?.ClientDisplayName ?? string.Empty, s.Rems?.CustomerEmail,
-                    RemsMaconomySyncViews.StatusOf(s, stale), stale ? RemsMaconomySyncViews.StaleReason : s.FailureReason,
-                    s.Attempts, s.LastAttemptOnUtc, s.CreatedOnUtc);
+                    client.Id, row.Request?.Id ?? Guid.Empty, row.Request?.RemsNumber ?? string.Empty,
+                    client.ClientName, client.ClientEmail,
+                    RemsMaconomySyncViews.StatusOf(client, stale), stale ? RemsMaconomySyncViews.StaleReason : client.MaconomySyncError,
+                    0, lastAttempt, client.UpdatedOnUtc);
             })
             .ToList();
         return Ok(ApiResponseFactory.Success(rows, $"{rows.Count} request(s) waiting."));
@@ -136,8 +145,8 @@ public sealed class MaconomyController : ControllerBase
 
         try
         {
-            var sync = await _customerSync.SyncNowAsync(remsId, tenant, me, cancellationToken);
-            var view = RemsMaconomySyncViews.From(sync, _customerSync.IsStale(sync), enabled: true, canManage: true);
+            var client = await _customerSync.SyncNowAsync(remsId, tenant, me, cancellationToken);
+            var view = RemsMaconomySyncViews.From(client, _customerSync.IsStale(client), enabled: true, canManage: true);
             return Ok(ApiResponseFactory.Success(view, RemsMaconomySyncController.MessageFor(view)));
         }
         catch (MaconomyCustomerSyncException ex)

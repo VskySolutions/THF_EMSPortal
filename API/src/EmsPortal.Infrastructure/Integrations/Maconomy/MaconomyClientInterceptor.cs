@@ -20,9 +20,9 @@ internal sealed class MaconomyClientInterceptor : IMaterializationInterceptor
 
     public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
     {
-        if (entity is Person { IsMaconomyClient: true } person)
+        if (entity is Client { IsMaconomyClient: true } client)
         {
-            person.Maconomy = _clients.Find(person.TenantId, person.MaconomyCustomerNumber);
+            client.Maconomy = _clients.Find(client.TenantId, client.MaconomyCustomerNumber);
         }
         return entity;
     }

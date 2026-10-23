@@ -32,6 +32,9 @@ public interface IClientRepository
 
     Task<bool> MaconomyNumberHeldByAnotherAsync(Guid tenantId, string customerNumber, Guid exceptClientId, CancellationToken cancellationToken = default);
 
+    /// <summary>Every Maconomy customer number the tenant's clients hold, whatever tenant is active.</summary>
+    Task<IReadOnlyList<string>> ListMaconomyCustomerNumbersAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
     Task AddAsync(Client client, CancellationToken cancellationToken = default);
     void Update(Client client);
 

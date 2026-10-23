@@ -12,14 +12,12 @@ internal sealed class PersonRepository : IPersonRepository
 {
     private readonly EmsPortalDbContext _dbContext;
     private readonly ITenantContext _tenantContext;
-    private readonly IMaconomyClientDirectory _maconomyClients;
 
     public PersonRepository(
-        EmsPortalDbContext dbContext, ITenantContext tenantContext, IMaconomyClientDirectory maconomyClients)
+        EmsPortalDbContext dbContext, ITenantContext tenantContext)
     {
         _dbContext = dbContext;
         _tenantContext = tenantContext;
-        _maconomyClients = maconomyClients;
     }
 
     public Task<Person?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -73,7 +71,7 @@ internal sealed class PersonRepository : IPersonRepository
 
     public async Task<(IReadOnlyList<Person> Items, int Total)> ListAsync(
         string? search, Guid? tenantId, bool? isUser, bool? isActive, SortRequest sort, int page, int limit,
-        EntityType? sourceEntityType = null, PartyType? partyType = null,
+        EntityType? sourceEntityType = null,
         CancellationToken cancellationToken = default)
     {
         // Cross-tenant (Super Admin) reads pass an explicit tenant id and bypass the ambient filter;
@@ -89,13 +87,7 @@ internal sealed class PersonRepository : IPersonRepository
             var term = search.Trim();
             // A Maconomy client's row holds no name or email to search: those are matched in memory and
             // the row is found by the customer number it does hold.
-            var scope = tenantId ?? (_tenantContext.IsResolved ? _tenantContext.TenantId : Guid.Empty);
-            var maconomy = _maconomyClients.MatchByName(scope, term)
-                .Concat(_maconomyClients.MatchByContact(scope, term))
-                .Distinct()
-                .ToList();
             query = query.Where(p =>
-                (p.MaconomyCustomerNumber != null && maconomy.Contains(p.MaconomyCustomerNumber)) ||
                 p.FirstName.Contains(term) ||
                 p.LastName.Contains(term) ||
                 p.DisplayName.Contains(term) ||
@@ -103,7 +95,6 @@ internal sealed class PersonRepository : IPersonRepository
                 // so a picker showing that string finds a row when somebody types what they can see.
                 // Without the first of these a company could only be found by whatever the first/last
                 // split had guessed at, which for an organisation is nothing at all.
-                (p.CorporateName != null && p.CorporateName.Contains(term)) ||
                 p.ClientDisplayName.Contains(term) ||
                 p.PersonCode.Contains(term) ||
                 (p.PrimaryEmail != null && p.PrimaryEmail.Contains(term)) ||
@@ -122,10 +113,6 @@ internal sealed class PersonRepository : IPersonRepository
         {
             query = query.Where(p => p.SourceEntityType == source);
         }
-        if (partyType is { } party)
-        {
-            query = query.Where(p => p.PartyType == party);
-        }
 
         var total = await query.CountAsync(cancellationToken);
         var items = await BuildSorts().Apply(query, sort.SortBy, sort.Descending)
@@ -138,42 +125,6 @@ internal sealed class PersonRepository : IPersonRepository
 
     // Tenant-scoped and soft-delete-filtered by the ambient query filter. Equality (not ToLower) so the
     // column's case-insensitive collation does the comparing and the index stays usable.
-    public Task<Person?> FindClientByEmailAsync(
-        string email, Guid? excludingPersonId, CancellationToken cancellationToken = default)
-        => _dbContext.Persons
-            .FirstOrDefaultAsync(
-                p => p.SourceEntityType == EntityType.Client
-                    && p.PrimaryEmail == email
-                    && (excludingPersonId == null || p.Id != excludingPersonId),
-                cancellationToken);
-
-    public Task<Person?> FindClientByMaconomyNumberAsync(string number, CancellationToken cancellationToken = default)
-        => _dbContext.Persons.FirstOrDefaultAsync(p => p.MaconomyCustomerNumber == number, cancellationToken);
-
-    public async Task<IReadOnlyDictionary<string, Guid>> FindClientIdsByMaconomyNumbersAsync(
-        IReadOnlyCollection<string> numbers, CancellationToken cancellationToken = default)
-    {
-        if (numbers.Count == 0)
-        {
-            return new Dictionary<string, Guid>();
-        }
-
-        var rows = await _dbContext.Persons
-            .Where(p => p.MaconomyCustomerNumber != null && numbers.Contains(p.MaconomyCustomerNumber))
-            .Select(p => new { Number = p.MaconomyCustomerNumber!, p.Id })
-            .ToListAsync(cancellationToken);
-        return rows.ToDictionary(r => r.Number, r => r.Id, StringComparer.OrdinalIgnoreCase);
-    }
-
-    public async Task<IReadOnlyList<string>> ListMaconomyCustomerNumbersAsync(
-        Guid tenantId, CancellationToken cancellationToken = default)
-        => await _dbContext.Persons
-            .IgnoreQueryFilters()
-            .Where(p => p.TenantId == tenantId && !p.Deleted && p.MaconomyCustomerNumber != null)
-            .Select(p => p.MaconomyCustomerNumber!)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
     public async Task<IReadOnlyList<(Person Person, bool IsUser)>> ListSelectableAsync(
         Guid? tenantId = null, CancellationToken cancellationToken = default)
     {

@@ -31,31 +31,34 @@ namespace EmsPortal.Api.Controllers;
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 public sealed class RemsRelatedEntitiesController : ControllerBase
 {
-    /// <summary>Which table a row is in, as it travels on the wire.</summary>
+    /// <summary>Which kind of related party a row is, as it travels on the wire.</summary>
     private const string KindIndividual = "individual";
 
     /// <inheritdoc cref="KindIndividual"/>
     private const string KindEntity = "entity";
 
-    /// <summary>See <c>RemsRepository.JointFiling</c> — a joint filer is the parent, not a row under it.</summary>
+    /// <summary>See <c>RemsRequestRepository.JointFiling</c> — a joint filer is the parent, not a row under it.</summary>
     private const string JointFiling = "joint";
 
-    private readonly IRemsRepository _rems;
-    private readonly IRemsApprovalRepository _approvals;
+    private readonly IRemsRequestRepository _rems;
+    private readonly IClientRepository _clients;
+    private readonly IRemsApprovalTaskRepository _approvals;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
     private readonly IOptionCodeResolver _codes;
 
     public RemsRelatedEntitiesController(
-        IRemsRepository rems,
-        IRemsApprovalRepository approvals,
+        IRemsRequestRepository rems,
+        IClientRepository clients,
+        IRemsApprovalTaskRepository approvals,
         IUserRepository users,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
         IOptionCodeResolver codes)
     {
         _rems = rems;
+        _clients = clients;
         _approvals = approvals;
         _users = users;
         _unitOfWork = unitOfWork;
@@ -203,7 +206,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
     // -------------------- Setting a row's status --------------------
 
     /// <summary>Move one related client along.</summary>
-    /// <param name="kind"><c>individual</c> or <c>entity</c> — which table the row is in.</param>
+    /// <param name="kind"><c>individual</c> or <c>entity</c> — which kind of related party the row is.</param>
     [HttpPut("{kind}/{id:guid}/status")]
     [Authorize]
     [ProducesResponseType<ApiResponse<RemsRelatedClientView>>(StatusCodes.Status200OK)]
@@ -236,40 +239,31 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 $"That is not a value on your Related Entity Status list (Administration → Option Sets)."));
         }
 
-        Guid remsId;
-        string? previous;
-        if (string.Equals(kind, KindIndividual, StringComparison.OrdinalIgnoreCase))
-        {
-            if (await _rems.GetAdditionalIndividualAsync(id, cancellationToken) is not { } individual)
-            {
-                return NotFound(ApiResponseFactory.NotFound("Related client not found."));
-            }
-
-            remsId = individual.REMSId;
-            previous = individual.RelatedStatus?.Value;
-            individual.RelatedStatusId = resolved;
-            _rems.UpdateAdditionalIndividual(individual);
-        }
-        else if (string.Equals(kind, KindEntity, StringComparison.OrdinalIgnoreCase))
-        {
-            if (await _rems.GetAdditionalEntityAsync(id, cancellationToken) is not { } entity)
-            {
-                return NotFound(ApiResponseFactory.NotFound("Related client not found."));
-            }
-
-            remsId = entity.REMSId;
-            previous = entity.RelatedStatus?.Value;
-            entity.RelatedStatusId = resolved;
-            _rems.UpdateAdditionalEntity(entity);
-        }
-        else
+        if (!string.Equals(kind, KindIndividual, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(kind, KindEntity, StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(ApiResponseFactory.Error(
                 ApiErrorCodes.ValidationFailed, "Unknown kind.",
                 $"Expected '{KindIndividual}' or '{KindEntity}' in the URL."));
         }
 
-        // On the PARENT request, because that is the only record these rows have a timeline on.
+        // Both kinds are one relationship row now, so the id is the relationship's whichever kind the URL names.
+        if (await _clients.GetRelationshipAsync(id, cancellationToken) is not { } relationship)
+        {
+            return NotFound(ApiResponseFactory.NotFound("Related client not found."));
+        }
+
+        // The row sits under the client's newest request, which is the only record it has a timeline on.
+        if ((await _rems.ListByClientAsync(relationship.ClientId, cancellationToken)).FirstOrDefault() is not { } rems)
+        {
+            return NotFound(ApiResponseFactory.NotFound("Related client not found."));
+        }
+
+        var remsId = rems.Id;
+        var previous = relationship.RelatedStatus?.Value;
+        relationship.RelatedStatusId = resolved;
+        _clients.UpdateRelationship(relationship);
+
         await _activity.WriteAsync(
             new CreateActivityEventDto(
                 EntityType.Rems, remsId, ActivityEventTypes.RemsRelatedEntityStatusChanged,
@@ -371,7 +365,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         // The parent header is discarded here — only one CHILD is being rebuilt, and all that needs from the
         // parent is its REMS number for the reference.
         var (_, children) = MapRelated(
-            rems.REMSNumber, string.Empty, null, declared, createdNumbers);
+            rems.RemsNumber, string.Empty, null, declared, createdNumbers);
         return children.FirstOrDefault(c => c.Id == rowId);
     }
 }

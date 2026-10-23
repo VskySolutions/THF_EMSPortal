@@ -24,6 +24,14 @@ internal sealed class ClientRepository : IClientRepository
     public Task<Client?> FindByMaconomyNumberAsync(string customerNumber, CancellationToken cancellationToken = default)
         => _dbContext.Clients.FullGraph().FirstOrDefaultAsync(c => c.MaconomyCustomerNumber == customerNumber, cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListMaconomyCustomerNumbersAsync(Guid tenantId, CancellationToken cancellationToken = default)
+        => await _dbContext.Clients
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && !c.Deleted && c.MaconomyCustomerNumber != null)
+            .Select(c => c.MaconomyCustomerNumber!)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Client>> FindByEmailAsync(string email, Guid? excludingClientId, CancellationToken cancellationToken = default)
     {
         var wanted = email.Trim();

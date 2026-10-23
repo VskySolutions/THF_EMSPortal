@@ -19,10 +19,11 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
         _maconomy = maconomy;
     }
 
-    private IQueryable<RemsApprovalTask> Tasks => _dbContext.RemsRequestApprovalTasks;
+    private IQueryable<RemsApprovalTask> Tasks => _dbContext.RemsApprovalTasks;
 
     public Task<RemsApprovalTask?> GetTaskByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => Tasks.Include(t => t.ChecklistItems.Where(i => !i.Deleted))
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
     public Task<RemsApprovalTask?> GetTaskWithContextAsync(Guid id, CancellationToken cancellationToken = default)
@@ -58,6 +59,7 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
             .Include(t => t.Request).ThenInclude(r => r!.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.BillingPreference)
             .Include(t => t.Request).ThenInclude(r => r!.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedStatus)
             .Include(t => t.Request).ThenInclude(r => r!.Client).ThenInclude(c => c!.Contracts.Where(x => !x.Deleted))
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<RemsApprovalTask>> ListByRequestAsync(Guid remsId, CancellationToken cancellationToken = default)
@@ -181,7 +183,7 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
     // A round's outcome, from its tasks: one decline rejects it, every approval approves it, otherwise it is pending.
     private IQueryable<RemsApprovalTask> WhereRoundStatus(IQueryable<RemsApprovalTask> tasks, string value)
     {
-        var all = _dbContext.RemsRequestApprovalTasks;
+        var all = _dbContext.RemsApprovalTasks;
         var wanted = value.Trim();
         if (wanted.Equals(PartiallyApproved, StringComparison.OrdinalIgnoreCase))
         {
@@ -230,7 +232,7 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
 
     public async Task<(IReadOnlyList<RemsApprovalTask> Items, int Total)> ListTasksByApproverAsync(RemsApprovalTaskQuery query, CancellationToken cancellationToken = default)
     {
-        var all = _dbContext.RemsRequestApprovalTasks;
+        var all = _dbContext.RemsApprovalTasks;
         var tasks = InboxTasks(query, withRoundStatus: true, withStatus: true);
         var total = await tasks.CountAsync(cancellationToken);
         var actors = ActorNames.Of(_dbContext);
@@ -304,12 +306,12 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
             .FirstOrDefaultAsync(cancellationToken);
 
     public async Task AddTaskAsync(RemsApprovalTask task, CancellationToken cancellationToken = default)
-        => await _dbContext.RemsRequestApprovalTasks.AddAsync(task, cancellationToken);
+        => await _dbContext.RemsApprovalTasks.AddAsync(task, cancellationToken);
 
-    public void UpdateTask(RemsApprovalTask task) => _dbContext.RemsRequestApprovalTasks.Update(task);
+    public void UpdateTask(RemsApprovalTask task) => _dbContext.RemsApprovalTasks.Update(task);
 
     public async Task AddChecklistItemAsync(RemsApprovalChecklistItem item, CancellationToken cancellationToken = default)
-        => await _dbContext.RemsRequestChecklistItems.AddAsync(item, cancellationToken);
+        => await _dbContext.RemsApprovalChecklistItems.AddAsync(item, cancellationToken);
 
-    public void UpdateChecklistItem(RemsApprovalChecklistItem item) => _dbContext.RemsRequestChecklistItems.Update(item);
+    public void UpdateChecklistItem(RemsApprovalChecklistItem item) => _dbContext.RemsApprovalChecklistItems.Update(item);
 }

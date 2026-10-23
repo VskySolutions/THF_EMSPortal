@@ -80,23 +80,6 @@ public sealed class MaconomyClientDirectory : IMaconomyClientDirectory
         }
     }
 
-    public async Task HydrateAsync(Person? client, CancellationToken cancellationToken = default)
-    {
-        if (client is not { IsMaconomyClient: true, TenantId: { } tenantId })
-        {
-            return;
-        }
-
-        await EnsureLoadedAsync(tenantId, cancellationToken);
-        var found = Find(tenantId, client.MaconomyCustomerNumber);
-        if (found is null && _tenants.TryGetValue(tenantId, out var state) && !state.Unknown.IsEmpty)
-        {
-            // Linked since the last load: the miss was recorded just now, so one more pass fetches it.
-            await EnsureLoadedAsync(tenantId, cancellationToken);
-            found = Find(tenantId, client.MaconomyCustomerNumber);
-        }
-        client.Maconomy = found;
-    }
     public async Task HydrateAsync(Client? client, CancellationToken cancellationToken = default)
     {
         if (client is not { IsMaconomyClient: true })
@@ -331,7 +314,7 @@ public sealed class MaconomyClientDirectory : IMaconomyClientDirectory
         IServiceProvider services, Guid tenantId, IReadOnlyCollection<string> unknown, CancellationToken cancellationToken)
     {
         var customerService = services.GetRequiredService<IMaconomyCustomerService>();
-        var linked = await services.GetRequiredService<IPersonRepository>()
+        var linked = await services.GetRequiredService<IClientRepository>()
             .ListMaconomyCustomerNumbersAsync(tenantId, cancellationToken);
         var wanted = linked.Concat(unknown).ToList();
 

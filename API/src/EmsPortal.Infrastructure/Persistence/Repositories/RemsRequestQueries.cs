@@ -24,7 +24,8 @@ internal static class RemsRequestQueries
             .Include(r => r.TaxForms.Where(x => !x.Deleted)).ThenInclude(x => x.TaxForm)
             .Include(r => r.TaxDueDates.Where(x => !x.Deleted))
             .Include(r => r.Approvers.Where(x => !x.Deleted))
-            .ClientGraph();
+            .ClientGraph()
+            .AsSplitQuery();
 
     /// <summary>The client's full graph on a request: person, option items, addresses, contacts, relationships, contracts.</summary>
     public static IQueryable<RemsRequest> ClientGraph(this IQueryable<RemsRequest> query)
@@ -42,7 +43,10 @@ internal static class RemsRequestQueries
             .Include(r => r.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.FilingType)
             .Include(r => r.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.BillingPreference)
             .Include(r => r.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedStatus)
-            .Include(r => r.Client).ThenInclude(c => c!.Contracts.Where(x => !x.Deleted));
+            .Include(r => r.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedClient).ThenInclude(x => x!.Contacts.Where(k => !k.Deleted)).ThenInclude(k => k.Person)
+            .Include(r => r.Client).ThenInclude(c => c!.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedClient).ThenInclude(x => x!.Contacts.Where(k => !k.Deleted)).ThenInclude(k => k.ContactRole)
+            .Include(r => r.Client).ThenInclude(c => c!.Contracts.Where(x => !x.Deleted))
+            .AsSplitQuery();
 
     /// <summary>The client's full graph when the client itself is the root.</summary>
     public static IQueryable<Client> FullGraph(this IQueryable<Client> query)
@@ -60,7 +64,10 @@ internal static class RemsRequestQueries
             .Include(c => c.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.FilingType)
             .Include(c => c.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.BillingPreference)
             .Include(c => c.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedStatus)
-            .Include(c => c.Contracts.Where(x => !x.Deleted));
+            .Include(c => c.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedClient).ThenInclude(x => x!.Contacts.Where(k => !k.Deleted)).ThenInclude(k => k.Person)
+            .Include(c => c.Relationships.Where(x => !x.Deleted)).ThenInclude(x => x.RelatedClient).ThenInclude(x => x!.Contacts.Where(k => !k.Deleted)).ThenInclude(k => k.ContactRole)
+            .Include(c => c.Contracts.Where(x => !x.Deleted))
+            .AsSplitQuery();
 
     /// <summary>Requests whose client name, or a Maconomy customer matched by name, contains the term.</summary>
     public static IQueryable<RemsRequest> WhereClientNameMatches(this IQueryable<RemsRequest> query, string term, IReadOnlyList<string> maconomyNumbers)
