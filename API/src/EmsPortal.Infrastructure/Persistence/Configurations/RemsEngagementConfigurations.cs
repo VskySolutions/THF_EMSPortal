@@ -13,7 +13,7 @@ internal sealed class RemsEngagementConfiguration : IEntityTypeConfiguration<REM
 {
     public void Configure(EntityTypeBuilder<REMSEngagement> builder)
     {
-        builder.ToTable("REMSEngagement", t =>
+        builder.ToTable("REMSEngagement", "legacy", t =>
         {
             t.HasCheckConstraint(
                 "CK_REMSEngagement_Realization",
@@ -67,7 +67,7 @@ internal sealed class RemsEngagementAuditDetailConfiguration : IEntityTypeConfig
 {
     public void Configure(EntityTypeBuilder<REMSEngagementAuditDetail> builder)
     {
-        builder.ToTable("REMSEngagementAuditDetail");
+        builder.ToTable("REMSEngagementAuditDetail", "legacy");
         builder.HasKey(d => d.Id);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(d => d.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -84,7 +84,7 @@ internal sealed class RemsEngagementGovernmentDetailConfiguration : IEntityTypeC
 {
     public void Configure(EntityTypeBuilder<REMSEngagementGovernmentDetail> builder)
     {
-        builder.ToTable("REMSEngagementGovernmentDetail", t =>
+        builder.ToTable("REMSEngagementGovernmentDetail", "legacy", t =>
         {
             // The purchase order is worth what it is worth — never a negative amount.
             t.HasCheckConstraint(
@@ -114,7 +114,7 @@ internal sealed class RemsEngagementPersonnelRateConfiguration : IEntityTypeConf
     public void Configure(EntityTypeBuilder<REMSEngagementPersonnelRate> builder)
     {
         // An hour is billed at a rate, not a credit.
-        builder.ToTable("REMSEngagementPersonnelRate", t => t.HasCheckConstraint(
+        builder.ToTable("REMSEngagementPersonnelRate", "legacy", t => t.HasCheckConstraint(
             "CK_REMSEngagementPersonnelRate_BillRatePerHour",
             "[BillRatePerHour] >= 0"));
         builder.HasKey(r => r.Id);
@@ -138,7 +138,7 @@ internal sealed class RemsEngagementTaxDetailConfiguration : IEntityTypeConfigur
 {
     public void Configure(EntityTypeBuilder<REMSEngagementTaxDetail> builder)
     {
-        builder.ToTable("REMSEngagementTaxDetail");
+        builder.ToTable("REMSEngagementTaxDetail", "legacy");
         builder.HasKey(d => d.Id);
 
         builder.Property(d => d.CalculatedDueDates).HasColumnType("nvarchar(max)");
@@ -156,7 +156,7 @@ internal sealed class RemsEngagementTaxFormConfiguration : IEntityTypeConfigurat
 {
     public void Configure(EntityTypeBuilder<REMSEngagementTaxForm> builder)
     {
-        builder.ToTable("REMSEngagementTaxForm");
+        builder.ToTable("REMSEngagementTaxForm", "legacy");
         builder.HasKey(f => f.Id);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(f => f.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -173,7 +173,7 @@ internal sealed class RemsEngagementMarketingMethodConfiguration : IEntityTypeCo
 {
     public void Configure(EntityTypeBuilder<REMSEngagementMarketingMethod> builder)
     {
-        builder.ToTable("REMSEngagementMarketingMethod");
+        builder.ToTable("REMSEngagementMarketingMethod", "legacy");
         builder.HasKey(m => m.Id);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -190,7 +190,7 @@ internal sealed class RemsEngagementCommissionSplitConfiguration : IEntityTypeCo
 {
     public void Configure(EntityTypeBuilder<REMSEngagementCommissionSplit> builder)
     {
-        builder.ToTable("REMSEngagementCommissionSplit", t => t.HasCheckConstraint(
+        builder.ToTable("REMSEngagementCommissionSplit", "legacy", t => t.HasCheckConstraint(
             "CK_REMSEngagementCommissionSplit_Pct",
             "[CommissionPercentage] > 0 AND [CommissionPercentage] <= 100"));
         builder.HasKey(s => s.Id);
@@ -212,7 +212,7 @@ internal sealed class RemsEngagementApproverConfiguration : IEntityTypeConfigura
 {
     public void Configure(EntityTypeBuilder<REMSEngagementApprover> builder)
     {
-        builder.ToTable("REMSEngagementApprover");
+        builder.ToTable("REMSEngagementApprover", "legacy");
         builder.HasKey(a => a.Id);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(a => a.TenantId).OnDelete(DeleteBehavior.Restrict);

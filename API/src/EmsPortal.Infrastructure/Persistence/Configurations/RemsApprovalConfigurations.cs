@@ -12,7 +12,7 @@ internal sealed class RemsApprovalRoundConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<REMSApprovalRound> builder)
     {
-        builder.ToTable("REMSApprovalRound");
+        builder.ToTable("REMSApprovalRound", "legacy");
         builder.HasKey(r => r.Id);
 
         builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -33,7 +33,7 @@ internal sealed class RemsApprovalTaskConfiguration : IEntityTypeConfiguration<R
 {
     public void Configure(EntityTypeBuilder<REMSApprovalTask> builder)
     {
-        builder.ToTable("REMSApprovalTask");
+        builder.ToTable("REMSApprovalTask", "legacy");
         builder.HasKey(t => t.Id);
 
         builder.Property(t => t.ApproverRole).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -58,7 +58,7 @@ internal sealed class RemsApprovalChecklistItemConfiguration : IEntityTypeConfig
 {
     public void Configure(EntityTypeBuilder<REMSApprovalChecklistItem> builder)
     {
-        builder.ToTable("REMSApprovalChecklistItem");
+        builder.ToTable("REMSApprovalChecklistItem", "legacy");
         builder.HasKey(i => i.Id);
 
         builder.Property(i => i.Label).IsRequired().HasMaxLength(200);

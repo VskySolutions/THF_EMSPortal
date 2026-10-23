@@ -97,6 +97,21 @@ public sealed class MaconomyClientDirectory : IMaconomyClientDirectory
         }
         client.Maconomy = found;
     }
+    public async Task HydrateAsync(Client? client, CancellationToken cancellationToken = default)
+    {
+        if (client is not { IsMaconomyClient: true })
+        {
+            return;
+        }
+        await EnsureLoadedAsync(client.TenantId, cancellationToken);
+        var found = Find(client.TenantId, client.MaconomyCustomerNumber);
+        if (found is null && _tenants.TryGetValue(client.TenantId, out var state) && !state.Unknown.IsEmpty)
+        {
+            await EnsureLoadedAsync(client.TenantId, cancellationToken);
+            found = Find(client.TenantId, client.MaconomyCustomerNumber);
+        }
+        client.Maconomy = found;
+    }
 
     public MaconomyClientDetails? Find(Guid? tenantId, string? number)
     {

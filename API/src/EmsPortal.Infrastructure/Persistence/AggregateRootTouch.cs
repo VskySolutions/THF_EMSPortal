@@ -34,7 +34,7 @@ internal sealed class AggregateRootTouch : IAggregateRootTouch
         // Usually already tracked — the caller just loaded or edited this request — in which case Find
         // returns it without a round trip. The tenant filter is not bypassed: a request outside the
         // caller's tenant resolves to null and is left alone.
-        var rems = await _dbContext.Rems.FindAsync(new object?[] { entityId }, cancellationToken);
+        var rems = await _dbContext.RemsRequests.FindAsync(new object?[] { entityId }, cancellationToken);
         if (rems is null)
         {
             return;

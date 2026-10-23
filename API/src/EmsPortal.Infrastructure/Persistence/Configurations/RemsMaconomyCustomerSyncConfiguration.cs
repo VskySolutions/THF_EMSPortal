@@ -10,7 +10,7 @@ internal sealed class RemsMaconomyCustomerSyncConfiguration : IEntityTypeConfigu
 {
     public void Configure(EntityTypeBuilder<REMSMaconomyCustomerSync> builder)
     {
-        builder.ToTable("REMSMaconomyCustomerSync");
+        builder.ToTable("REMSMaconomyCustomerSync", "legacy");
         builder.HasKey(s => s.Id);
 
         builder.Property(s => s.Status).HasConversion<string>().IsRequired().HasMaxLength(32);

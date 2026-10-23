@@ -12,7 +12,7 @@ internal sealed class RemsConfiguration : IEntityTypeConfiguration<REMS>
 {
     public void Configure(EntityTypeBuilder<REMS> builder)
     {
-        builder.ToTable("REMS");
+        builder.ToTable("REMS", "legacy");
         builder.HasKey(r => r.Id);
 
         builder.Property(r => r.REMSNumber).IsRequired().HasMaxLength(64);
@@ -70,7 +70,7 @@ internal sealed class RemsFilesConfiguration : IEntityTypeConfiguration<REMSFile
 {
     public void Configure(EntityTypeBuilder<REMSFiles> builder)
     {
-        builder.ToTable("REMSFiles");
+        builder.ToTable("REMSFiles", "legacy");
         builder.HasKey(f => f.Id);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(f => f.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -87,7 +87,7 @@ internal sealed class RemsAdditionalEntityConfiguration : IEntityTypeConfigurati
 {
     public void Configure(EntityTypeBuilder<REMSAdditionalEntity> builder)
     {
-        builder.ToTable("REMSAdditionalEntity");
+        builder.ToTable("REMSAdditionalEntity", "legacy");
         builder.HasKey(a => a.Id);
 
         builder.Property(a => a.SourceKey).IsRequired().HasMaxLength(64);
@@ -124,7 +124,7 @@ internal sealed class RemsAdditionalIndividualConfiguration : IEntityTypeConfigu
 {
     public void Configure(EntityTypeBuilder<REMSAdditionalIndividual> builder)
     {
-        builder.ToTable("REMSAdditionalIndividual");
+        builder.ToTable("REMSAdditionalIndividual", "legacy");
         builder.HasKey(a => a.Id);
 
         builder.Property(a => a.SourceKey).IsRequired().HasMaxLength(64);
@@ -169,10 +169,12 @@ internal sealed class RemsDelegationConfiguration : IEntityTypeConfiguration<REM
 {
     public void Configure(EntityTypeBuilder<REMSDelegation> builder)
     {
-        builder.ToTable("REMSDelegation", t => t.HasCheckConstraint(
+        builder.ToTable("REMS_Delegation", t => t.HasCheckConstraint(
             "CK_REMSDelegation_Dates",
             "[StartsOn] IS NULL OR [EndsOn] IS NULL OR [EndsOn] >= [StartsOn]"));
         builder.HasKey(d => d.Id);
+        builder.Property(d => d.CanPrepare).HasColumnName("IsPrepareAllowed");
+        builder.Property(d => d.CanSend).HasColumnName("IsSendAllowed");
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(d => d.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(d => d.TenantId);
@@ -195,7 +197,7 @@ internal sealed class RemsSendBackConfiguration : IEntityTypeConfiguration<REMSS
 {
     public void Configure(EntityTypeBuilder<REMSSendBack> builder)
     {
-        builder.ToTable("REMSSendBack");
+        builder.ToTable("REMSSendBack", "legacy");
         builder.HasKey(s => s.Id);
 
         // Matches the request's own description: an admin explaining what is wrong with the setup should

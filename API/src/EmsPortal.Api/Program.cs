@@ -74,6 +74,7 @@ builder.Services.AddSingleton<EmsPortal.Api.Dashboard.IDashboardCacheService, Em
 builder.Services.AddScoped<EmsPortal.Api.Dashboard.IDashboardQueryService, EmsPortal.Api.Dashboard.DashboardQueryService>();
 // STATIC-APPROVAL-POLICY
 builder.Services.AddScoped<EmsPortal.Api.Approval.IRemsApprovalPolicy, EmsPortal.Api.Approval.RemsApprovalPolicy>();
+builder.Services.AddScoped<EmsPortal.Api.Rems.RemsClientIntake>();
 
 // CORS for the browser SPA (WEB/). Cors:AllowedOrigins in appsettings.json is the one list, edited on the
 // server after a publish (a restart applies it). A trailing slash is the usual hand-editing slip, so it is forgiven.

@@ -108,15 +108,15 @@ public sealed record RemsApprovalRoute(IReadOnlyList<(Guid UserId, RemsApproverR
 public static class RemsStaticApprovalRoute
 {
     public static RemsApprovalRoute Build(
-        REMSEngagement engagement, IReadOnlyList<Guid> pickedApproverIds, RemsApprovalPolicySnapshot policy)
+        RemsRequest request, IReadOnlyList<Guid> pickedApproverIds, RemsApprovalPolicySnapshot policy)
     {
-        var cse = engagement.Rems?.CSEId;
-        var director = engagement.DepartmentDirectorId;
+        var cse = request.CSEId;
+        var director = request.DepartmentDirectorId;
         var shareholders = policy.Shareholders.Select(u => u.Id).ToList();
-        var recipients = engagement.CommissionSplits.Where(s => !s.Deleted).Select(s => s.EmployeeId).Distinct().ToList();
+        var recipients = request.CommissionSplits.Where(s => !s.Deleted).Select(s => s.EmployeeId).Distinct().ToList();
         // The exception is the TAX department's: one of its named CSEs on an engagement placed anywhere
         // else is routed like everybody.
-        var cseIsException = policy.IsTaxExceptionCse(cse) && RemsEngagementCodes.IsTax(engagement.Department?.Value);
+        var cseIsException = policy.IsTaxExceptionCse(cse) && RemsEngagementCodes.IsTax(request.Department?.Value);
 
         if (cse is null)
         {
@@ -145,7 +145,7 @@ public static class RemsStaticApprovalRoute
         }
         Add(pickedApproverIds.Distinct().Select(p => (p, RemsApproverRole.Approver)));
 
-        if (NeedsShareholder(engagement, policy, cseIsException))
+        if (NeedsShareholder(request, policy, cseIsException))
         {
             if (shareholders.Count == 0)
             {
@@ -158,23 +158,23 @@ public static class RemsStaticApprovalRoute
     }
 
     /// <summary>Required for every engagement except a tax engagement priced at or under the ceiling, unless the CSE is the tax exception.</summary>
-    private static bool NeedsShareholder(REMSEngagement engagement, RemsApprovalPolicySnapshot policy, bool cseIsException)
+    private static bool NeedsShareholder(RemsRequest request, RemsApprovalPolicySnapshot policy, bool cseIsException)
     {
         if (cseIsException)
         {
             return true;
         }
-        if (!RemsEngagementCodes.IsTax(engagement.Department?.Value))
+        if (!RemsEngagementCodes.IsTax(request.Department?.Value))
         {
             return true;
         }
         // No fee entered reads as "not known to be small", so the shareholders are asked.
-        return engagement.FirstYearFeeEstimate is not { } fee || fee > policy.TaxFeeCeilingWithoutShareholder;
+        return request.FirstYearFeeEstimate is not { } fee || fee > policy.TaxFeeCeilingWithoutShareholder;
     }
 
     /// <summary>The users an engagement's seats reserve: nobody in them may also receive commission or be picked as an extra approver.</summary>
-    public static IReadOnlyList<Guid> ReservedUserIds(REMSEngagement engagement, RemsApprovalPolicySnapshot policy)
-        => new[] { engagement.Rems?.CSEId, engagement.DepartmentDirectorId }
+    public static IReadOnlyList<Guid> ReservedUserIds(RemsRequest request, RemsApprovalPolicySnapshot policy)
+        => new[] { request.CSEId, request.DepartmentDirectorId }
             .Where(id => id.HasValue).Select(id => id!.Value)
             .Concat(policy.Shareholders.Select(u => u.Id))
             .Distinct().ToList();

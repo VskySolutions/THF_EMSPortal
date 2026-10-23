@@ -11,7 +11,8 @@ internal sealed class RemsSettingsConfiguration : IEntityTypeConfiguration<RemsS
 {
     public void Configure(EntityTypeBuilder<RemsSettings> builder)
     {
-        builder.ToTable("RemsSettings");
+        builder.ToTable("REMS_Settings");
+        builder.Property(s => s.TaxFeeCeilingWithoutShareholder).HasPrecision(18, 2);
         builder.HasKey(s => s.Id);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -25,7 +26,8 @@ internal sealed class RemsDepartmentDirectorConfiguration : IEntityTypeConfigura
 {
     public void Configure(EntityTypeBuilder<RemsDepartmentDirector> builder)
     {
-        builder.ToTable("RemsDepartmentDirector");
+        builder.ToTable("REMS_DepartmentDirector");
+        builder.Property(d => d.RemsSettingsId).HasColumnName("SettingsId");
         builder.HasKey(d => d.Id);
 
         builder.HasOne(d => d.Department).WithMany().HasForeignKey(d => d.DepartmentId).OnDelete(DeleteBehavior.Restrict);

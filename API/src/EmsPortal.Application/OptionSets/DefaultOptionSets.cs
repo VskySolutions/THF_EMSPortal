@@ -611,6 +611,46 @@ public static class DefaultOptionSets
                 "The message could not be delivered. The reason is on the row.",
                 BackgroundColor: Red, TextColor: OnDark, Icon: "o_error"),
         }, IsClosed: true),
+
+        // REMS data model v2: the codes the client layer used to store as strings, now referenced by id from
+        // Client_Address, Client_Contact and Client_Relationship. Existing tenants got these from the
+        // rems-v2-migrate.sql script; tenants created afterwards get them here.
+        new Definition(EntityType.Rems, "REMS.AddressType", "REMS Address Type", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("physical", "Physical", 1),
+            new ItemDefinition("mailing", "Mailing", 2),
+            new ItemDefinition("billing", "Billing", 3),
+        }, LockSeededValues: true),
+        new Definition(EntityType.Rems, "REMS.ContactRole", "REMS Contact Role", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("self", "Self", 1),
+            new ItemDefinition("spouse", "Spouse", 2),
+            new ItemDefinition("primary_client_contact", "Primary Client Contact", 3),
+            new ItemDefinition("financial_contact", "Financial Contact", 4),
+            new ItemDefinition("billing_contact", "Billing Contact", 5),
+            new ItemDefinition("other_contact", "Other Contact", 6),
+            new ItemDefinition("finance_director", "Finance Director", 7),
+            new ItemDefinition("trust_estate_contact", "Trust and Estate Contact", 8),
+            new ItemDefinition("banker", "Banker", 9),
+            new ItemDefinition("lawyer", "Lawyer", 10),
+        }, LockSeededValues: true),
+        new Definition(EntityType.Rems, "REMS.RelationType", "REMS Relation Type", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("spouse", "Spouse", 1),
+            new ItemDefinition("child", "Child", 2),
+            new ItemDefinition("other", "Other Individual", 3),
+            new ItemDefinition("related_entity", "Related Entity", 4),
+        }, LockSeededValues: true),
+        new Definition(EntityType.Rems, "REMS.FilingType", "REMS Filing Type", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("joint", "Joint", 1),
+            new ItemDefinition("individual", "Individual", 2),
+        }, LockSeededValues: true),
+        new Definition(EntityType.Rems, "REMS.BillingPreference", "REMS Billing Preference", OptionItemSortMode.Custom, new[]
+        {
+            new ItemDefinition("primary", "Bill the primary client", 1),
+            new ItemDefinition("separate", "Bill separately", 2),
+        }, LockSeededValues: true),
     };
 
     /// <summary>Builds the <c>MetadataJson</c> for a REMS marketing-method item: its group and behaviour flags.</summary>

@@ -140,6 +140,26 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<RemsDepartmentDirector> RemsDepartmentDirectors => Set<RemsDepartmentDirector>();
     public DbSet<REMSMaconomyCustomerSync> RemsMaconomyCustomerSyncs => Set<REMSMaconomyCustomerSync>();
 
+    // ---- REMS data model v2: Client and REMS primaries. The REMS* sets above are the legacy model and go when the rewrite is done. ----
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<ClientAddress> ClientAddresses => Set<ClientAddress>();
+    public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
+    public DbSet<ClientRelationship> ClientRelationships => Set<ClientRelationship>();
+    public DbSet<ClientContract> ClientContracts => Set<ClientContract>();
+    public DbSet<RemsRequest> RemsRequests => Set<RemsRequest>();
+    public DbSet<RemsFile> RemsRequestFiles => Set<RemsFile>();
+    public DbSet<RemsEmailEvent> RemsEmailEvents => Set<RemsEmailEvent>();
+    public DbSet<RemsStatusHistory> RemsStatusHistory => Set<RemsStatusHistory>();
+    public DbSet<RemsApprover> RemsApprovers => Set<RemsApprover>();
+    public DbSet<RemsCommissionSplit> RemsCommissionSplits => Set<RemsCommissionSplit>();
+    public DbSet<RemsApprovalTask> RemsRequestApprovalTasks => Set<RemsApprovalTask>();
+    public DbSet<RemsApprovalChecklistItem> RemsRequestChecklistItems => Set<RemsApprovalChecklistItem>();
+    public DbSet<RemsPersonnelRate> RemsPersonnelRates => Set<RemsPersonnelRate>();
+    public DbSet<RemsMarketingMethod> RemsMarketingMethods => Set<RemsMarketingMethod>();
+    public DbSet<RemsTaxForm> RemsTaxForms => Set<RemsTaxForm>();
+    public DbSet<RemsTaxDueDate> RemsTaxDueDates => Set<RemsTaxDueDate>();
+    public DbSet<RemsChecklistTemplate> RemsChecklistTemplates => Set<RemsChecklistTemplate>();
+
     /// <summary>Data Protection key ring storage (Multi-Tenancy ADR-002).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
@@ -147,6 +167,10 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EmsPortalDbContext).Assembly);
+
+        // Request and client numbers come from sequences, so a deleted row never frees its number.
+        modelBuilder.HasSequence<int>("seq_RemsNumber").StartsAt(1).IncrementsBy(1);
+        modelBuilder.HasSequence<int>("seq_ClientNumber").StartsAt(1).IncrementsBy(1);
 
         // Tenant isolation filters, combined with the soft-delete filter. The tenant
         // filter is bypassed when no tenant is resolved so global background operations
@@ -221,6 +245,26 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<REMSSendBack>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSDelegation>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<REMSMaconomyCustomerSync>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+
+        // REMS data model v2. Email events and status history are append-only, so they filter on tenant alone.
+        modelBuilder.Entity<Client>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<ClientAddress>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<ClientContact>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<ClientRelationship>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<ClientContract>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsRequest>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsFile>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsEmailEvent>().HasQueryFilter(e => !_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<RemsStatusHistory>().HasQueryFilter(e => !_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<RemsApprover>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsCommissionSplit>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsApprovalTask>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsApprovalChecklistItem>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsPersonnelRate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsMarketingMethod>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsTaxForm>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsTaxDueDate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<RemsChecklistTemplate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Soft-delete filters for the non-tenant-scoped entities.
         modelBuilder.Entity<Tenant>().HasQueryFilter(e => !e.Deleted);

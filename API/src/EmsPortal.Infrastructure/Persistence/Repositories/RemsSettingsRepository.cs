@@ -16,6 +16,7 @@ internal sealed class RemsSettingsRepository : IRemsSettingsRepository
     public Task<RemsSettings?> GetAsync(CancellationToken cancellationToken = default)
         => _dbContext.RemsSettings
             .Include(s => s.DepartmentDirectors).ThenInclude(d => d.Department)
+            .Include(s => s.ChecklistTemplates.Where(t => !t.Deleted))
             .FirstOrDefaultAsync(cancellationToken);
 
     public async Task AddAsync(RemsSettings settings, CancellationToken cancellationToken = default)
@@ -29,4 +30,7 @@ internal sealed class RemsSettingsRepository : IRemsSettingsRepository
     public void UpdateDepartmentDirector(RemsDepartmentDirector director) => _dbContext.RemsDepartmentDirectors.Update(director);
 
     public void RemoveDepartmentDirector(RemsDepartmentDirector director) => _dbContext.RemsDepartmentDirectors.Remove(director);
+    public async Task AddChecklistTemplateAsync(RemsChecklistTemplate template, CancellationToken cancellationToken = default)
+        => await _dbContext.RemsChecklistTemplates.AddAsync(template, cancellationToken);
+    public void RemoveChecklistTemplate(RemsChecklistTemplate template) => _dbContext.RemsChecklistTemplates.Remove(template);
 }

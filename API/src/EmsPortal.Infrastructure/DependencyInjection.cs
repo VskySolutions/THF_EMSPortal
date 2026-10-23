@@ -126,6 +126,11 @@ public static class DependencyInjection
         services.AddScoped<IRemsDelegationRepository, RemsDelegationRepository>();
         services.AddScoped<IRemsApprovalRepository, RemsApprovalRepository>();
         services.AddScoped<IRemsSettingsRepository, RemsSettingsRepository>();
+        // REMS data model v2: the client master, the request as one row, and tasks without a round table.
+        services.AddScoped<IClientRepository, ClientRepository>();
+        services.AddScoped<IRemsRequestRepository, RemsRequestRepository>();
+        services.AddScoped<IRemsApprovalTaskRepository, RemsApprovalTaskRepository>();
+        services.AddScoped<IClientNumberGenerator, Persistence.ClientNumberGenerator>();
 
         // Bubbles a child write's timestamp up to the aggregate root it belongs to (see AggregateRootTouch).
         services.AddScoped<Application.Abstractions.UniversalFeatures.IAggregateRootTouch, Persistence.AggregateRootTouch>();

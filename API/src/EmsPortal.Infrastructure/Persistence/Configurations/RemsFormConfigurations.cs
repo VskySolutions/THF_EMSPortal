@@ -12,7 +12,7 @@ internal sealed class RemsFormConfiguration : IEntityTypeConfiguration<REMSForm>
 {
     public void Configure(EntityTypeBuilder<REMSForm> builder)
     {
-        builder.ToTable("REMSForm");
+        builder.ToTable("REMSForm", "legacy");
         builder.HasKey(f => f.Id);
 
         builder.HasOne(f => f.EntityType).WithMany().HasForeignKey(f => f.EntityTypeId).OnDelete(DeleteBehavior.Restrict);
@@ -39,7 +39,7 @@ internal sealed class RemsFormDraftConfiguration : IEntityTypeConfiguration<REMS
 {
     public void Configure(EntityTypeBuilder<REMSFormDraft> builder)
     {
-        builder.ToTable("REMSFormDraft");
+        builder.ToTable("REMSFormDraft", "legacy");
         builder.HasKey(d => d.Id);
 
         builder.Property(d => d.DraftPayload).HasColumnType("nvarchar(max)").IsRequired();
@@ -58,7 +58,7 @@ internal sealed class RemsFormSubmissionConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<REMSFormSubmission> builder)
     {
-        builder.ToTable("REMSFormSubmission");
+        builder.ToTable("REMSFormSubmission", "legacy");
         builder.HasKey(s => s.Id);
 
         builder.Property(s => s.SubmittedPayload).HasColumnType("nvarchar(max)").IsRequired();
@@ -77,7 +77,7 @@ internal sealed class RemsFormEmailEventConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<REMSFormEmailEvent> builder)
     {
-        builder.ToTable("REMSFormEmailEvent");
+        builder.ToTable("REMSFormEmailEvent", "legacy");
         builder.HasKey(e => e.Id);
 
         builder.Property(e => e.ProviderMessageId).HasMaxLength(256);

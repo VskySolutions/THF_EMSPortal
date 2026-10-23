@@ -11,7 +11,7 @@ internal sealed class RemsClientConfiguration : IEntityTypeConfiguration<REMSCli
 {
     public void Configure(EntityTypeBuilder<REMSClient> builder)
     {
-        builder.ToTable("REMSClient");
+        builder.ToTable("REMSClient", "legacy");
         builder.HasKey(c => c.Id);
 
         builder.Property(c => c.Name).IsRequired().HasMaxLength(200);
@@ -43,7 +43,7 @@ internal sealed class RemsEntityConfiguration : IEntityTypeConfiguration<REMSEnt
 {
     public void Configure(EntityTypeBuilder<REMSEntity> builder)
     {
-        builder.ToTable("REMSEntity");
+        builder.ToTable("REMSEntity", "legacy");
         builder.HasKey(e => e.Id);
 
         builder.Property(e => e.Name).IsRequired().HasMaxLength(200);
@@ -70,7 +70,7 @@ internal sealed class RemsEntityAddressConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<REMSEntityAddress> builder)
     {
-        builder.ToTable("REMSEntityAddress");
+        builder.ToTable("REMSEntityAddress", "legacy");
         builder.HasKey(a => a.Id);
 
         builder.Property(a => a.AddressType).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -103,7 +103,7 @@ internal sealed class RemsEntityContactConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<REMSEntityContact> builder)
     {
-        builder.ToTable("REMSEntityContact");
+        builder.ToTable("REMSEntityContact", "legacy");
         builder.HasKey(c => c.Id);
 
         builder.Property(c => c.ContactRole).IsRequired().HasMaxLength(64);

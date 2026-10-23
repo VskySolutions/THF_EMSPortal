@@ -61,9 +61,9 @@ public static class RemsMaconomySyncViews
 {
     public const string StaleReason = "The portal lost track of this attempt. Sync now to try again.";
 
-    public static string StatusOf(REMSMaconomyCustomerSync sync, bool stale) => stale
+    public static string StatusOf(Client client, bool stale) => stale
         ? RemsMaconomySyncStatuses.Failed
-        : sync.Status switch
+        : client.MaconomySyncStatus switch
         {
             RemsMaconomyCustomerSyncStatus.Pending => RemsMaconomySyncStatuses.Pending,
             RemsMaconomyCustomerSyncStatus.Syncing => RemsMaconomySyncStatuses.Syncing,
@@ -73,30 +73,42 @@ public static class RemsMaconomySyncViews
             _ => RemsMaconomySyncStatuses.NotSynced,
         };
 
-    public static RemsMaconomySyncView From(REMSMaconomyCustomerSync sync, bool stale, bool enabled, bool canManage)
+    /// <summary>
+    /// The sync state as the chip reads it. Attempts are no longer counted; the last attempt is the moment
+    /// the client's state last changed while an attempt was pending, running or failed.
+    /// </summary>
+    public static RemsMaconomySyncView From(Client client, bool stale, bool enabled, bool canManage)
     {
-        var status = StatusOf(sync, stale);
+        var status = StatusOf(client, stale);
+        var lastAttempt = client.MaconomySyncStatus is RemsMaconomyCustomerSyncStatus.Pending
+            or RemsMaconomyCustomerSyncStatus.Syncing or RemsMaconomyCustomerSyncStatus.Failed
+            ? client.UpdatedOnUtc
+            : client.MaconomySyncedOnUtc;
         return new RemsMaconomySyncView(
-            sync.Id, status, sync.CustomerNumber, sync.Attempts, sync.LastAttemptOnUtc, sync.SyncedOnUtc,
-            stale ? StaleReason : sync.FailureReason,
+            client.Id, status, client.MaconomyCustomerNumber, 0, lastAttempt, client.MaconomySyncedOnUtc,
+            stale ? StaleReason : client.MaconomySyncError,
             enabled,
             canManage && enabled && status is RemsMaconomySyncStatuses.NotSynced or RemsMaconomySyncStatuses.Failed);
     }
 
     /// <summary>
-    /// The view for a request, or null when its client is not one that is posted. A row says what
-    /// happened; an approved Brand New Client request with no row (approved before the sync existed)
-    /// reads as Not synced, and Sync now makes its row.
+    /// The view for a request, or null when its client is not one that is posted. A client that has been
+    /// recorded says what happened; an approved Brand New Client request whose client was never recorded
+    /// reads as Not synced, and Sync now records it.
     /// </summary>
-    public static RemsMaconomySyncView? For(REMS rems, REMSMaconomyCustomerSync? sync, bool stale, bool enabled, bool canManage)
+    public static RemsMaconomySyncView? For(RemsRequest request, bool stale, bool enabled, bool canManage)
     {
-        if (sync is not null)
+        var client = request.Client;
+        if (client is null)
         {
-            return From(sync, stale, enabled, canManage);
+            return null;
         }
-        var eligible = string.Equals(rems.Type?.Value, RemsRequestTypes.BrandNewClient, StringComparison.Ordinal)
-            && string.Equals(rems.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal)
-            && rems.ClientPerson is { IsMaconomyClient: false };
+        if (client.MaconomySyncStatus != RemsMaconomyCustomerSyncStatus.NotSynced || client.IsMaconomyClient)
+        {
+            return From(client, stale, enabled, canManage);
+        }
+        var eligible = string.Equals(request.Type?.Value, RemsRequestTypes.BrandNewClient, StringComparison.Ordinal)
+            && string.Equals(request.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal);
         return eligible
             ? new RemsMaconomySyncView(null, RemsMaconomySyncStatuses.NotSynced, null, 0, null, null, null, enabled, canManage && enabled)
             : null;

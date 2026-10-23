@@ -20,4 +20,6 @@ public interface IRemsSettingsRepository
     void UpdateDepartmentDirector(RemsDepartmentDirector director);
 
     void RemoveDepartmentDirector(RemsDepartmentDirector director);
+    Task AddChecklistTemplateAsync(RemsChecklistTemplate template, CancellationToken cancellationToken = default);
+    void RemoveChecklistTemplate(RemsChecklistTemplate template);
 }

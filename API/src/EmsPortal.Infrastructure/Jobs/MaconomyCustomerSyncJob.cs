@@ -16,8 +16,8 @@ public sealed class MaconomyCustomerSyncJob
     public MaconomyCustomerSyncJob(IMaconomyCustomerSyncService sync) => _sync = sync;
 
     [AutomaticRetry(Attempts = 0)]
-    public Task RunAsync(Guid syncId, Guid tenantId, CancellationToken cancellationToken)
-        => _sync.RunAsync(syncId, tenantId, cancellationToken);
+    public Task RunAsync(Guid clientId, Guid tenantId, CancellationToken cancellationToken)
+        => _sync.RunAsync(clientId, tenantId, cancellationToken);
 }
 
 /// <summary>Hangfire-backed <see cref="IMaconomyCustomerSyncQueue"/>: the enqueue the approval makes.</summary>
@@ -27,6 +27,6 @@ internal sealed class MaconomyCustomerSyncQueue : IMaconomyCustomerSyncQueue
 
     public MaconomyCustomerSyncQueue(IBackgroundJobClient backgroundJobs) => _backgroundJobs = backgroundJobs;
 
-    public void Enqueue(Guid syncId, Guid tenantId)
-        => _backgroundJobs.Enqueue<MaconomyCustomerSyncJob>(job => job.RunAsync(syncId, tenantId, CancellationToken.None));
+    public void Enqueue(Guid clientId, Guid tenantId)
+        => _backgroundJobs.Enqueue<MaconomyCustomerSyncJob>(job => job.RunAsync(clientId, tenantId, CancellationToken.None));
 }
