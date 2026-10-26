@@ -97,8 +97,9 @@
       <router-view />
     </q-page-container>
 
-    <!-- Universal Features floating sticky notes overlay (authenticated users only). -->
-    <sticky-note-layer v-if="isLoggedIn" />
+    <!-- Universal Features floating sticky notes overlay (authenticated users only). Off the screen for
+         now: shared/features.js. -->
+    <sticky-note-layer v-if="isLoggedIn && STICKY_NOTES_ENABLED" />
 
     <q-footer bordered class="bg-white">
       <div class="text-center q-py-sm">
@@ -128,6 +129,7 @@ import NotificationCentre from "components/universal/NotificationCentre.vue";
 import StickyNoteLayer from "components/universal/StickyNoteLayer.vue";
 import AppTenantScopeSelect from "components/common/AppTenantScopeSelect.vue";
 import { useTenantScope } from "composables/useTenantScope";
+import { STICKY_NOTES_ENABLED } from "shared/features";
 
 const $q = useQuasar();
 const branding = useBrandingStore();

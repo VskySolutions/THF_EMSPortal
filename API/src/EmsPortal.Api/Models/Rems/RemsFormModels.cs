@@ -51,9 +51,15 @@ public sealed record RemsFormPreview(
     string? Subject,
     string? Body);
 
-/// <summary>Send payload: the subject / body as the admin left them in the send dialog.</summary>
+/// <summary>Send payload: the To, subject and body as the sender left them in the send dialog.</summary>
 public sealed class SendRemsFormRequest
 {
+    /// <summary>
+    /// Every address the email goes to: the client's address on file as seeded, edited or added to. Null
+    /// or empty means the address on file. One message goes to each address, with its own log row.
+    /// </summary>
+    public List<string>? Recipients { get; set; }
+
     public string? Subject { get; set; }
     public string? Body { get; set; }
 }

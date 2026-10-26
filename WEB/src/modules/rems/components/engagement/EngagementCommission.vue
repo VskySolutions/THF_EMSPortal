@@ -12,7 +12,7 @@
       <app-select
         v-model="pick" :options="availableRecipients" label="Add recipient" class="col-12 col-sm"
         use-input :disable="splits.length >= 10" :hint="recipientHint"
-        info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded."
+        info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded; the CSE, the Department Director and the Shareholders approve this request instead, so they are greyed out."
         @update:model-value="addRecipient"
       />
       <!-- The cap said as a count, not only as a picker that stops responding. -->
@@ -69,8 +69,9 @@ const props = defineProps({
   // Selectable recipients — the holders of the "CSE" role, as [{ label, value }].
   recipientOptions: { type: Array, default: () => [] },
   // STATIC-APPROVAL-POLICY: the CSE, Department Director and Shareholders on this request, who
-  // approve at their own stage and so may not also be paid commission.
-  excludedRecipientIds: { type: Array, default: () => [] },
+  // approve at their own stage and so may not also be paid commission. [{ id, reason }], greyed out
+  // with the reason rather than left out, so nobody wonders where they went.
+  reservedRecipients: { type: Array, default: () => [] },
   editable: { type: Boolean, default: true }
 });
 // The page saves this section for the user, so every change to the splits is announced.
@@ -94,9 +95,13 @@ watch(() => props.engagement, (e) => {
 watch(splits, () => { if (!syncing) emit("change"); }, { deep: true });
 
 const pick = ref(null);
+const reservedReason = computed(() => new Map(props.reservedRecipients.map((r) => [r.id, r.reason])));
 const availableRecipients = computed(() =>
-  props.recipientOptions.filter((s) =>
-    !splits.value.some((x) => x.employeeId === s.value) && !props.excludedRecipientIds.includes(s.value)));
+  props.recipientOptions
+    .filter((s) => !splits.value.some((x) => x.employeeId === s.value))
+    .map((s) => (reservedReason.value.has(s.value)
+      ? { ...s, label: `${s.label} — ${reservedReason.value.get(s.value)}`, disable: true }
+      : s)));
 
 // An empty picker means the group has no members; name it so the fix is obvious rather than the dropdown
 // just being blank (mirrors the setup form's executive / billing-manager hints).
@@ -105,7 +110,7 @@ const recipientHint = computed(() => (props.recipientOptions.length
   : "Nobody holds the \"CSE\" role — assign it on a user's page in Administration → Users."));
 
 const addRecipient = (value) => {
-  if (!value || splits.value.length >= 10) { pick.value = null; return; }
+  if (!value || splits.value.length >= 10 || reservedReason.value.has(value)) { pick.value = null; return; }
   const option = props.recipientOptions.find((s) => s.value === value);
   if (option && !splits.value.some((x) => x.employeeId === value)) {
     splits.value.push({ employeeId: value, name: option.label, percentage: "" });
