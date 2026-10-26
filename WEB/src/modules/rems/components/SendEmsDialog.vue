@@ -19,9 +19,12 @@
       <!-- The email itself, pre-populated from the tenant's template and editable before it goes
            (AC-REMS-008.1). -->
       <q-card-section v-else-if="phase === 'preview' || phase === 'sending'" class="send-body">
-        <app-text-field :model-value="preview.destinationEmail || ''" label="To" readonly>
-          <template #append><q-icon name="o_lock" size="18px" color="grey-6" /></template>
-        </app-text-field>
+        <!-- Seeded with the client's address on file, and theirs to change or add to for this send. Each
+             address gets its own message and its own row in the Email Log. -->
+        <app-email-list-field
+          v-model="recipients" label="To" required
+          hint="Press Enter after each address. Everyone listed receives the link."
+        />
 
         <!-- No client email → sending is blocked (AC-REMS-008.2). -->
         <q-banner v-if="!preview.destinationEmail" dense class="bg-orange-1 text-orange-9 rounded-borders">
@@ -37,8 +40,8 @@
         <app-rich-text-field v-model="body" label="Message" />
 
         <div class="text-caption text-grey-6">
-          Pre-filled from your tenant's email template. Edit anything above and the client receives exactly
-          that — the template itself is unchanged.
+          Pre-filled from your tenant's email template and the client's address on file. Edit anything above
+          and the people listed receive exactly that — the template and the request are unchanged.
         </div>
       </q-card-section>
 
@@ -55,7 +58,7 @@
         <div class="column flex-center q-py-md text-center">
           <q-icon name="o_mark_email_read" color="positive" size="48px" class="q-mb-sm" />
           <div class="text-subtitle1 q-mb-xs">{{ copy.sentHeadline }}</div>
-          <div class="text-grey-7">{{ sentEmail }}</div>
+          <div class="text-grey-7">{{ sentTo }}</div>
           <div class="text-caption text-grey-6 q-mt-sm">{{ copy.sentNote }}</div>
         </div>
       </q-card-section>
@@ -97,6 +100,7 @@ import { remsApi, getApiErrorMessage, webUrl } from "services/api";
 import { useNotify } from "composables/useNotify";
 
 import AppTextField from "components/common/AppTextField.vue";
+import AppEmailListField from "components/common/AppEmailListField.vue";
 import AppRichTextField from "components/common/AppRichTextField.vue";
 
 const props = defineProps({
@@ -121,15 +125,19 @@ const open = computed({
 // loading → preview → sending → sent | error
 const phase = ref("loading");
 const preview = ref({ destinationEmail: null, formLink: "" });
-// The email as the admin will send it — seeded from the rendered template, theirs to change.
+// The email as the admin will send it — the To seeded from the client's address on file, the rest from
+// the rendered template, all theirs to change.
+const recipients = ref([]);
 const subject = ref("");
 const body = ref("");
 const errorMsg = ref("");
-const sentEmail = ref("");
+const sentTo = ref("");
 
-// Confirm is active only once the preview resolved with a real destination email (AC-REMS-008.2).
+// Confirm is active only once the preview resolved with a real destination email (AC-REMS-008.2) and
+// somebody is still on the To line.
 const canConfirm = computed(() =>
-  phase.value === "preview" && !!preview.value.destinationEmail && !!body.value.trim() && !!subject.value.trim());
+  phase.value === "preview" && !!preview.value.destinationEmail && recipients.value.length > 0 &&
+  !!body.value.trim() && !!subject.value.trim());
 
 // Show the link exactly as it should be opened — absolute, even if the API's App:BaseUrl is unset.
 const formLink = computed(() => webUrl(preview.value.formLink));
@@ -172,6 +180,7 @@ const loadPreview = async () => {
       ? await remsApi.previewReminder(props.remsId)
       : await remsApi.previewForm(props.remsId);
     preview.value = { destinationEmail: p?.destinationEmail || null, formLink: p?.formLink || "" };
+    recipients.value = p?.destinationEmail ? [p.destinationEmail] : [];
     // Seeded from the template rendered server-side with this request's values. Empty when the tenant
     // has no effective template — the same reason the send itself would deliver nothing.
     subject.value = p?.subject || "";
@@ -189,10 +198,10 @@ const confirmSend = async () => {
   try {
     // What the admin is looking at is what gets sent — edited or not. The server still resolves the
     // template (it is what decides whether there is anything to send at all); these just win over it.
-    const payload = { subject: subject.value, body: body.value };
+    const payload = { recipients: recipients.value, subject: subject.value, body: body.value };
     if (isReminder.value) await remsApi.sendReminder(props.remsId, payload);
     else await remsApi.sendForm(props.remsId, payload);
-    sentEmail.value = preview.value.destinationEmail;
+    sentTo.value = recipients.value.join(", ");
     phase.value = "sent";
     notify.success(isReminder.value ? "Reminder sent to the client." : "EMS Form link sent to the client.");
     emit("sent");
