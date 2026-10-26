@@ -66,7 +66,7 @@ public sealed record RemsEngagementWorkspace(
     Guid RemsId,
     string RemsNumber,
     string RequestStatus,
-    // Null until the client submits their intake form.
+    // The request's client, held from its first save; whether they have answered is the detail's ClientSubmissionState.
     RemsClientView? Client,
     IReadOnlyList<RemsEntityView> Entities,
     // The request's single engagement. Null only before the initiator has saved the request for the

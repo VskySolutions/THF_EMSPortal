@@ -835,8 +835,9 @@ const sendBlockedReason = computed(() => {
   return "";
 });
 
-// Whether the client has answered — what puts their form in the left pane.
-const hasSubmission = computed(() => !!workspace.value?.client);
+// Whether the client has answered — what puts their form in the left pane. The workspace's client is no
+// signal: a request has one from its first save; the submission state is set only once the form is in.
+const hasSubmission = computed(() => request.value?.clientSubmissionState === "Submitted");
 
 // ---- The submitted-form pane ----
 // Shown whenever there is a submission to show, in BOTH modes: reading a request and correcting one are

@@ -61,6 +61,7 @@ public sealed class MaconomyOptions
 /// <summary>
 /// The customer card as the customer sync WRITES it. The container is the one THF's Maconomy team named
 /// for creating customers (<c>dpl:customercard</c>, 22 Oct 2026); reads keep using <c>customercard</c>.
+/// The test instance thmasd01 has no <c>dpl:customercard</c>, so the dev config writes to <c>customercard</c> (26 Oct 2026).
 /// The specification popups ARE the <c>specification1name</c> … <c>specification6name</c> fields: the
 /// instance refused <c>specification6</c> as a card field. Configurable because every one of these is
 /// confirmed against the instance, not taken from documentation.

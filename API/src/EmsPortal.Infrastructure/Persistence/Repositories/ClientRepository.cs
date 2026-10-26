@@ -173,12 +173,11 @@ internal sealed class ClientRepository : IClientRepository
             .OrderByDescending(c => c.UpdatedOnUtc)
             .ToListAsync(cancellationToken);
 
+    // Includes must sit on the query's root, so start from the client and reach the request through its navigation.
     public Task<Client?> GetSyncSubjectAsync(Guid remsId, Guid tenantId, CancellationToken cancellationToken = default)
-        => _dbContext.RemsRequests.IgnoreQueryFilters()
-            .Where(r => r.Id == remsId && r.TenantId == tenantId && !r.Deleted)
-            .Select(r => r.Client!)
+        => _dbContext.Clients.IgnoreQueryFilters()
             .Include(c => c.Person)
             .Include(c => c.EntityType)
             .Include(c => c.Industry)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(c => c.Requests.Any(r => r.Id == remsId && r.TenantId == tenantId && !r.Deleted), cancellationToken);
 }
