@@ -17,6 +17,10 @@ public static class DependencyInjection
         // SMTP Email Accounts: account management business logic.
         services.AddScoped<Abstractions.Email.ISmtpAccountService, Email.SmtpAccountService>();
 
+        // The Maconomy session and customer services and the option-code resolver cache in IMemoryCache;
+        // registered here so every host that composes this layer has it, not only the API.
+        services.AddMemoryCache();
+
         // Maconomy: the tenant's connection, the token that keeps it alive, and the customer lookup.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyConnectionService, Integrations.Maconomy.MaconomyConnectionService>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomySessionManager, Integrations.Maconomy.MaconomySessionManager>();

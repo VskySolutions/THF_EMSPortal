@@ -1,7 +1,8 @@
 using global::Hangfire;
 using EmsPortal.Infrastructure.Jobs;
+using Microsoft.Extensions.Hosting;
 
-namespace EmsPortal.Workers;
+namespace EmsPortal.Infrastructure.Hangfire;
 
 /// <summary>
 /// Registers the Universal Features recurring background jobs on startup with fixed cron schedules:
@@ -15,11 +16,11 @@ public sealed class UniversalFeaturesRecurringJobs : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        // Reminder dispatch — every minute.
+        // Reminder dispatch: every minute.
         _recurringJobs.AddOrUpdate<ReminderDispatchJob>(
             ReminderDispatchJob.Name, job => job.RunAsync(CancellationToken.None), "* * * * *");
 
-        // Sticky-note expiry — hourly (soft-deletes expired tenant notes).
+        // Sticky-note expiry: hourly (soft-deletes expired tenant notes).
         _recurringJobs.AddOrUpdate<StickyNoteExpiryJob>(
             StickyNoteExpiryJob.Name, job => job.RunAsync(CancellationToken.None), "0 * * * *");
 

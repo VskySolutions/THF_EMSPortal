@@ -3,8 +3,6 @@ using EmsPortal.Application;
 using EmsPortal.Infrastructure;
 using EmsPortal.Infrastructure.Hangfire;
 using EmsPortal.Infrastructure.Logging;
-using EmsPortal.Shared.Configuration;
-using EmsPortal.Workers;
 using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -21,29 +19,15 @@ builder.Services.AddSerilog((_, loggerConfiguration) =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Hangfire server: consumes jobs from the shared SQL Server queue (schema auto-provisioned).
-// AddHangfireServer registers an IHostedService that drains in-flight jobs on the host's
-// cancellation token for graceful shutdown. Recurring job registration is a later work order.
+// Hangfire server: the same composition the API runs by default (Hangfire:ServerEnabled). This host is for
+// a deployment that runs the jobs apart from the web process, and runs them whatever that setting says.
 if (HangfireStorageConfigurator.IsConfigured(builder.Configuration))
 {
-    var hangfireOptions = builder.Configuration.GetSection(ConfigurationSections.Hangfire).Get<HangfireOptions>()
-        ?? new HangfireOptions();
-
     // Reconstruct ITenantContext from each job payload before the handler runs.
     GlobalJobFilters.Filters.Add(new TenantHangfireJobFilter());
 
     builder.Services.AddHangfire(config => HangfireStorageConfigurator.Configure(config, builder.Configuration));
-    builder.Services.AddHangfireServer(options =>
-    {
-        options.WorkerCount = hangfireOptions.WorkerCount > 0 ? hangfireOptions.WorkerCount : Environment.ProcessorCount * 5;
-        if (!string.IsNullOrWhiteSpace(hangfireOptions.ServerName))
-        {
-            options.ServerName = hangfireOptions.ServerName;
-        }
-    });
-
-    // Universal Features platform-fixed recurring jobs (reminder dispatch, sticky-note expiry).
-    builder.Services.AddHostedService<UniversalFeaturesRecurringJobs>();
+    builder.Services.AddEmsPortalHangfireServer(builder.Configuration);
 }
 
 var host = builder.Build();

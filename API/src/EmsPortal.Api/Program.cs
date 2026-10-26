@@ -56,8 +56,13 @@ builder.Services.AddEmsPortalOpenApi();
 // Authentication (JWT + API key), the AnyOf composite scheme, and RBAC policies.
 builder.Services.AddEmsPortalAuthentication(builder.Configuration);
 
-// Hangfire storage so the API can host the monitoring dashboard (jobs run in the Worker).
+// Hangfire storage for the dashboard and the enqueue side, plus (unless Hangfire:ServerEnabled is off) the
+// server that runs the queued and recurring jobs, so one publish of the API carries everything.
 builder.Services.AddEmsPortalHangfireDashboard(builder.Configuration);
+if (HangfireServerExtensions.ServerEnabled(builder.Configuration))
+{
+    builder.Services.AddEmsPortalHangfireServer(builder.Configuration);
+}
 
 // Clean Architecture composition root.
 builder.Services.AddApplication();
@@ -151,7 +156,7 @@ app.UseAuthorization();
 // Resolve the active tenant from the authenticated JWT and populate ITenantContext.
 app.UseMiddleware<TenantResolutionMiddleware>();
 
-// Propagate the active tenant into Hangfire job payloads at enqueue time.
+// Propagate the active tenant into Hangfire job payloads at enqueue time, and restore it when a job runs here.
 var httpContextAccessor = app.Services.GetRequiredService<IHttpContextAccessor>();
 GlobalJobFilters.Filters.Add(new TenantHangfireJobFilter(() =>
 {

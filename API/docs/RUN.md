@@ -115,9 +115,9 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/EmsPortal.Api --urls
 $env:ASPNETCORE_ENVIRONMENT="Development"; dotnet run --project src/EmsPortal.Api --urls http://localhost:5080
 ```
 
-### Worker (executes jobs)
+### Worker (optional)
 
-The API only **enqueues** jobs; the Worker runs them. Start it to actually process imports and recurring schedules.
+The API runs the Hangfire server itself by default (`Hangfire:ServerEnabled`), so the queued and recurring jobs need nothing else running. Under IIS keep the app pool Always On (Start Mode `AlwaysRunning`, Preload Enabled on the site) so the server is up without waiting for a request; a recycle re-queues any job it interrupts. Set `Hangfire:ServerEnabled` to `false` on the API and run the Worker instead to process jobs apart from the web process, for example as a Windows Service.
 
 ```bash
 dotnet run --project src/EmsPortal.Workers
@@ -201,7 +201,7 @@ IF DB_ID('EMS_Portal_Test') IS NULL CREATE DATABASE [EMS_Portal_Test];
 | `Cannot open database … login failed` | Connection string wrong, SQL not running, or the login lacks rights. For the test DB, pre-create it (section 8). |
 | `/scalar/v1` returns 404 | App is running in **Production**. Use the `http` launch profile or set `ASPNETCORE_ENVIRONMENT=Development`. |
 | Login returns 401 for the bootstrap admin | Seeder didn't run (a user already exists) or the `Bootstrap` password differs. Check the `Users` table / config. |
-| Triggered import stays `Created` | The **Worker isn't running** — start `EmsPortal.Workers`. |
+| A queued job never runs (an import stays `Created`, a client stays Queued) | No Hangfire server is up: `Hangfire:ServerEnabled` is off on the API and no `EmsPortal.Workers` is running. |
 | Port already in use | Pass a free port with `--urls http://localhost:<port>`. |
 | `dotnet --version` is not 9.x | Install the .NET 9 SDK; `global.json` pins it. |
 </content>

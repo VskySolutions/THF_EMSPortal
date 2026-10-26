@@ -31,8 +31,8 @@ The platform is three deployable containers sharing one SQL Server database:
 
 | Container | Project | Responsibility |
 |-----------|---------|----------------|
-| **Integration API** | `EmsPortal.Api` | HTTP entry point. Authenticates requests, triggers flows (enqueues Hangfire jobs), serves admin/tenant/user/auth endpoints, owns EF Core migrations. Never calls external systems directly. |
-| **Background Worker** | `EmsPortal.Workers` | Runs the Hangfire server. Executes recurring and enqueued integration jobs; the only container that calls Concur and Maconomy. |
+| **Integration API** | `EmsPortal.Api` | HTTP entry point. Authenticates requests, serves admin/tenant/user/auth endpoints, owns EF Core migrations, enqueues Hangfire jobs and, by default, runs them too (`Hangfire:ServerEnabled`). |
+| **Background Worker** | `EmsPortal.Workers` | Optional. Runs the same Hangfire server apart from the web process, for a deployment that switches `Hangfire:ServerEnabled` off on the API. |
 | **MCP Server** | `EmsPortal.McpServer` | Host placeholder for the Model Context Protocol surface (AI-agent access). |
 
 Layering follows Clean Architecture — dependencies point inward:
@@ -136,7 +136,7 @@ The **API** owns schema migrations and seeds a bootstrap Super Admin on first ru
 # Terminal 1 — API (applies migrations + seeds, serves HTTP)
 dotnet run --project src/EmsPortal.Api --urls http://localhost:5080
 
-# Terminal 2 — Worker (Hangfire server: executes jobs)
+# Terminal 2 — optional: the Worker, only when the API's Hangfire:ServerEnabled is false
 dotnet run --project src/EmsPortal.Workers
 ```
 
