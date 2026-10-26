@@ -387,9 +387,10 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+// Draft is preselected for a reader who has never changed or cleared these shortcuts.
 useFilterMemory("rems-partner", {
   ownership, status: toRef(filters, "status"), emsFormState: toRef(filters, "emsFormState")
-});
+}, { status: REMS_STATUS.DRAFT });
 
 // The column chips plus one per standalone filter, so everything narrowing the list is visible in the
 // same place and removable the same way.

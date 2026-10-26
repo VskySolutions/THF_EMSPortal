@@ -385,8 +385,7 @@ const ADDRESS_HINTS = {
     "place you are invoiced at."
 };
 
-// The grid every address block on this form uses, so a client reads the same shape whether they are telling
-// us where they live or where the invoice goes.
+// The grid the physical and mailing blocks share; the billing block below has its own.
 const ADDRESS_COLS = {
   country: "col-12 col-sm-4",
   state: "col-12 col-sm-4",
@@ -396,14 +395,20 @@ const ADDRESS_COLS = {
   postalCode: "col-12 col-sm-4 col-md-3"
 };
 
-// The billing block adds the five boxes saying who the invoice is for, and they LEAD it.
+// The billing block's grid as designed: who the invoice is for on two rows, then where it goes. Full
+// width on a phone, these widths from the sm breakpoint up.
 const BILLING_COLS = {
-  ...ADDRESS_COLS,
-  firstName: "col-12 col-sm-6 col-md-3",
-  lastName: "col-8 col-sm-4 col-md-3",
-  suffix: "col-4 col-sm-2 col-md-2",
-  email: "col-12 col-md-4",
-  phone: "col-12 col-sm-6 col-md-4"
+  firstName: "col-12 col-sm-5",
+  lastName: "col-8 col-sm-5",
+  suffix: "col-4 col-sm-2",
+  email: "col-12 col-sm-6",
+  phone: "col-12 col-sm-6",
+  country: "col-12 col-sm-4",
+  state: "col-12 col-sm-4",
+  city: "col-12 col-sm-4",
+  addressLine1: "col-12 col-sm-6",
+  addressLine2: "col-12 col-sm-6",
+  postalCode: "col-12 col-sm-2"
 };
 
 const isIndividual = computed(() => props.entityType === "individual");
