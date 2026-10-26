@@ -309,7 +309,12 @@ public sealed class RemsFormController : ControllerBase
         {
             return FormConflict(noAddress.Code, noAddress.Reason);
         }
-        var email = Normalize(rems.CustomerEmail)!;
+        // Where it goes: the To field as the sender left it, or the address on file.
+        var (recipients, badRecipient) = ResolveRecipients(request, Normalize(rems.CustomerEmail)!);
+        if (badRecipient is not null)
+        {
+            return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", badRecipient));
+        }
 
         // Commission is optional; where anyone is named, the split has to be settled before the client is written to.
         var engagement = await _engagements.GetByRemsIdAsync(remsId, cancellationToken);
@@ -328,9 +333,10 @@ public sealed class RemsFormController : ControllerBase
         // The sender's wording with every placeholder filled in, so the log and the email say the same thing.
         var (subject, body) = await ComposeAsync(request, rems, formLink, cancellationToken);
 
-        // Mint a stable outbound Message-ID and store it as the ProviderMessageId on the Sent event so a
-        // delivery provider can echo it back on delivery/open/failed callbacks that WO-121 ingests.
-        var messageId = BuildOutboundMessageId();
+        // Mint a stable outbound Message-ID per recipient and store it as the ProviderMessageId on their
+        // Sent event so a delivery provider can echo it back on delivery/open/failed callbacks that WO-121
+        // ingests. One message each: every address gets its own delivery and open status.
+        var messages = recipients.Select(to => (To: to, MessageId: BuildOutboundMessageId())).ToList();
 
         form.Status = RemsFormStatus.Sent;
         form.SentOnUtc = now;
@@ -346,20 +352,23 @@ public sealed class RemsFormController : ControllerBase
             _rems.Update(rems);
         }
 
-        // Record the Sent delivery event (later delivery/open/failed events are ingested by WO-121, matched
-        // to this row by ProviderMessageId).
-        await _forms.AddEmailEventAsync(new REMSFormEmailEvent
+        // Record a Sent delivery event per recipient (later delivery/open/failed events are ingested by
+        // WO-121, matched to their row by ProviderMessageId).
+        foreach (var (to, messageId) in messages)
         {
-            Id = Guid.NewGuid(),
-            REMSFormId = form.Id,
-            ProviderMessageId = messageId,
-            EventType = RemsFormEmailEventType.Sent,
-            RecipientEmail = email,
-            OccurredOnUtc = now,
-            // What the client is about to read, kept alongside the fact that we sent it.
-            Subject = subject,
-            Body = body,
-        }, cancellationToken);
+            await _forms.AddEmailEventAsync(new REMSFormEmailEvent
+            {
+                Id = Guid.NewGuid(),
+                REMSFormId = form.Id,
+                ProviderMessageId = messageId,
+                EventType = RemsFormEmailEventType.Sent,
+                RecipientEmail = to,
+                OccurredOnUtc = now,
+                // What the client is about to read, kept alongside the fact that we sent it.
+                Subject = subject,
+                Body = body,
+            }, cancellationToken);
+        }
 
         await _activity.WriteAsync(new CreateActivityEventDto(EntityType.Rems, remsId, ActivityEventTypes.RemsFormSent), cancellationToken);
         // Sender, CSE, and whoever raised the request — the requester is tracking their client's onboarding
@@ -371,10 +380,12 @@ public sealed class RemsFormController : ControllerBase
         }
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Enqueue the email only after the Sent state is durably persisted.
-        _emailNotifier.SendComposedFormLink(
-            tenantId, email, new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber),
-            subject, body, messageId);
+        // Enqueue the emails only after the Sent state is durably persisted.
+        var linkEmail = new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber);
+        foreach (var (to, messageId) in messages)
+        {
+            _emailNotifier.SendComposedFormLink(tenantId, to, linkEmail, subject, body, messageId);
+        }
 
         var refreshed = await _forms.GetByRemsIdAsync(remsId, cancellationToken) ?? form;
         var screen = await BuildScreenAsync(rems, refreshed, cancellationToken);
@@ -429,22 +440,31 @@ public sealed class RemsFormController : ControllerBase
         }
 
         var (rems, form) = (context.Rems!, context.Form!);
-        var email = Normalize(rems.CustomerEmail)!; // guaranteed by LoadRemindableAsync
-        var formLink = BuildFormLink(form.InviteCode);
-        var messageId = BuildOutboundMessageId();
-        var (subject, body) = await ComposeAsync(request, rems, formLink, cancellationToken);
-
-        await _forms.AddEmailEventAsync(new REMSFormEmailEvent
+        // The address on file is guaranteed by LoadRemindableAsync; the sender may still have changed the To field.
+        var (recipients, badRecipient) = ResolveRecipients(request, Normalize(rems.CustomerEmail)!);
+        if (badRecipient is not null)
         {
-            Id = Guid.NewGuid(),
-            REMSFormId = form.Id,
-            ProviderMessageId = messageId,
-            EventType = RemsFormEmailEventType.Reminder,
-            RecipientEmail = email,
-            OccurredOnUtc = DateTime.UtcNow,
-            Subject = subject,
-            Body = body,
-        }, cancellationToken);
+            return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", badRecipient));
+        }
+        var formLink = BuildFormLink(form.InviteCode);
+        var messages = recipients.Select(to => (To: to, MessageId: BuildOutboundMessageId())).ToList();
+        var (subject, body) = await ComposeAsync(request, rems, formLink, cancellationToken);
+        var now = DateTime.UtcNow;
+
+        foreach (var (to, messageId) in messages)
+        {
+            await _forms.AddEmailEventAsync(new REMSFormEmailEvent
+            {
+                Id = Guid.NewGuid(),
+                REMSFormId = form.Id,
+                ProviderMessageId = messageId,
+                EventType = RemsFormEmailEventType.Reminder,
+                RecipientEmail = to,
+                OccurredOnUtc = now,
+                Subject = subject,
+                Body = body,
+            }, cancellationToken);
+        }
 
         await _activity.WriteAsync(
             new CreateActivityEventDto(EntityType.Rems, remsId, ActivityEventTypes.RemsFormReminderSent), cancellationToken);
@@ -452,9 +472,11 @@ public sealed class RemsFormController : ControllerBase
 
         // Enqueued after the event row is durable, as the first send does. Best-effort on a Hangfire
         // worker; a delivery failure must not roll back the record that we tried.
-        _emailNotifier.SendComposedFormReminder(
-            tenantId, email, new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber),
-            subject, body, messageId);
+        var linkEmail = new RemsFormLinkEmail(rems.ClientDisplayName, formLink, rems.REMSNumber);
+        foreach (var (to, messageId) in messages)
+        {
+            _emailNotifier.SendComposedFormReminder(tenantId, to, linkEmail, subject, body, messageId);
+        }
 
         // Nobody in-app is notified: this is the admin chasing the client, and telling the team each time
         // somebody clicks Remind would be noise about their own action.
@@ -795,6 +817,41 @@ public sealed class RemsFormController : ControllerBase
     {
         var rendered = _templates.Render(subject ?? string.Empty, body ?? string.Empty, model);
         return (subject is null ? null : rendered.Subject, body is null ? null : rendered.Body);
+    }
+
+    /// <summary>At most this many addresses on one send: a client and their people, not a mailing list.</summary>
+    private const int MaxRecipients = 10;
+
+    /// <summary>
+    /// Where a send goes: the To field as the sender left it, or the address on file where they left it
+    /// alone. Each address must be one valid mailbox; duplicates are dropped and the first bad address is
+    /// named, since the sender is about to be told the email went.
+    /// </summary>
+    private static (IReadOnlyList<string> Recipients, string? Error) ResolveRecipients(
+        SendRemsFormRequest? request, string onFile)
+    {
+        var recipients = new List<string>();
+        foreach (var entry in request?.Recipients ?? [])
+        {
+            if (Normalize(entry) is not { } address)
+            {
+                continue;
+            }
+            if (!System.Net.Mail.MailAddress.TryCreate(address, out _) || address.IndexOfAny([' ', ',', ';']) >= 0)
+            {
+                return (Array.Empty<string>(), $"\"{address}\" is not a valid email address.");
+            }
+            if (!recipients.Contains(address, StringComparer.OrdinalIgnoreCase))
+            {
+                recipients.Add(address);
+            }
+        }
+
+        if (recipients.Count > MaxRecipients)
+        {
+            return (Array.Empty<string>(), $"At most {MaxRecipients} addresses can be on one send.");
+        }
+        return (recipients.Count == 0 ? new List<string> { onFile } : recipients, null);
     }
 
     private string BuildOutboundMessageId()

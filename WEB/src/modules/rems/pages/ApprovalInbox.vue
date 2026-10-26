@@ -106,6 +106,21 @@
         <q-td :props="cell">{{ fmt.formatDateTime(cell.row.sentOnUtc) }}</q-td>
       </template>
 
+      <!-- Whether the approved client has reached Maconomy. Blank until the request is approved and has a
+           brand-new client to post. Once it has, the cell is the customer number alone — what somebody
+           will type into Maconomy — with when it got there on the tooltip; the badge is kept for the
+           states on the way. -->
+      <template #body-cell-maconomySync="cell">
+        <q-td :props="cell">
+          <q-badge v-if="syncedNumber(cell.row)" color="positive" text-color="white" class="text-weight-medium">
+            <q-icon name="o_cloud_done" size="13px" class="q-mr-xs" />{{ syncedNumber(cell.row) }}
+            <q-tooltip :delay="300">{{ syncedTooltip(cell.row) }}</q-tooltip>
+          </q-badge>
+          <maconomy-sync-chip v-else-if="cell.row.maconomySync" :sync="cell.row.maconomySync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- A LINK, not a click handler: the task is a place, so the button is written as a route and
@@ -115,6 +130,14 @@
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
             <q-tooltip>Conversation</q-tooltip>
+          </q-btn>
+          <!-- Sync now: post the approved client to Maconomy. Offered once the request is approved, while
+               the client is not in Maconomy yet or the last attempt failed, and only with the sync on. -->
+          <q-btn
+            v-if="cell.row.maconomySync?.canSyncNow" type="a" flat round dense color="primary" icon="o_cloud_upload"
+            :loading="syncingRems === cell.row.remsId" :disable="!!syncingRems" @click.stop="syncNow(cell.row)"
+          >
+            <q-tooltip>Sync now — post this client to Maconomy</q-tooltip>
           </q-btn>
         </q-td>
       </template>
@@ -156,6 +179,8 @@ import AppDataTable from "components/common/AppDataTable.vue";
 import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
 import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
+import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
+import { maconomySyncLabel } from "modules/rems/maconomySync";
 
 const router = useRouter();
 const notify = useNotify();
@@ -169,6 +194,18 @@ const {
 // which is "Partially Approved" while some but not all approvers have signed.
 const roundMeta = (row) =>
   roundStatusOption(row?.roundStatus, row?.approvedCount || 0, row?.approverCount || 0);
+
+// ---- Maconomy ----
+// Declared BEFORE the columns: a column's field function reads these the moment the table is set up.
+// The customer number once the client is in Maconomy (created or linked), else null.
+const syncedNumber = (row) => {
+  const s = row?.maconomySync;
+  return s && (s.status === "synced" || s.status === "linked") && s.customerNumber ? s.customerNumber : null;
+};
+const syncedTooltip = (row) => {
+  const when = row?.maconomySync?.syncedOnUtc;
+  return when ? `Synced on ${fmt.formatDateTime(when)}` : "Synced";
+};
 
 // The CSE filter offers the CSEs on the caller's own inbox: an approver may hold no REMS permission, so
 // the tenant's CSE directory is not theirs to read.
@@ -196,6 +233,8 @@ const columns = computed(() => [
   // On by default: an approver deciding on a round needs to know who to ask about it, and the CSE is that
   // person.
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
+  // Whether the approved client has reached Maconomy; Sync now sits in the Actions column beside it.
+  { name: "maconomySync", label: "Maconomy", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the
   // reader's own decision below is not.
   {
@@ -302,6 +341,29 @@ const progressHint = (row) => {
 const taskRoute = (row) => ({ name: "rems_approval_task", params: { taskId: row.taskId } });
 // Still a push for the ROW click, which has nowhere to hang an href.
 const openTask = (row) => router.push(taskRoute(row));
+
+// ---- Sync now ----
+// One attempt, inline. A failed post is a result with a reason, not an error; only a refusal (sync off,
+// not eligible, already running) throws. The list is re-read either way, so the row says what happened.
+const syncingRems = ref(null);
+const syncNow = async (row) => {
+  syncingRems.value = row.remsId;
+  try {
+    const result = await remsApi.maconomySyncNow(row.remsId);
+    if (result?.status === "failed") {
+      notify.error(`${row.remsNumber}: Maconomy sync failed. ${result.failureReason || ""}`.trim());
+    } else if (result?.status === "linked") {
+      notify.success(`${row.remsNumber}: linked to the existing Maconomy customer ${result.customerNumber}.`);
+    } else {
+      notify.success(`${row.remsNumber}: Maconomy customer ${result?.customerNumber} created.`);
+    }
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    syncingRems.value = null;
+    load();
+  }
+};
 
 // ---- Conversation ----
 // The REQUEST's thread, the same one the task detail shows under the checklist — so an approver can raise

@@ -35,6 +35,15 @@ public sealed record SaveMaconomyConnectionInput(
     int DefaultLimit,
     bool IsEnabled);
 
+/// <summary>A record to create in a container: the card fields the instance is opened with, and the values written.</summary>
+public sealed record MaconomyCreateRequest(string Container, IReadOnlyList<string> Fields, IReadOnlyDictionary<string, string?> Values);
+
+/// <summary>The record Maconomy created, as field name → value text.</summary>
+public sealed record MaconomyCreatedRecord(IReadOnlyDictionary<string, string?> Data);
+
+/// <summary>What the portal posts as a new customer. A null field is left to Maconomy's defaults.</summary>
+public sealed record MaconomyNewCustomer(string Name, string? Email, string? Phone, string? EntityTypeNumber, string? IndustryNumber);
+
 /// <summary>Why a call to Maconomy did not produce an answer.</summary>
 public enum MaconomyFailure
 {
@@ -49,6 +58,9 @@ public enum MaconomyFailure
 
     /// <summary>Maconomy could not be reached, took too long, or answered something other than success.</summary>
     Unavailable,
+
+    /// <summary>Maconomy understood a write and refused the record: a validation message, a field it does not know.</summary>
+    Rejected,
 }
 
 /// <summary>A call to Maconomy that did not produce an answer, and why.</summary>

@@ -1,4 +1,5 @@
 using EmsPortal.Api.Models.Maconomy;
+using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.Persistence;
@@ -35,19 +36,161 @@ public sealed class MaconomyController : ControllerBase
     private readonly IMaconomySessionManager _session;
     private readonly ITenantRepository _tenants;
     private readonly IUserRepository _users;
+    private readonly IMaconomyCustomerSyncService _customerSync;
 
     public MaconomyController(
         IMaconomyConnectionService connections,
         IMaconomyCustomerService customers,
         IMaconomySessionManager session,
         ITenantRepository tenants,
-        IUserRepository users)
+        IUserRepository users,
+        IMaconomyCustomerSyncService customerSync)
     {
         _connections = connections;
         _customers = customers;
         _session = session;
         _tenants = tenants;
         _users = users;
+        _customerSync = customerSync;
+    }
+
+    // ---- The customer sync ----
+    //
+    // ALWAYS the caller's own tenant. Unlike the connection above, these take no ?tenantId= override: the
+    // rows are REMS requests, which the caller only ever sees for the tenant they are signed in to, and a
+    // Super Admin with the page scoped to another tenant was shown that tenant's requests here (user,
+    // 22 Oct 2026).
+
+    /// <summary>The Customer sync card: whether it is on, who last moved it and when, and the counts.</summary>
+    [HttpGet("customer-sync")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyCustomerSyncOverviewResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCustomerSync(CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        return Ok(ApiResponseFactory.Success(await CustomerSyncOverviewAsync(tenant, cancellationToken), "Customer sync retrieved."));
+    }
+
+    /// <summary>Start posting approved new clients. Posts nothing by itself: what is already waiting is synced by hand.</summary>
+    [HttpPost("customer-sync/start")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyCustomerSyncOverviewResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public Task<IActionResult> StartCustomerSync(CancellationToken cancellationToken)
+        => SetCustomerSyncAsync(enabled: true, cancellationToken);
+
+    /// <summary>Stop posting. A job already running finishes; requests approved from now on are recorded as Not synced.</summary>
+    [HttpPost("customer-sync/stop")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyCustomerSyncOverviewResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public Task<IActionResult> StopCustomerSync(CancellationToken cancellationToken)
+        => SetCustomerSyncAsync(enabled: false, cancellationToken);
+
+    /// <summary>The requests an admin may want to Sync now: failed, not synced, and attempts the portal lost track of.</summary>
+    [HttpGet("customer-sync/unsynced")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<MaconomyUnsyncedRow>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListUnsynced(CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+
+        IReadOnlyList<MaconomyUnsyncedRow> rows = (await _customerSync.ListUnsyncedAsync(tenant, cancellationToken))
+            .Select(s =>
+            {
+                var stale = _customerSync.IsStale(s);
+                return new MaconomyUnsyncedRow(
+                    s.Id, s.REMSId, s.Rems?.REMSNumber ?? string.Empty, s.Rems?.ClientDisplayName ?? string.Empty, s.Rems?.CustomerEmail,
+                    RemsMaconomySyncViews.StatusOf(s, stale), stale ? RemsMaconomySyncViews.StaleReason : s.FailureReason,
+                    s.Attempts, s.LastAttemptOnUtc, s.CreatedOnUtc);
+            })
+            .ToList();
+        return Ok(ApiResponseFactory.Success(rows, $"{rows.Count} request(s) waiting."));
+    }
+
+    /// <summary>Sync now from the settings page: one attempt, inline, in the caller's own tenant.</summary>
+    [HttpPost("customer-sync/{remsId:guid}/run")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<RemsMaconomySyncView>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunCustomerSync(Guid remsId, CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        try
+        {
+            var sync = await _customerSync.SyncNowAsync(remsId, tenant, me, cancellationToken);
+            var view = RemsMaconomySyncViews.From(sync, _customerSync.IsStale(sync), enabled: true, canManage: true);
+            return Ok(ApiResponseFactory.Success(view, RemsMaconomySyncController.MessageFor(view)));
+        }
+        catch (MaconomyCustomerSyncException ex)
+        {
+            return RemsMaconomySyncController.RefusalFor(this, ex);
+        }
+    }
+
+    /// <summary>The tenant the caller is signed in to, or the 403 that says they have none.</summary>
+    private (Guid TenantId, IActionResult? Error) OwnTenant()
+        => User.GetActiveTenantId() is { } tenant
+            ? (tenant, null)
+            : (Guid.Empty, StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden("No active tenant for the caller.")));
+
+    private async Task<IActionResult> SetCustomerSyncAsync(bool enabled, CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        try
+        {
+            await _customerSync.SetEnabledAsync(tenant, enabled, me, cancellationToken);
+        }
+        catch (MaconomyCustomerSyncException ex)
+        {
+            return RemsMaconomySyncController.RefusalFor(this, ex);
+        }
+        return Ok(ApiResponseFactory.Success(
+            await CustomerSyncOverviewAsync(tenant, cancellationToken),
+            enabled
+                ? "Customer sync started. Approvals from now on post their new client; anything already waiting is synced by hand."
+                : "Customer sync stopped."));
+    }
+
+    private async Task<MaconomyCustomerSyncOverviewResponse> CustomerSyncOverviewAsync(Guid tenant, CancellationToken cancellationToken)
+    {
+        var overview = await _customerSync.GetOverviewAsync(tenant, cancellationToken);
+        string? changedBy = null;
+        if (overview.ChangedById is { } changedById)
+        {
+            var names = await _users.GetFullNamesAsync(new[] { changedById }, cancellationToken);
+            names.TryGetValue(changedById, out changedBy);
+        }
+        return new MaconomyCustomerSyncOverviewResponse(
+            overview.Connected, overview.Enabled, overview.ChangedOnUtc, changedBy,
+            overview.Synced, overview.Linked, overview.Failed, overview.NotSynced, overview.Pending);
     }
 
     // ---- The connection ----

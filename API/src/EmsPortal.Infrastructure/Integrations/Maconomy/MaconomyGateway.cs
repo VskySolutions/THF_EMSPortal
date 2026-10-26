@@ -17,6 +17,7 @@ internal sealed class MaconomyGateway : IMaconomyGateway
     /// <summary>Named HttpClient (registered in DependencyInjection, with the configured timeout).</summary>
     public const string HttpClientName = "Maconomy";
     private const string ReconnectHeader = "Maconomy-Reconnect";
+    private const string ConcurrencyHeader = "Maconomy-Concurrency-Control";
     private const string AuthenticationAccept = "application/vnd.deltek.maconomy.authentication+json; charset=utf-8; version=3.0";
     private const string ContainersAccept = "application/vnd.deltek.maconomy.containers+json; charset=utf-8; version=9.0";
     private const string ContainersContentType = "application/vnd.deltek.maconomy.containers+json; charset=UTF-8; version=9.0";
@@ -133,6 +134,200 @@ internal sealed class MaconomyGateway : IMaconomyGateway
         JsonValueKind.False => "false",
         _ => value.GetRawText(),
     };
+
+    public async Task<MaconomyCreatedRecord> CreateAsync(
+        MaconomyEndpoint endpoint,
+        string reconnectToken,
+        MaconomyCreateRequest create,
+        CancellationToken cancellationToken = default)
+    {
+        // The sequence THF's Maconomy team gave (22 Oct 2026), spelt out rather than discovered from links:
+        //   1. POST .../{container}/instances, naming the card fields          → containerInstanceId
+        //   2. POST .../instances/{id}/data/panes/card/init with {}            → a blank template
+        //   3. POST .../instances/{id}/data/panes/card with {"data": {...}}    → the created record
+        // Each reply's Maconomy-Concurrency-Control value goes on the next request. "init-create" is a
+        // different action — it validated and refused an empty record — and is not used.
+        var what = $"{create.Container} create";
+        var instancesUrl = $"{Root(endpoint)}/containers/{Segment(endpoint.InstanceCode)}/{ContainerSegment(create.Container)}/instances";
+        string? instanceId = null;
+        try
+        {
+            var (instance, concurrency) = await PostContainersAsync(
+                reconnectToken, instancesUrl, new { panes = new { card = new { fields = create.Fields } } }, null,
+                $"{create.Container} instance", cancellationToken);
+            using (instance)
+            {
+                instanceId = Text(instance.RootElement, "meta", "containerInstanceId");
+            }
+            if (string.IsNullOrWhiteSpace(instanceId))
+            {
+                throw new MaconomyException(
+                    MaconomyFailure.Unavailable, $"Maconomy opened a {create.Container} instance but its reply named no containerInstanceId.");
+            }
+
+            var paneUrl = $"{instancesUrl}/{Segment(instanceId)}/data/panes/card";
+            var (template, templateConcurrency) = await PostContainersAsync(
+                reconnectToken, $"{paneUrl}/init", new { }, concurrency, $"{create.Container} init", cancellationToken);
+            template.Dispose();
+
+            var (created, _) = await PostContainersAsync(
+                reconnectToken, paneUrl, new { data = create.Values }, templateConcurrency, what, cancellationToken);
+            using (created)
+            {
+                var data = FindRecordData(created.RootElement, create.Fields)
+                    ?? throw new MaconomyException(MaconomyFailure.Unavailable, $"Maconomy accepted the {what} but its reply held no record.");
+                return new MaconomyCreatedRecord(data);
+            }
+        }
+        finally
+        {
+            if (instanceId is { Length: > 0 })
+            {
+                await DeleteInstanceQuietlyAsync(reconnectToken, $"{instancesUrl}/{Segment(instanceId)}", cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>One POST in the containers dialect: the reply parsed, with the concurrency value to send next.</summary>
+    private async Task<(JsonDocument Reply, string? Concurrency)> PostContainersAsync(
+        string reconnectToken, string url, object? body, string? concurrency, string what, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("X-Reconnect", reconnectToken);
+        request.Headers.TryAddWithoutValidation("Accept", ContainersAccept);
+        if (!string.IsNullOrEmpty(concurrency))
+        {
+            request.Headers.TryAddWithoutValidation(ConcurrencyHeader, concurrency);
+        }
+        if (body is not null)
+        {
+            request.Content = new StringContent(JsonSerializer.Serialize(body, BodyOptions), Encoding.UTF8);
+            request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(ContainersContentType);
+        }
+
+        using var response = await SendAsync(request, what, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            throw new MaconomyException(MaconomyFailure.TokenRejected, $"Maconomy refused the reconnect token ({(int)response.StatusCode}).");
+        }
+        if ((int)response.StatusCode is >= 400 and < 500)
+        {
+            // Maconomy understood and said no: its message is the one to show.
+            var said = ErrorMessageOf(await response.Content.ReadAsStringAsync(cancellationToken));
+            _logger.LogWarning("Maconomy refused the {What} with {StatusCode}: {Message}", what, (int)response.StatusCode, said ?? "(no message)");
+            throw new MaconomyException(
+                MaconomyFailure.Rejected,
+                $"Maconomy refused the {what}{(said is null ? $" ({(int)response.StatusCode})." : $": {said}")}");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await UnexpectedAsync(response, what, cancellationToken);
+        }
+
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+        JsonDocument reply;
+        try
+        {
+            reply = JsonDocument.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text);
+        }
+        catch (JsonException ex)
+        {
+            throw new MaconomyException(MaconomyFailure.Unavailable, $"Maconomy's reply to the {what} was not JSON.", ex);
+        }
+        var next = response.Headers.TryGetValues(ConcurrencyHeader, out var values)
+            ? values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim() ?? concurrency
+            : concurrency;
+        return (reply, next);
+    }
+
+    // A container instance left open holds a slot on Maconomy until it expires; nothing rides on the delete.
+    private async Task DeleteInstanceQuietlyAsync(string reconnectToken, string url, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("X-Reconnect", reconnectToken);
+            request.Headers.TryAddWithoutValidation("Accept", ContainersAccept);
+            using var response = await _httpClientFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Maconomy container instance at {Url} was not released.", url);
+        }
+    }
+
+    // A container name such as "dpl:customercard" keeps its colon: that is how Maconomy's own examples
+    // spell the path, and an escaped one may not be read the same way.
+    private static string ContainerSegment(string container) => Segment(container).Replace("%3A", ":", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The created record: <c>panes.card.records[0].data</c> where it is, else the first <c>data</c> object naming a field asked for.</summary>
+    private static IReadOnlyDictionary<string, string?>? FindRecordData(JsonElement root, IReadOnlyList<string> fields)
+    {
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("panes", out var panes) && panes.ValueKind == JsonValueKind.Object
+            && panes.TryGetProperty("card", out var card) && card.ValueKind == JsonValueKind.Object
+            && card.TryGetProperty("records", out var records) && records.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var record in records.EnumerateArray())
+            {
+                if (record.ValueKind == JsonValueKind.Object
+                    && record.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                {
+                    return ToRecord(data);
+                }
+            }
+        }
+        return FindData(root, fields);
+    }
+
+    private static IReadOnlyDictionary<string, string?>? FindData(JsonElement element, IReadOnlyList<string> fields)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                if (element.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object
+                    && fields.Any(f => data.TryGetProperty(f, out _)))
+                {
+                    return ToRecord(data);
+                }
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (FindData(property.Value, fields) is { } found)
+                    {
+                        return found;
+                    }
+                }
+                return null;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (FindData(item, fields) is { } found)
+                    {
+                        return found;
+                    }
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string?> ToRecord(JsonElement data)
+        => data.EnumerateObject().ToDictionary(p => p.Name, p => ValueText(p.Value), StringComparer.OrdinalIgnoreCase);
+
+    private static string? Text(JsonElement element, params string[] path)
+    {
+        var current = element;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out var next))
+            {
+                return null;
+            }
+            current = next;
+        }
+        return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
+    }
 
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, string what, CancellationToken cancellationToken)
     {

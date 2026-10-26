@@ -50,4 +50,34 @@ public sealed class MaconomyOptions
 
     /// <summary>Row cap for that one read. A Maconomy holding more is searched live instead.</summary>
     public int PreloadMaxRows { get; set; } = 50000;
+
+    /// <summary>The customer card as the customer sync writes it: the container, and the field each value goes in.</summary>
+    public MaconomyCustomerCardOptions CustomerCard { get; set; } = new();
+
+    /// <summary>Minutes after which a sync row still Syncing is taken to be an attempt the portal lost track of.</summary>
+    public int CustomerSyncStaleMinutes { get; set; } = 10;
+}
+
+/// <summary>
+/// The customer card as the customer sync WRITES it. The container is the one THF's Maconomy team named
+/// for creating customers (<c>dpl:customercard</c>, 22 Oct 2026); reads keep using <c>customercard</c>.
+/// The specification popups ARE the <c>specification1name</c> … <c>specification6name</c> fields: the
+/// instance refused <c>specification6</c> as a card field. Configurable because every one of these is
+/// confirmed against the instance, not taken from documentation.
+/// </summary>
+public sealed class MaconomyCustomerCardOptions
+{
+    public string Container { get; set; } = "dpl:customercard";
+
+    public string NumberField { get; set; } = "customernumber";
+
+    public string NameField { get; set; } = "name1";
+
+    public string EmailField { get; set; } = "electronicmailaddress";
+
+    public string PhoneField { get; set; } = "telephone";
+
+    public string EntityTypeField { get; set; } = "specification6name";
+
+    public string IndustryField { get; set; } = "specification1name";
 }

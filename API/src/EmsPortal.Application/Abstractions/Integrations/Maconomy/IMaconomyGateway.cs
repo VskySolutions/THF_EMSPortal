@@ -24,4 +24,16 @@ public interface IMaconomyGateway
         string container,
         MaconomyFilterRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a record: opens a container instance, follows its init-create link for a template, posts
+    /// the values to the template's create link, each step carrying <c>Maconomy-Concurrency-Control</c>.
+    /// Throws <see cref="MaconomyException"/> with <see cref="MaconomyFailure.Rejected"/> when Maconomy
+    /// refuses the record, with its own message.
+    /// </summary>
+    Task<MaconomyCreatedRecord> CreateAsync(
+        MaconomyEndpoint endpoint,
+        string reconnectToken,
+        MaconomyCreateRequest create,
+        CancellationToken cancellationToken = default);
 }

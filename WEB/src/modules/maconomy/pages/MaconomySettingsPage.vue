@@ -117,6 +117,86 @@
         </q-card>
       </div>
     </div>
+
+    <!-- The customer sync: a fully approved Brand New Client request posts its client to Maconomy. It is
+         standalone from approval, so what failed, or was approved while it was off, waits here for a hand.
+         Always the caller's OWN tenant: the scope control above moves the connection, not this. -->
+    <q-card flat bordered class="q-mt-md">
+      <q-card-section class="q-py-sm text-subtitle2 text-primary row items-center">
+        <q-icon name="o_cloud_upload" size="18px" class="q-mr-xs" />Customer sync
+        <span v-if="canChooseTenant" class="text-caption text-grey-7 q-ml-sm">— your own tenant</span>
+        <q-space />
+        <q-badge :color="sync.enabled ? 'positive' : 'grey-6'">{{ sync.enabled ? "On" : "Off" }}</q-badge>
+      </q-card-section>
+      <q-separator />
+      <q-card-section>
+        <p class="text-body2 text-grey-8 q-mb-xs">
+          When on, a Brand New Client request that is fully approved posts its client to Maconomy as a new
+          customer, with the number left to Maconomy's series and written back onto the client. Starting it
+          posts nothing by itself: requests approved while it was off, and attempts that failed, are listed
+          below for syncing by hand.
+        </p>
+        <div v-if="sync.changedOnUtc" class="text-caption text-grey-7 q-mb-md">
+          {{ sync.enabled ? "Started" : "Stopped" }} {{ fmt.formatDateTime(sync.changedOnUtc) }}{{ sync.changedByName ? ` by ${sync.changedByName}` : "" }}.
+        </div>
+
+        <div class="row q-col-gutter-md q-mb-md">
+          <div v-for="tile in syncTiles" :key="tile.label" class="col-6 col-sm-3">
+            <div class="text-h6">{{ tile.value }}</div>
+            <div class="text-caption text-grey-7">{{ tile.label }}</div>
+          </div>
+        </div>
+
+        <div class="text-subtitle2 q-mb-xs">Waiting for a hand</div>
+        <q-table
+          flat dense bordered :rows="unsynced" :columns="unsyncedColumns" row-key="remsId" :loading="syncLoading"
+          :pagination="{ rowsPerPage: 10 }" no-data-label="Nothing is waiting: every approved new client is in Maconomy."
+        >
+          <template #body-cell-remsNumber="cell">
+            <q-td :props="cell">
+              <router-link :to="{ name: 'rems_request', params: { id: cell.row.remsId } }" class="text-primary">
+                {{ cell.row.remsNumber }}
+              </router-link>
+            </q-td>
+          </template>
+          <template #body-cell-status="cell">
+            <q-td :props="cell"><maconomy-sync-chip :sync="cell.row.status" /></q-td>
+          </template>
+          <template #body-cell-failureReason="cell">
+            <q-td :props="cell" class="ms-reason">{{ cell.row.failureReason || "—" }}</q-td>
+          </template>
+          <template #body-cell-lastAttemptOnUtc="cell">
+            <q-td :props="cell">{{ cell.row.lastAttemptOnUtc ? fmt.formatDateTime(cell.row.lastAttemptOnUtc) : "—" }}</q-td>
+          </template>
+          <template #body-cell-actions="cell">
+            <q-td :props="cell">
+              <q-btn
+                dense outline no-caps color="primary" icon="o_cloud_upload" label="Sync now"
+                :loading="syncingRems === cell.row.remsId" :disable="!sync.enabled || !!syncingRems" @click="syncNow(cell.row)"
+              >
+                <q-tooltip v-if="!sync.enabled">Start the customer sync first.</q-tooltip>
+              </q-btn>
+            </q-td>
+          </template>
+        </q-table>
+      </q-card-section>
+      <q-separator />
+      <q-card-actions class="q-gutter-sm bg-grey-1">
+        <q-space />
+        <q-btn outline no-caps color="grey-8" icon="o_refresh" label="Refresh" :loading="syncLoading" @click="loadSync" />
+        <q-btn
+          v-if="sync.enabled" outline no-caps color="negative" icon="o_pause" label="Stop"
+          :loading="syncToggling" :disable="busy" @click="setSync(false)"
+        />
+        <q-btn
+          v-else unelevated no-caps color="primary" icon="o_play_arrow" label="Start"
+          :loading="syncToggling" :disable="busy || !exists || !connection?.isEnabled" @click="setSync(true)"
+        >
+          <q-tooltip v-if="!exists">Save a connection first.</q-tooltip>
+          <q-tooltip v-else-if="!connection?.isEnabled">Enable the connection first.</q-tooltip>
+        </q-btn>
+      </q-card-actions>
+    </q-card>
   </q-page>
 </template>
 
@@ -134,6 +214,7 @@ import AppListHeader from "components/common/AppListHeader.vue";
 import AppTextField from "components/common/AppTextField.vue";
 import AppPasswordField from "components/common/AppPasswordField.vue";
 import MaconomyCustomerSelect from "modules/maconomy/components/MaconomyCustomerSelect.vue";
+import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
 
 const notify = useNotify();
 const { confirm } = useConfirm();
@@ -196,8 +277,9 @@ const load = async () => {
 };
 
 // The global scope switch announces itself; this page is not a list, so it listens for itself.
-onMounted(() => { load(); window.addEventListener("tenant-switched", load); });
-onUnmounted(() => window.removeEventListener("tenant-switched", load));
+const loadAll = () => { load(); loadSync(); };
+onMounted(() => { loadAll(); window.addEventListener("tenant-switched", loadAll); });
+onUnmounted(() => window.removeEventListener("tenant-switched", loadAll));
 
 const requiredRule = (v) => (v !== null && v !== undefined && String(v).trim() !== "") || "Required";
 const httpsRule = (v) => /^https:\/\/\S+$/i.test(String(v || "").trim()) || "Enter an https:// URL";
@@ -280,4 +362,99 @@ const remove = async () => {
 // ---- The lookup ----
 const customer = ref(null);
 const picked = ref(null);
+
+// ---- The customer sync ----
+const blankSync = () => ({
+  connected: false,
+  enabled: false,
+  changedOnUtc: null,
+  changedByName: null,
+  synced: 0,
+  linked: 0,
+  failed: 0,
+  notSynced: 0,
+  pending: 0
+});
+const sync = ref(blankSync());
+const unsynced = ref([]);
+const syncLoading = ref(false);
+const syncToggling = ref(false);
+// The request being synced by hand right now, so only its button spins.
+const syncingRems = ref(null);
+
+const syncTiles = computed(() => [
+  // Linked counts as synced: the client is in Maconomy either way.
+  { label: "In Maconomy", value: sync.value.synced + sync.value.linked },
+  { label: "Failed", value: sync.value.failed },
+  { label: "Not synced", value: sync.value.notSynced },
+  { label: "Queued", value: sync.value.pending }
+]);
+
+const unsyncedColumns = [
+  { name: "remsNumber", label: "Request", field: "remsNumber", align: "left" },
+  { name: "clientName", label: "Client", field: "clientName", align: "left" },
+  { name: "status", label: "Status", field: "status", align: "left" },
+  { name: "failureReason", label: "Reason", field: "failureReason", align: "left" },
+  { name: "lastAttemptOnUtc", label: "Last attempt", field: "lastAttemptOnUtc", align: "left" },
+  { name: "actions", label: "", field: "syncId", align: "right" }
+];
+
+const loadSync = async () => {
+  syncLoading.value = true;
+  try {
+    // The caller's OWN tenant, whatever the scope control above says: these are their REMS requests.
+    const [overview, rows] = await Promise.all([
+      maconomyApi.customerSync(),
+      maconomyApi.customerSyncUnsynced()
+    ]);
+    sync.value = overview || blankSync();
+    unsynced.value = rows || [];
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    syncLoading.value = false;
+  }
+};
+
+const setSync = async (enabled) => {
+  syncToggling.value = true;
+  try {
+    sync.value = await (enabled ? maconomyApi.startCustomerSync() : maconomyApi.stopCustomerSync());
+    notify.success(enabled
+      ? "Customer sync started. Approvals from now on post their new client; anything already waiting is synced by hand."
+      : "Customer sync stopped.");
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    syncToggling.value = false;
+  }
+};
+
+// One attempt, inline. A failed post comes back as a result, not an error, so it is read off the status.
+const syncNow = async (row) => {
+  syncingRems.value = row.remsId;
+  try {
+    const result = await maconomyApi.runCustomerSync(row.remsId);
+    if (result?.status === "failed") {
+      notify.error(`${row.remsNumber}: ${result.failureReason || "the sync failed."}`);
+    } else if (result?.status === "linked") {
+      notify.success(`${row.remsNumber}: linked to the existing Maconomy customer ${result.customerNumber}.`);
+    } else {
+      notify.success(`${row.remsNumber}: Maconomy customer ${result?.customerNumber} created.`);
+    }
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    syncingRems.value = null;
+    await loadSync();
+  }
+};
 </script>
+
+<style scoped>
+/* A Maconomy error message can be a sentence or three; the column wraps rather than widening the table. */
+.ms-reason {
+  max-width: 420px;
+  white-space: normal;
+}
+</style>

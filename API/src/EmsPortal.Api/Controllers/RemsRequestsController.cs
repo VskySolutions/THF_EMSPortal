@@ -58,6 +58,8 @@ public sealed class RemsRequestsController : ControllerBase
     private readonly INotificationDispatcher _notifications;
     private readonly IOptionCodeResolver _codes;
     private readonly IMaconomyClientDirectory _maconomy;
+    private readonly IRemsMaconomyCustomerSyncRepository _syncs;
+    private readonly IMaconomyCustomerSyncService _customerSync;
     /// <summary>Where the SPA is served from — the front half of the client's public form link.</summary>
     private readonly string _baseUrl;
 
@@ -74,8 +76,12 @@ public sealed class RemsRequestsController : ControllerBase
         INotificationDispatcher notifications,
         IOptionCodeResolver codes,
         IMaconomyClientDirectory maconomy,
+        IRemsMaconomyCustomerSyncRepository syncs,
+        IMaconomyCustomerSyncService customerSync,
         IOptions<AppOptions> appOptions)
     {
+        _syncs = syncs;
+        _customerSync = customerSync;
         _rems = rems;
         _engagements = engagements;
         _approvals = approvals;
@@ -146,8 +152,11 @@ public sealed class RemsRequestsController : ControllerBase
             cancellationToken);
         var formStates = (await _rems.GetFormStatesAsync(items.Select(r => r.Id).ToList(), cancellationToken))
             .ToDictionary(f => f.RemsId);
+        var syncs = await _syncs.ListByRemsIdsAsync(items.Select(r => r.Id).ToList(), cancellationToken);
+        var syncEnabled = await CustomerSyncEnabledAsync(cancellationToken);
+        var canSync = User.HasPermission(Permissions.RemsEngagementsManage);
 
-        var rows = items.Select(r => ToRow(r, me, privileged, names, formStates));
+        var rows = items.Select(r => ToRow(r, me, privileged, names, formStates, syncs, syncEnabled, canSync));
         return Ok(ApiResponseFactory.Paginated(rows, "REMS requests retrieved.", page, limit, total));
     }
 
@@ -1591,7 +1600,9 @@ public sealed class RemsRequestsController : ControllerBase
     private RemsRequestRow ToRow(
         REMS r, Guid me, bool privileged,
         IReadOnlyDictionary<Guid, string> names,
-        IReadOnlyDictionary<Guid, RemsFormStateInfo> forms)
+        IReadOnlyDictionary<Guid, RemsFormStateInfo> forms,
+        IReadOnlyDictionary<Guid, REMSMaconomyCustomerSync> syncs,
+        bool syncEnabled, bool canSync)
     {
         forms.TryGetValue(r.Id, out var form);
         var (ems, submission) = MapFormState(form);
@@ -1603,8 +1614,16 @@ public sealed class RemsRequestsController : ControllerBase
             form?.EntityType, ems, submission,
             NameOf(names, r.CreatedById), NameOf(names, r.UpdatedById), r.UpdatedOnUtc,
             ActionsFor(r, me, privileged),
-            r.ClientPerson?.MaconomyCustomerNumber);
+            r.ClientPerson?.MaconomyCustomerNumber,
+            MaconomySync: SyncViewFor(r, syncs.GetValueOrDefault(r.Id), syncEnabled, canSync));
     }
+
+    /// <summary>Whether the caller's tenant posts approved new clients to Maconomy right now.</summary>
+    private async Task<bool> CustomerSyncEnabledAsync(CancellationToken cancellationToken)
+        => User.GetActiveTenantId() is { } tenantId && await _customerSync.IsEnabledAsync(tenantId, cancellationToken);
+
+    private RemsMaconomySyncView? SyncViewFor(REMS r, REMSMaconomyCustomerSync? sync, bool syncEnabled, bool canSync)
+        => RemsMaconomySyncViews.For(r, sync, sync is not null && _customerSync.IsStale(sync), syncEnabled, canSync);
 
     private async Task<RemsRequestDetail> BuildDetailAsync(REMS rems, Guid me, bool privileged, CancellationToken cancellationToken)
     {
@@ -1629,6 +1648,10 @@ public sealed class RemsRequestsController : ControllerBase
         var client = rems.ClientPerson;
         var whole = client is null || client.IsOrganisation || client.IsMaconomyClient;
 
+        var sync = await _syncs.GetByRemsIdAsync(rems.Id, rems.TenantId, cancellationToken);
+        var maconomySync = SyncViewFor(
+            rems, sync, await CustomerSyncEnabledAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage));
+
         return new RemsRequestDetail(
             rems.Id, rems.REMSNumber, rems.Description, rems.ClientDisplayName,
             rems.ClientNameSuffix,
@@ -1644,7 +1667,8 @@ public sealed class RemsRequestsController : ControllerBase
             canSendBackToCse,
             ClientFormLink(form),
             client?.MaconomyCustomerNumber,
-            MaconomyUnavailable: client is { IsMaconomyClient: true, Maconomy: null });
+            MaconomyUnavailable: client is { IsMaconomyClient: true, Maconomy: null },
+            MaconomySync: maconomySync);
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>

@@ -7,6 +7,8 @@
           <!-- The row helper rather than the bare code, so a request nobody has picked up says so here
                exactly as it does in EMS Review instead of reading as though an admin is already on it. -->
           <app-option-badge v-if="request" :option="requestStatusOption(request)" />
+          <!-- Whether the approved client has reached Maconomy: a separate fact from the status beside it. -->
+          <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
 
           <!-- What the page is doing with what has been typed. -->
           <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
@@ -194,6 +196,13 @@
               <q-separator />
               <div class="rf-section__body">
                 <detail-grid :rows="clientRows" />
+                <!-- Posting the client to Maconomy. Standalone from the approval above it, so it has its own
+                     line and its own reason when it failed. Read-only here: Sync now lives on the Approvals
+                     list and the Maconomy settings page. Shown only on a request whose client is posted at all. -->
+                <div v-if="request?.maconomySync" class="rf-maconomy-sync q-mt-md">
+                  <maconomy-sync-chip :sync="request.maconomySync" />
+                  <span class="text-body2 text-grey-8">{{ maconomySyncNote }}</span>
+                </div>
                 <!-- The client's other businesses, and whether each has been turned into its own request
                      yet. -->
                 <additional-entities-panel
@@ -398,7 +407,7 @@
                 <engagement-commission
                   ref="commissionRef"
                   :engagement="setupEngagement" :recipient-options="cseOptions" :editable="canEditSetup"
-                  :excluded-recipient-ids="reservedCommissionIds"
+                  :reserved-recipients="reservedCommissionRecipients"
                   @change="markDirty('commission')"
                 />
               </q-tab-panel>
@@ -458,7 +467,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } 
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
 import { useNotify } from "composables/useNotify";
-import { formatDateOnly } from "composables/useDateFormat";
+import { formatDateOnly, useDateFormat } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import {
@@ -475,6 +484,7 @@ import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
 import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
 import DetailGrid from "modules/rems/components/DetailGrid.vue";
+import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
 import ClientInformationFields from "modules/rems/components/ClientInformationFields.vue";
 import AdditionalEntitiesPanel from "modules/rems/components/AdditionalEntitiesPanel.vue";
 import ApprovalHistory from "modules/rems/components/ApprovalHistory.vue";
@@ -538,6 +548,17 @@ const clientFieldsRef = ref(null);
 const setupRef = ref(null);
 const marketingRef = ref(null);
 const commissionRef = ref(null);
+
+// A hidden tab keeps its component (the panels are kept alive) but Vue clears its template ref. A save
+// flushed from another tab still needs the instance, so the last one mounted is kept until a reload.
+const keepInstance = (templateRef) => {
+  let instance = null;
+  watch(templateRef, (current) => { if (current) instance = current; });
+  return () => templateRef.value || instance;
+};
+const setupTab = keepInstance(setupRef);
+const marketingTab = keepInstance(marketingRef);
+const commissionTab = keepInstance(commissionRef);
 
 const conversationOpen = ref(false);
 const emailLogOpen = ref(false);
@@ -782,10 +803,17 @@ const commissionCount = computed(() => (engagement.value?.commissionSplits || []
 // Commission is optional; a split somebody started has to come to 100%.
 const commissionAllocated = computed(() => !commissionCount.value || commissionTotal.value === 100);
 
+// A part the page could not write, refused by the server or not fillable yet, holds the send: the server
+// would send what it holds, not what is on screen.
+const saveBlocked = computed(() => saveState.value === "blocked" || saveState.value === "error");
+
 const readyToSend = computed(() =>
   !!clientForm.customerEmail?.trim() && !!setupForm.cseUserId && !!setupForm.entityType &&
-  !!setupForm.industry && commissionAllocated.value);
+  !!setupForm.industry && commissionAllocated.value && !saveBlocked.value);
 const sendBlockedReason = computed(() => {
+  if (saveBlocked.value) {
+    return `Not sent while a change is unsaved — ${(saveMessage.value || "see the save status above").replace(/\.$/, "")}.`;
+  }
   if (!clientForm.customerEmail?.trim()) {
     return clientForm.maconomyCustomerNumber
       ? "Maconomy holds no email address for this customer. Add one in Maconomy, then refresh the client."
@@ -902,13 +930,17 @@ const cseHint = computed(() => (cseOptions.value.length
   : "Nobody holds the \"CSE\" role — assign it on a user's page in Administration → Users."));
 
 // ---- The Approval section ----
-// Reading the approver list is gated on managing engagements, which the initiator does not hold — so
-// showing them the section would render a bare 403 in a section they could do nothing with anyway.
+// Not before the client has answered: the round is run on their intake, so until the form is in there is
+// nothing here to route or to read. From then on, reading the approver list is gated on managing
+// engagements, which the initiator does not hold — so showing them the section would render a bare 403.
 const ROUND_OPENED = ["PendingApproval", "Approved", "Rejected"];
 const approvalStarted = computed(() => ROUND_OPENED.includes(engagement.value?.status));
 const canManageApproval = computed(() => isAdmin.value);
+// Submitted once the request has moved past the two stages that come before the client answers.
+const intakeSubmitted = computed(() =>
+  !isNew.value && ![REMS_STATUS.DRAFT, REMS_STATUS.AWAITING_CUSTOMER].includes(status.value));
 const showApprovalSection = computed(() =>
-  !!engagement.value && (canManageApproval.value || approvalStarted.value));
+  !!engagement.value && intakeSubmitted.value && (canManageApproval.value || approvalStarted.value));
 
 const approvalNote = computed(() => {
   const s = engagement.value?.status;
@@ -1010,7 +1042,7 @@ const marketingLabels = computed(() => {
 
 const commissionLabels = computed(() =>
   (engagement.value?.commissionSplits || [])
-    .map((s) => `${s.employee?.name || nameOf(cseOptions.value, s.employeeId)} — ${s.percentage}%`));
+    .map((s) => `${s.employee?.name || nameOf(cseOptions.value, s.employee?.id)} — ${s.percentage}%`));
 
 const clientRows = computed(() => [
   // Read as one name, the particle after it — the pair is edited as two boxes because they are two
@@ -1152,15 +1184,27 @@ const billingManagerChoices = computed(() =>
 
 // ---- STATIC-APPROVAL-POLICY ----
 // The seats on this request approve at their own stage and may not also be paid commission, so the
-// Commission section does not offer them.
+// Commission tab greys them out, each with the reason. Read off the LIVE engagement: the director follows
+// the department, which may have been picked a moment ago on the Setup tab. With the policy unread, the
+// seats the page knows are still kept out rather than offered and then refused by the server.
 const approvalPolicy = ref(null);
-const reservedCommissionIds = computed(() => {
-  if (!approvalPolicy.value?.staticRouting) return [];
-  return [
-    setupForm.cseUserId,
-    setupEngagement.value?.departmentDirector?.id,
-    ...(approvalPolicy.value?.shareholders || []).map((s) => s.id)
-  ].filter(Boolean);
+const reservedCommissionRecipients = computed(() => {
+  const policy = approvalPolicy.value;
+  if (policy && !policy.staticRouting) return [];
+  const live = engagement.value;
+  const mappedDirector = (workspace.value?.departmentDirectors || [])
+    .find((d) => d.department === live?.department)?.director?.id;
+  const seats = [
+    [setupForm.cseUserId, "CSE"],
+    [live?.departmentDirector?.id, "Department Director"],
+    [mappedDirector, "Department Director"],
+    ...(policy?.shareholders || []).map((s) => [s.id, "Shareholder"])
+  ];
+  const reserved = [];
+  for (const [id, seat] of seats) {
+    if (id && !reserved.some((r) => r.id === id)) reserved.push({ id, reason: `${seat}, approves this request` });
+  }
+  return reserved;
 });
 
 // The CSE, the Entity Type and the Industry as they were picked BEFORE the request existed.
@@ -1354,16 +1398,16 @@ const {
   // one of those. Every request created since has one — raised in the same transaction as the request.
   setup: async () => {
     if (!canEditSetup.value || !engagementId.value) return "";
-    await setupRef.value?.saveSetup(engagementId.value, remsId.value);
+    await setupTab()?.saveSetup(engagementId.value, remsId.value);
     return "";
   },
   marketing: async () => {
     if (!canEditSetup.value || !engagementId.value) return "";
-    return (await marketingRef.value?.saveMarketing(engagementId.value)) || "";
+    return (await marketingTab()?.saveMarketing(engagementId.value)) || "";
   },
   commission: async () => {
     if (!canEditSetup.value || !engagementId.value) return "";
-    await commissionRef.value?.saveCommission(engagementId.value);
+    await commissionTab()?.saveCommission(engagementId.value);
     return "";
   }
 }, {
@@ -1386,13 +1430,113 @@ const saveChip = computed(() => ({
   error: { tone: "bad", icon: "o_cloud_off", text: "Not saved" }
 }[saveState.value] || { tone: "idle", icon: "o_cloud_sync", text: "Saves as you type" }));
 
+// Said out loud as well as in the chip: a refused save nobody noticed is how a request went to the client
+// without the recipients typed on the Commission tab. Once per problem, until something saves.
+let announced = "";
+let announcements = 0;
+const sayUnsaved = (force = false) => {
+  const message = saveMessage.value;
+  if (!message || (!force && message === announced)) return;
+  announced = message;
+  announcements += 1;
+  if (saveState.value === "error") notify.error(message);
+  else notify.warning(message);
+};
+watch([saveState, saveMessage], ([state]) => {
+  if (state === "saved" || state === "idle") announced = "";
+  else if (state === "blocked" || state === "error") sayUnsaved();
+});
+
+// Back to the blank page. `loading` unmounts every section, so each one mounts afresh against the next
+// request rather than keeping what the last one seeded into it.
+const resetPage = () => {
+  Object.assign(clientForm, blankClient());
+  Object.assign(setupForm, { cseUserId: null, entityType: null, industry: null });
+  request.value = null;
+  workspace.value = null;
+  engagementLive.value = null;
+  workspaceDenied.value = false;
+  additionalEntities.value = [];
+  sendBacks.value = [];
+  declinedReasons.value = [];
+  attempted.value = false;
+  errorMsg.value = "";
+  loading.value = true;
+};
+
+// ---- A follow-up request ----
+// Create EMS on one of a client's other businesses opens this page, as a new request, naming the request
+// and the row it came from. The row is read off that request so a reload comes back the same way, and its
+// id goes with the create: the link is made by Save and Continue and by nothing before it, so backing out
+// of the form leaves the row outstanding.
+const followUp = computed(() => (isNew.value && route.query.from && route.query.entity
+  ? { from: String(route.query.from), entity: String(route.query.entity) }
+  : null));
+
+const seedFollowUp = async () => {
+  const source = followUp.value;
+  if (!source) return;
+  const [origin, ws] = await Promise.all([remsApi.get(source.from), remsApi.engagement(source.from)]);
+  const row = (ws?.additionalEntities || []).find((r) => r.id === source.entity);
+  if (!row) {
+    notify.warning("That entity is no longer listed on the request it came from.");
+    router.replace({ name: ROUTE_NEW });
+    return;
+  }
+  // Somebody got there first, so it is not raised twice.
+  if (row.createdRemsId) {
+    notify.info(`${row.createdRemsNumber || "A request"} already exists for ${row.fullName}.`);
+    router.replace({ name: ROUTE_VIEW, params: { id: row.createdRemsId } });
+    return;
+  }
+  clientForm.type = origin?.type || "";
+  // These rows are the client's other BUSINESSES, so the name is the legal name, whole.
+  clientForm.clientName = row.fullName || "";
+  clientForm.clientCorporateName = row.fullName || "";
+  clientForm.customerEmail = row.emailAddress || "";
+  clientForm.customerMobileNumber = row.phoneNumber || "";
+};
+
+// ---- Posting the client to Maconomy ----
+// Standalone from the approval: the request page only reads the outcome. Sync now is on the Approvals list
+// and the Maconomy settings page.
+const dateFmt = useDateFormat();
+
+const maconomySyncNote = computed(() => {
+  const s = request.value?.maconomySync;
+  if (!s) return "";
+  const when = s.syncedOnUtc ? ` on ${dateFmt.formatDateTime(s.syncedOnUtc)}` : "";
+  switch (s.status) {
+    case "synced":
+      return `Created in Maconomy${when}.`;
+    case "linked":
+      return `A Maconomy customer with this client's email already existed; linked to it${when}.`;
+    case "failed":
+      return s.failureReason || "The last attempt failed.";
+    case "pending":
+      return "Queued for posting to Maconomy.";
+    case "syncing":
+      return "Posting to Maconomy now.";
+    default:
+      return s.syncEnabled
+        ? "Not posted to Maconomy yet. Sync now is on the Approvals list and the Maconomy settings page."
+        : "Not posted to Maconomy: the customer sync is switched off. Start it under Tenant Settings → Maconomy, then sync by hand.";
+  }
+});
+
 const load = async () => {
   // Seeding writes to the very state the watchers above listen to, and that is the page catching up with
   // the server rather than the user typing.
   suspendSaves();
   try {
-    // Nothing to read for a request that does not exist: the blank form IS the state.
+    // Nothing to read for a request that does not exist: the blank form IS the state — unless it was
+    // opened from Create EMS, which fills it in before the client section mounts and reads it.
     if (isNew.value) {
+      try {
+        await seedFollowUp();
+      } catch (err) {
+        notify.error(getApiErrorMessage(err));
+      }
       loading.value = false;
       return;
     }
@@ -1435,9 +1579,11 @@ const load = async () => {
 };
 
 // One request per page, but the page outlives the id: creating one replaces "new" with its id, and the
-// Create-EMS action on another of the client's businesses moves it to a different request entirely.
+// Create-EMS action on another of the client's businesses moves it to a new request entirely. The route
+// changes but the component is reused, so what the last request left on screen is cleared by hand.
 watch(remsId, (id) => {
-  if (id) load();
+  if (!id) resetPage();
+  load();
 });
 
 // Leaving a tab commits what was typed on it rather than waiting out the debounce, and arriving at
@@ -1480,7 +1626,9 @@ const createDraft = async () => {
   // afterwards, or a second attempt would file a second copy of it.
   let created = null;
   try {
-    created = await remsApi.create(clientPayload());
+    // The row Create EMS was pressed on goes with the create, so the originating request stops flagging
+    // it — linked by this one write and by nothing before it.
+    created = await remsApi.create({ ...clientPayload(), fromAdditionalEntityId: followUp.value?.entity });
     const mediaIds = (await clientFieldsRef.value?.uploadAttachments(created.id)) || [];
     if (mediaIds.length) await remsApi.addFiles(created.id, mediaIds);
     notify.success(`${created.remsNumber} saved as a draft. Everything from here saves itself.`);
@@ -1527,7 +1675,13 @@ const removeAttachment = async (file, done) => {
 // Each of these hands the request to somebody else, so whatever is still sitting in the debounce goes with
 // it.
 const openSend = async () => {
+  const said = announcements;
   await flushSaves();
+  // Still pending after a flush means refused, or not fillable yet. Either way it is said, not sent.
+  if (savePending.value) {
+    if (announcements === said) sayUnsaved(true);
+    return;
+  }
   sendOpen.value = true;
 };
 
@@ -1580,25 +1734,11 @@ const returnToAdmin = async () => {
   }
 };
 
-// Raise a fresh request for one of the client's other businesses, pre-filled from the contact they gave.
+// Create EMS on one of the client's other businesses: opens a new request pre-filled from what the client
+// said about it (see seedFollowUp). Nothing is written here.
 const createFollowUp = async (row) => {
-  try {
-    await flushSaves();
-    const follow = await remsApi.create({
-      clientName: row.fullName,
-      // These rows are the client's other BUSINESSES. Sent as the legal name, or the server reads one
-      // string as a person's and splits it into a first and a last name.
-      clientCorporateName: row.fullName,
-      customerEmail: row.emailAddress || undefined,
-      customerMobileNumber: row.phoneNumber || undefined,
-      type: clientForm.type,
-      fromAdditionalEntityId: row.id
-    });
-    notify.success(`${follow.remsNumber} created for ${row.fullName}.`);
-    router.push({ name: ROUTE_EDIT, params: { id: follow.id } });
-  } catch (err) {
-    notify.error(getApiErrorMessage(err));
-  }
+  await flushSaves();
+  router.push({ name: ROUTE_NEW, query: { from: remsId.value, entity: row.id } });
 };
 
 // Navigating away commits the debounce; closing the tab cannot be awaited, so that one is a warning.
@@ -1763,6 +1903,15 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", warnOnUnload));
 /* A cursor that says "hover me": the icon carries the whole message and nothing about an icon otherwise
    suggests there is more behind it. */
 .rf-tabs__note { cursor: help; }
+
+/* The Maconomy line under the client details: chip, note and the Sync now button on one row, wrapping on a
+   phone. */
+.rf-maconomy-sync {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 
 /* min-width:0 is what lets this shrink inside the header's action group; without it the box refuses to go
    below the width of everything in it and nothing ever wraps. */

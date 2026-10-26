@@ -109,6 +109,7 @@ import { LocalStorage } from "quasar";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
 import { Permissions } from "composables/usePermissions";
+import { STICKY_NOTES_ENABLED } from "shared/features";
 
 defineProps({
   // Collapsed to the icon rail: each group offers its children as a flyout beside its icon.
@@ -198,6 +199,7 @@ const sections = [
     key: "settings",
     label: "Tenant Settings",
     icon: "o_settings",
+    startCollapsed: true,
     items: [
       { label: "Email Accounts", icon: "o_mail", to: "/smtp-accounts", permissions: [Permissions.EmailManage] },
       { label: "Email Templates", icon: "o_drafts", to: "/email-templates", permissions: [Permissions.EmailManage] },
@@ -207,7 +209,8 @@ const sections = [
       // but the lists are configuration and only Super Admin / Tenant Admin maintain them.
       { label: "Option Sets", icon: "o_list_alt", to: "/option-sets", permissions: [Permissions.OptionSetsManage] },
       { label: "Tag Management", icon: "o_label", to: "/settings/tags", permissions: [Permissions.SettingsManage] },
-      { label: "Sticky Notes", icon: "o_sticky_note_2", to: "/settings/sticky-notes", permissions: [Permissions.SettingsManage] },
+      // Off the screen for now: shared/features.js.
+      { label: "Sticky Notes", icon: "o_sticky_note_2", to: "/settings/sticky-notes", permissions: [Permissions.SettingsManage], hidden: !STICKY_NOTES_ENABLED },
       { label: "Modified Log", icon: "o_manage_history", to: "/settings/modified-log-config", permissions: [Permissions.SettingsManage] },
       { label: "Deleted Records", icon: "o_restore_from_trash", to: "/settings/retention", permissions: [Permissions.RecordsAdminDelete] }
     ]
@@ -216,6 +219,7 @@ const sections = [
     key: "account",
     label: "Account",
     icon: "o_account_circle",
+    startCollapsed: true,
     items: [
       { label: "My Account", icon: "o_manage_accounts", to: "/account", permissions: null },
       { label: "Profile", icon: "o_person", to: { name: "profile" }, permissions: null },
@@ -236,20 +240,19 @@ const canSee = (permissions) => !permissions || authStore.hasAnyPermission(permi
 
 const visibleSections = computed(() =>
   sections
-    .map((section) => ({ ...section, items: section.items.filter((item) => canSee(item.permissions)) }))
+    .map((section) => ({ ...section, items: section.items.filter((item) => !item.hidden && canSee(item.permissions)) }))
     .filter((section) => section.items.length));
 
 // Per-group collapse state, persisted to LocalStorage so the user's expand/collapse choices survive a
-// page refresh. The stored object holds only the collapsed groups ({ [sectionKey]: true }).
+// page refresh. The stored object holds the groups the user has set by hand ({ [sectionKey]: true =
+// collapsed, false = expanded }); a group not in it follows its own default. Tenant Settings and
+// Account start collapsed, so the drawer opens on the work rather than on the housekeeping.
 const STORAGE_KEY = "appMenuCollapsed";
 const collapsed = reactive(LocalStorage.getItem(STORAGE_KEY) || {});
-const isOpen = (section) => collapsed[section.key] !== true;
+const isOpen = (section) =>
+  (section.key in collapsed ? collapsed[section.key] !== true : !section.startCollapsed);
 const setOpen = (key, open) => {
-  if (open) {
-    delete collapsed[key];
-  } else {
-    collapsed[key] = true;
-  }
+  collapsed[key] = !open;
   LocalStorage.set(STORAGE_KEY, { ...collapsed });
 };
 </script>

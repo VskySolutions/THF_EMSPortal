@@ -263,7 +263,22 @@ export const maconomyApi = {
   // entityType: "commercial", emailAddress: "ap@acme.com", phoneNumber: "850-555-0100" }]; empty below
   // two characters.
   searchCustomers: (search, limit, tenantId) =>
-    api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap)
+    api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap),
+
+  // ---- The customer sync: a fully approved Brand New Client request posts its client to Maconomy ----
+  // ALWAYS the caller's own tenant — no `tenantId` override here, unlike the connection calls above: the
+  // rows are REMS requests, which the caller only ever sees for the tenant they are signed in to.
+  // → { connected, enabled, changedOnUtc, changedByName, synced, linked, failed, notSynced, pending }.
+  customerSync: () => api.get("/api/integrations/maconomy/customer-sync").then(unwrap),
+  // Start posts nothing by itself; Stop does not interrupt a job already running. Both → the overview.
+  startCustomerSync: () => api.post("/api/integrations/maconomy/customer-sync/start").then(unwrap),
+  stopCustomerSync: () => api.post("/api/integrations/maconomy/customer-sync/stop").then(unwrap),
+  // The requests waiting on an admin: [{ syncId, remsId, remsNumber, clientName, clientEmail, status,
+  // failureReason, attempts, lastAttemptOnUtc, recordedOnUtc }].
+  customerSyncUnsynced: () => api.get("/api/integrations/maconomy/customer-sync/unsynced").then(unwrap),
+  // Sync now for one request → its sync view { status, customerNumber, failureReason, … }. A failed post
+  // is a 200 with status "failed"; only a refusal (sync off, not eligible) is an error.
+  runCustomerSync: (remsId) => api.post(`/api/integrations/maconomy/customer-sync/${remsId}/run`).then(unwrap)
 };
 
 // The tenant's branding: its theme (name, colours, type, buttons) and its images. `tenantId` is the Super
@@ -568,6 +583,10 @@ export const remsApi = {
   // One Maconomy customer as a picker row, read from Maconomy now rather than from what the server holds.
   maconomyCustomer: (number, excludingRemsId) =>
     api.get("/api/rems/clients/maconomy/customer", { params: { number, excludingRemsId } }).then(unwrap),
+  // Sync now: post this approved request's brand-new client to Maconomy, inline → the request's sync view
+  // { status, customerNumber, failureReason, syncedOnUtc, canSyncNow, … }. A failed post is a 200 with
+  // status "failed"; a refusal (sync off, not eligible, already running) is a 409.
+  maconomySyncNow: (id) => api.post(`/api/rems/requests/${id}/maconomy-sync`).then(unwrap),
   // One client on file, in the picker's shape.
   client: (id, excludingRemsId) =>
     api.get(`/api/rems/clients/${id}`, { params: { excludingRemsId } }).then(unwrap),
