@@ -13,11 +13,21 @@
       @back="$router.back()"
     >
       <template #note>
-        The requests routed to you to review — one row each.
-        <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
-        every approver has signed.
-        <strong>Your Decision</strong> is your own signature on it.
-        You only ever see your own tasks; a decision is final once made.
+        <template v-if="seesTenant">
+          Every request of <strong>{{ tenantName }}</strong> that has been sent for approval — one row each,
+          on the round it is on now, and nothing from any other tenant.
+          <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
+          every approver has signed; <strong>Approvers</strong> shows where each of them stands.
+          Open a row to read the packet; a task is decided only by the approver who holds it.
+          <template v-if="canScopeTenant">To read another tenant's approvals, pick it in the tenant selector.</template>
+        </template>
+        <template v-else>
+          The requests routed to you to review — one row each.
+          <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
+          every approver has signed.
+          <strong>Your Decision</strong> is your own signature on it.
+          You only ever see your own tasks; a decision is final once made.
+        </template>
       </template>
     </app-list-header>
 
@@ -28,10 +38,11 @@
       <app-column-filters v-model="filters" :columns="filterableColumns" />
     </app-filter-drawer>
 
+    <!-- Keyed on the TASK: on the tenant-wide inbox one request has a row per approver. -->
     <app-data-table
-      page-key="rems-approvals"
-      row-key="remsId"
-      title="My Approvals"
+      :page-key="pageKey"
+      row-key="taskId"
+      :title="title"
       :rows="rows"
       :columns="columns"
       :loading="loading"
@@ -49,7 +60,9 @@
             v-model="filters.roundStatus" label="Approval Status" :options="roundQuick"
             :counts="quickCounts?.roundStatus"
           />
+          <!-- A decision is one approver's; the tenant-wide inbox, read per request, has no such group. -->
           <quick-filter-group
+            v-if="!seesTenant"
             v-model="filters.status" label="Your Decision" :options="decisionQuick" :counts="quickCounts?.status"
           />
         </quick-filter-bar>
@@ -82,6 +95,21 @@
       <template #body-cell-status="cell">
         <q-td :props="cell">
           <app-option-badge :option="approvalStatusOption(cell.row.status)" />
+        </q-td>
+      </template>
+
+      <!-- Where each approver on the round stands — the tenant-wide inbox, read per request. -->
+      <template #body-cell-approvers="cell">
+        <q-td :props="cell">
+          <div class="row items-center q-gutter-xs">
+            <q-chip
+              v-for="a in cell.row.approvers || []" :key="a.taskId" dense square size="sm"
+              :style="decisionStyle(a.status)" :icon="approvalStatusOption(a.status).icon || undefined"
+            >
+              {{ a.approver?.name || "—" }}
+              <q-tooltip :delay="300">{{ approverHint(a) }}</q-tooltip>
+            </q-chip>
+          </div>
         </q-td>
       </template>
 
@@ -126,7 +154,7 @@
           <!-- A LINK, not a click handler: the task is a place, so the button is written as a route and
                renders as a real <a href> — which is what makes middle-click and "open in new tab" work. -->
           <q-btn flat round dense color="primary" icon="o_visibility" :to="taskRoute(cell.row)">
-            <q-tooltip>Open for review</q-tooltip>
+            <q-tooltip>{{ seesTenant ? "Open" : "Open for review" }}</q-tooltip>
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
             <q-tooltip>Conversation</q-tooltip>
@@ -146,7 +174,8 @@
         <div class="full-width column flex-center q-pa-xl text-grey-6">
           <q-icon name="o_task_alt" size="40px" class="q-mb-sm" />
           <div class="text-subtitle1 q-mb-xs">No approvals</div>
-          <div>You have no requests awaiting your review right now.</div>
+          <div v-if="seesTenant">No request in this tenant has been routed for approval yet.</div>
+          <div v-else>You have no requests awaiting your review right now.</div>
         </div>
       </template>
     </app-data-table>
@@ -157,7 +186,8 @@
 
 <script setup>
 // The task-isolated REMS Approval Inbox (WO-117 Part B, AC-REMS-019): the REQUESTS routed to the caller,
-// one row each.
+// one row each. A Tenant Admin or Super Admin reads the whole tenant instead — one row per approver on
+// the round each request is on now, with an Approver column and filter.
 import { ref, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { useRouter } from "vue-router";
@@ -169,6 +199,9 @@ import { useFilterMemory } from "composables/useFilterMemory";
 import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useRemsMeta, REMS_ROUND_PARTIALLY_APPROVED } from "modules/rems/useRemsMeta";
+import { useAuthStore } from "stores/auth";
+import { useTenantStore } from "stores/tenant";
+import { useTenantScope } from "composables/useTenantScope";
 
 import AppListHeader from "components/common/AppListHeader.vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
@@ -186,9 +219,24 @@ const router = useRouter();
 const notify = useNotify();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
+const auth = useAuthStore();
 const {
-  approvalStatusOption, approvalStatusFilterOptions, roundStatusOption, roundStatusFilterOptions
+  approvalStatusOption, approvalStatusFilterOptions, roundStatusOption, roundStatusFilterOptions, approverRoleLabel
 } = useRemsMeta();
+
+// Whose inbox this is: a Tenant Admin or Super Admin reads every approver's tasks in the tenant, and the
+// API scopes the list the same way from the roles on the token.
+const seesTenant = computed(() => auth.roles.includes("SuperAdmin") || auth.roles.includes("TenantAdmin"));
+// The tenant the rows belong to, named in the title so the scope is never in doubt: a Tenant Admin's own
+// tenant, or the one a Super Admin has picked in the tenant selector (the API follows the same pick).
+const tenantStore = useTenantStore();
+const { canScopeTenant, isScoped, scopedTenantName } = useTenantScope();
+const tenantName = computed(() =>
+  (isScoped.value && scopedTenantName.value) || tenantStore.activeTenant?.name || "your tenant");
+const title = computed(() => (seesTenant.value ? `Approvals · ${tenantName.value}` : "My Approvals"));
+// The two views keep separate column and page-size preferences: a column list saved on the personal inbox
+// would otherwise hide the Approver column the tenant-wide one adds.
+const pageKey = seesTenant.value ? "rems-approvals-tenant" : "rems-approvals";
 
 // Where the whole ROUND stands, from the counts every row carries — the REMS.ApprovalRoundStatus value,
 // which is "Partially Approved" while some but not all approvers have signed.
@@ -207,17 +255,25 @@ const syncedTooltip = (row) => {
   return when ? `Synced on ${fmt.formatDateTime(when)}` : "Synced";
 };
 
-// The CSE filter offers the CSEs on the caller's own inbox: an approver may hold no REMS permission, so
-// the tenant's CSE directory is not theirs to read.
+// The CSE filter offers the CSEs on the caller's inbox: an approver may hold no REMS permission, so the
+// tenant's CSE directory is not theirs to read.
 const cseFilterOptions = ref([]);
-// The Client filter likewise offers the clients on the caller's own inbox — any of them at once.
+// The Client filter likewise offers the clients on the inbox — any of them at once.
 const clientFilterOptions = ref([]);
+// And the Approvers filter the approvers on it — a tenant-wide inbox only, since on their own it is them —
+// which narrows to the requests one approver is on.
+const approverFilterOptions = ref([]);
 const toOptions = (rows) => (rows || []).map((u) => ({ label: u.name, value: u.id }));
 onMounted(async () => {
   try {
-    const [cses, clients] = await Promise.all([remsApi.myApprovalCses(), remsApi.myApprovalClients()]);
+    const [cses, clients, approvers] = await Promise.all([
+      remsApi.myApprovalCses(),
+      remsApi.myApprovalClients(),
+      seesTenant.value ? remsApi.myApprovalApprovers() : Promise.resolve([])
+    ]);
     cseFilterOptions.value = toOptions(cses);
     clientFilterOptions.value = toOptions(clients);
+    approverFilterOptions.value = toOptions(approvers);
   } catch {
     // A filter nobody can populate simply stays empty; the list itself is unaffected.
   }
@@ -246,8 +302,15 @@ const columns = computed(() => [
     default: true,
     filterOptions: roundStatusFilterOptions.value
   },
-  // Whose signature, said in the heading.
-  { name: "status", label: "Your Decision", field: "status", align: "left", sortable: true, default: true, filterOptions: approvalStatusFilterOptions.value },
+  // Everyone on the round and where they stand — the tenant-wide inbox, whose row is a request. Not
+  // sortable: a row has several.
+  ...(seesTenant.value
+    ? [{ name: "approvers", label: "Approvers", field: (r) => (r.approvers || []).map((a) => a.approver?.name).filter(Boolean).join(", "), align: "left", sortable: false, default: true, filterOptions: approverFilterOptions.value }]
+    : []),
+  // Whose signature, said in the heading — an approver's own inbox only; a request row has no decision.
+  ...(seesTenant.value
+    ? []
+    : [{ name: "status", label: "Your Decision", field: "status", align: "left", sortable: true, default: true, filterOptions: approvalStatusFilterOptions.value }]),
   // Not sortable: how much of the round is outstanding is counted from the tasks loaded with each row.
   {
     name: "approvals",
@@ -260,7 +323,8 @@ const columns = computed(() => [
   },
   { name: "sentOnUtc", label: "Sent", field: "sentOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
   // Off by default, but offered in the Columns menu so nothing the row returns is unreachable.
-  { name: "decidedOnUtc", label: "Decided", field: (r) => (r.decidedOnUtc ? fmt.formatDateTime(r.decidedOnUtc) : "—"), align: "left", sortable: true, default: false, filterType: "dateRange" },
+  // On a request row this is when its round closed, which the server cannot order by.
+  { name: "decidedOnUtc", label: "Decided", field: (r) => (r.decidedOnUtc ? fmt.formatDateTime(r.decidedOnUtc) : "—"), align: "left", sortable: !seesTenant.value, default: false, filterType: "dateRange" },
   ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
@@ -278,9 +342,10 @@ const listFilters = () => {
   const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
   return {
     search: search.value || undefined,
-    status: filters.status || undefined,
+    status: seesTenant.value ? undefined : filters.status || undefined,
     roundStatus: filters.roundStatus || undefined,
     cseUserId: filters.cse || undefined,
+    approverUserId: filters.approvers || undefined,
     clientPersonIds: filters.client?.length ? filters.client : undefined,
     sentFrom: sent.from,
     sentTo: sent.to,
@@ -308,7 +373,7 @@ const roundQuick = computed(() => pickOptions(
 const decisionQuick = computed(() => pickOptions(approvalStatusFilterOptions.value, ["Pending", "Approved"]));
 
 const { rows, loading, totalRecords, search, filterOpen, pagination, load, onRequest } = useListTable({
-  pageKey: "rems-approvals",
+  pageKey,
   fetcher: ({ page, limit, sortBy, descending }) => {
     // The counts ride along with every read of the list, so the buttons describe the list on screen.
     refreshQuickCounts();
@@ -321,9 +386,9 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
-useFilterMemory("rems-approvals", {
-  roundStatus: toRef(filters, "roundStatus"), status: toRef(filters, "status")
-});
+useFilterMemory(pageKey, seesTenant.value
+  ? { roundStatus: toRef(filters, "roundStatus") }
+  : { roundStatus: toRef(filters, "roundStatus"), status: toRef(filters, "status") });
 const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters], reload, { deep: true });
 
@@ -336,6 +401,16 @@ const progressHint = (row) => {
   if (row.rejectedCount > 0) parts.push(`${row.rejectedCount} rejected — no further approvals needed`);
   else if (pendingOf(row) > 0) parts.push(`${pendingOf(row)} still to decide`);
   return parts.join(" · ");
+};
+
+// One approver's chip on a request row: the decision's own colours, the role and the date on the tooltip.
+const decisionStyle = (status) => {
+  const option = approvalStatusOption(status);
+  return { backgroundColor: option.backgroundColor || "#9e9e9e", color: option.textColor || "#ffffff" };
+};
+const approverHint = (a) => {
+  const decided = a.decidedOnUtc ? ` on ${fmt.formatDateTime(a.decidedOnUtc)}` : "";
+  return `${approverRoleLabel(a.role)} — ${approvalStatusOption(a.status).label}${decided}`;
 };
 
 const taskRoute = (row) => ({ name: "rems_approval_task", params: { taskId: row.taskId } });

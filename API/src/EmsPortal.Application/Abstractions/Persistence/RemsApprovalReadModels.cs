@@ -6,7 +6,8 @@ namespace EmsPortal.Application.Abstractions.Persistence;
 
 /// <summary>
 /// The approvals-inbox query (WO-117): quick search over the REMS number and client name, optional
-/// narrowing by the role they act in and their decision state.
+/// narrowing by the role they act in and their decision state. Whose inbox it is comes from
+/// <see cref="ApproverId"/> — or, with <see cref="TenantId"/> set, it is the whole tenant's.
 /// </summary>
 public sealed record RemsApprovalTaskQuery(
     Guid ApproverId,
@@ -32,7 +33,14 @@ public sealed record RemsApprovalTaskQuery(
     DateTime? CreatedFromUtc = null,
     DateTime? CreatedToUtc = null,
     DateTime? UpdatedFromUtc = null,
-    DateTime? UpdatedToUtc = null);
+    DateTime? UpdatedToUtc = null,
+    /// <summary>
+    /// Set for a Tenant Admin or Super Admin: the inbox is then every approver's task on the round each of
+    /// the tenant's requests is on now, not the caller's own tasks.
+    /// </summary>
+    Guid? TenantId = null,
+    /// <summary>One approver's tasks only — the Approver column's dropdown on the tenant-wide inbox.</summary>
+    Guid? ApproverUserId = null);
 
 /// <summary>
 /// How many rows each quick-filter button on the Approvals inbox would list: the Approval Status group by

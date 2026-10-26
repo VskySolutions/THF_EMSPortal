@@ -22,11 +22,20 @@ public interface IRemsApprovalTaskRepository
 
     Task<int> GetNextRoundNumberAsync(Guid remsId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Guid>> ListCseIdsByApproverAsync(Guid approverId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RemsClientChoice>> ListClientsByApproverAsync(Guid approverId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The inbox's filter choices, read off the inbox itself: the caller's own tasks, or every approver's
+    /// in the tenant when <paramref name="tenantId"/> is set (a Tenant Admin or Super Admin).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListInboxCseIdsAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RemsClientChoice>> ListInboxClientsAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> ListInboxApproverIdsAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default);
     Task<RemsApprovalTaskQuickCounts> CountInboxQuickFiltersAsync(RemsApprovalTaskQuery query, CancellationToken cancellationToken = default);
 
-    /// <summary>The approver's current task per request, with the request, its client and the sibling tasks of the round.</summary>
+    /// <summary>
+    /// The approver's current task per request — or, for a query scoped to the tenant, one row per request
+    /// on its current round, carried by the round's last-updated task — with the request, its client and
+    /// the sibling tasks of the round.
+    /// </summary>
     Task<(IReadOnlyList<RemsApprovalTask> Items, int Total)> ListTasksByApproverAsync(RemsApprovalTaskQuery query, CancellationToken cancellationToken = default);
 
     Task<bool> IsApproverOnRequestAsync(Guid remsId, Guid userId, CancellationToken cancellationToken = default);

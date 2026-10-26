@@ -18,9 +18,18 @@
 
     <template v-else-if="task">
       <!-- Decision-state banner. -->
+      <!-- Another approver's task, read by a Tenant Admin or Super Admin: whose it is and where it stands,
+           with nothing here for the reader to sign. -->
+      <q-banner v-if="task.isYours === false" dense :class="`${othersBanner.classes} rounded-borders q-mb-md`">
+        <template #avatar><q-icon :name="othersBanner.icon" :color="othersBanner.color" /></template>
+        <div>{{ othersBanner.text }}</div>
+        <div v-if="task.status === 'Rejected' && task.rejectionReason" class="q-mt-xs" style="white-space: pre-wrap;">
+          Reason: {{ task.rejectionReason }}
+        </div>
+      </q-banner>
       <!-- Signing is the reader's own act, and it is NOT the request being approved. -->
       <q-banner
-        v-if="task.status === 'Approved'" dense
+        v-else-if="task.status === 'Approved'" dense
         :class="`${roundOutstanding ? 'bg-teal-1 text-teal-9' : 'bg-green-1 text-green-9'} rounded-borders q-mb-md`"
       >
         <template #avatar>
@@ -60,7 +69,9 @@
                 <q-icon name="o_work" size="20px" class="q-mr-xs" />{{ request.remsNumber }} — {{ engagement.entity?.name || "Engagement" }}
               </div>
               <q-space />
-              <div class="text-caption text-grey-7">Acting as {{ approverRoleLabel(task.role) }}</div>
+              <div class="text-caption text-grey-7">
+                <template v-if="task.isYours === false">{{ approverName }} · </template>Acting as {{ approverRoleLabel(task.role) }}
+              </div>
             </q-card-section>
             <q-separator />
 
@@ -466,7 +477,7 @@
         <div class="col-12 col-md-4">
           <q-card flat bordered class="rems-card q-mb-md">
             <q-card-section class="text-subtitle1 text-weight-medium">
-              Your Checklist
+              {{ task.isYours === false ? `${approverName}'s Checklist` : "Your Checklist" }}
               <q-badge :color="allChecklistComplete ? 'positive' : 'grey-6'" class="q-ml-sm">
                 {{ completedCount }}/{{ checklist.length }}
               </q-badge>
@@ -641,6 +652,27 @@ const roundMeta = computed(() =>
 // The reader has signed but the request has not been approved — what keeps a green "all done" banner off
 // a round that is still waiting on somebody else.
 const roundOutstanding = computed(() => round.value.status === "Pending");
+
+// Another approver's task, read by a Tenant Admin or Super Admin over their shoulder: the banner names
+// them and says where their task stands, in place of the reader's own decision state. The API has already
+// withheld canDecide, so the checklist and the buttons are inert on their own.
+const approverName = computed(() => task.value?.approver?.name || "The approver");
+const othersBanner = computed(() => {
+  const when = task.value?.decidedOnUtc ? ` on ${fmt.formatDateTime(task.value.decidedOnUtc)}` : "";
+  const closed = { icon: "o_lock", color: "grey-7", classes: "bg-grey-2 text-grey-8" };
+  switch (task.value?.status) {
+    case "Approved":
+      return { icon: "o_verified", color: "green-9", classes: "bg-green-1 text-green-9", text: `${approverName.value} approved this task${when}.` };
+    case "Rejected":
+      return { icon: "o_cancel", color: "red-9", classes: "bg-red-1 text-red-9", text: `${approverName.value} rejected this task${when}.` };
+    case "Superseded":
+      return { ...closed, text: `This approval closed before ${approverName.value} decided.` };
+    default:
+      return roundOutstanding.value
+        ? { icon: "o_hourglass_top", color: "blue-9", classes: "bg-teal-1 text-blue-9", text: `Awaiting ${approverName.value}'s decision — only they can sign this task.` }
+        : { ...closed, text: `This approval is closed; ${approverName.value} did not decide.` };
+  }
+});
 const entityContacts = computed(() => engagement.value.entity?.contacts || []);
 const commissionSplits = computed(() => engagement.value.commissionSplits || []);
 const commissionTotal = computed(() =>

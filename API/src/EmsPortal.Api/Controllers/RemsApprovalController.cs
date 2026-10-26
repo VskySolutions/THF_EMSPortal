@@ -432,6 +432,12 @@ public sealed class RemsApprovalController : ControllerBase
     /// Each row carries the round's approved/rejected/total counts so the inbox can show its progress — the
     /// row is still the caller's own task, and no other approver's identity is exposed here.
     /// </para>
+    /// <para>
+    /// A Tenant Admin or Super Admin reads the whole tenant instead: one row per REQUEST on the round it is
+    /// on now, with every approver's standing on it, and <paramref name="approverUserId"/> narrows to the
+    /// requests one approver is on. Reading is all it grants — a task is still decided only by the approver
+    /// who holds it.
+    /// </para>
     /// </summary>
     [HttpGet("approval-tasks")]
     [Authorize]
@@ -447,6 +453,8 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        // The Approver column's dropdown on the tenant-wide inbox.
+        [FromQuery] Guid? approverUserId = null,
         [FromQuery] DateTime? sentFrom = null,
         [FromQuery] DateTime? sentTo = null,
         [FromQuery] DateTime? decidedFrom = null,
@@ -470,27 +478,34 @@ public sealed class RemsApprovalController : ControllerBase
         RemsApprovalTaskStatus? statusFilter =
             Enum.TryParse<RemsApprovalTaskStatus>(status, ignoreCase: true, out var s) ? s : null;
 
+        var tenantScope = InboxTenantScope();
         var (tasks, total) = await _tasks.ListTasksByApproverAsync(
             new RemsApprovalTaskQuery(
                 me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit,
                 roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
-                createdFrom, createdTo, updatedFrom, updatedTo),
+                createdFrom, createdTo, updatedFrom, updatedTo,
+                TenantId: tenantScope, ApproverUserId: approverUserId),
             cancellationToken);
 
-        // The audit actors AND each request's CSE, resolved in one read: the CSE is a column on this list
-        // now, and a name lookup per row would be one round trip per task.
+        // The audit actors, each request's CSE and each row's approvers, resolved in one read: a name
+        // lookup per row would be one round trip per task. A tenant-wide row names its whole round.
         var auditNames = await _users.GetFullNamesAsync(
-            tasks.SelectMany(t => new[] { t.CreatedById, t.UpdatedById, t.Request?.CSEId })
+            tasks.SelectMany(t => new[] { t.CreatedById, t.UpdatedById, t.Request?.CSEId, (Guid?)t.ApproverId }
+                    .Concat(tenantScope is null
+                        ? Array.Empty<Guid?>()
+                        : t.Request!.ApprovalTasks.Where(o => o.RoundNumber == t.RoundNumber).Select(o => (Guid?)o.ApproverId)))
                 .Where(id => id.HasValue).Select(id => id!.Value),
             cancellationToken);
         string? NameOf(Guid? id) => id is { } uid && auditNames.TryGetValue(uid, out var n) ? n : null;
 
         var threshold = await DeclineThresholdAsync(cancellationToken);
 
-        // Sync now lives on this list. Every row is the caller's own task, so being on the row is what
-        // entitles them; the view is null for a request whose client is not posted at all.
+        // Sync now lives on this list. A row that is the caller's own task entitles them by itself; on the
+        // tenant-wide inbox another approver's row needs the permission the Sync now endpoint asks for.
+        // The view is null for a request whose client is not posted at all.
         var syncEnabled = User.GetActiveTenantId() is { } tenantId
             && await _customerSync.IsEnabledAsync(tenantId, cancellationToken);
+        var maySyncAny = User.HasPermission(Permissions.RemsEngagementsManage);
 
         var rows = new List<RemsApprovalTaskRow>(tasks.Count);
         foreach (var t in tasks)
@@ -499,10 +514,19 @@ public sealed class RemsApprovalController : ControllerBase
             var client = request.Client;
             var round = RoundOf(request, t, threshold);
             var maconomySync = RemsMaconomySyncViews.For(
-                request, client is not null && _customerSync.IsStale(client), syncEnabled, canManage: true);
+                request, client is not null && _customerSync.IsStale(client), syncEnabled,
+                canManage: t.ApproverId == me || maySyncAny);
+            // A tenant-wide row is the request: Decided is when its round closed, and every approver is on it.
+            var approvers = tenantScope is null ? null : round.Tasks
+                .OrderBy(x => DisplayRank(x.ApproverRole))
+                .ThenBy(x => x.CreatedOnUtc)
+                .Select(x => new RemsApprovalDecisionView(
+                    x.Id, RemsWorkspaceMapper.UserRef(x.ApproverId, auditNames)!, x.ApproverRole.ToString(),
+                    x.Status.ToString(), x.DecidedOnUtc, x.RejectionReason, IsYou: x.ApproverId == me))
+                .ToList();
             rows.Add(new RemsApprovalTaskRow(
                 t.Id, round.Id, round.RoundNumber, t.ApproverRole.ToString(), t.Status.ToString(),
-                round.SentOnUtc, t.DecidedOnUtc, round.Status.ToString(),
+                round.SentOnUtc, tenantScope is null ? t.DecidedOnUtc : round.CompletedOnUtc, round.Status.ToString(),
                 request.Id, request.Id, request.RemsNumber,
                 client?.ClientName ?? string.Empty,
                 client?.Person?.Suffix,
@@ -511,15 +535,23 @@ public sealed class RemsApprovalController : ControllerBase
                 round.Tasks.Count(x => x.Status == RemsApprovalTaskStatus.Rejected),
                 round.Tasks.Count,
                 NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc,
-                MaconomySync: maconomySync));
+                MaconomySync: maconomySync,
+                Approver: RemsWorkspaceMapper.UserRef(t.ApproverId, auditNames),
+                Approvers: approvers));
         }
         return Ok(ApiResponseFactory.Paginated(rows, "REMS approval tasks retrieved.", page, limit, total));
     }
 
     /// <summary>
-    /// The CSEs across the caller's own inbox, for its CSE filter. Read off the caller's tasks rather
-    /// than the tenant's CSE directory: an approver may hold no REMS permission, so the directory is not
-    /// theirs to read — and a filter offering people none of their requests name would be noise anyway.
+    /// The tenant whose every approval task the caller may read: a Tenant Admin or Super Admin reads the
+    /// whole of their active tenant. Anyone else reads their own tasks only, and gets null.
+    /// </summary>
+    private Guid? InboxTenantScope() => RemsSetupAccess.IsElevated(User) ? User.GetActiveTenantId() : null;
+
+    /// <summary>
+    /// The CSEs across the caller's inbox, for its CSE filter. Read off the inbox rather than the tenant's
+    /// CSE directory: an approver may hold no REMS permission, so the directory is not theirs to read — and
+    /// a filter offering people none of their requests name would be noise anyway.
     /// </summary>
     [HttpGet("approval-tasks/cses")]
     [Authorize]
@@ -531,16 +563,11 @@ public sealed class RemsApprovalController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
 
-        var ids = await _tasks.ListCseIdsByApproverAsync(me, cancellationToken);
-        var names = await _users.GetFullNamesAsync(ids, cancellationToken);
-        var cses = ids
-            .Select(id => RemsWorkspaceMapper.UserRef(id, names)!)
-            .OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        return Ok(ApiResponseFactory.Success(cses, "Approval inbox CSEs retrieved."));
+        var ids = await _tasks.ListInboxCseIdsAsync(me, InboxTenantScope(), cancellationToken);
+        return Ok(ApiResponseFactory.Success(await UserRefsAsync(ids, cancellationToken), "Approval inbox CSEs retrieved."));
     }
 
-    /// <summary>The clients across the caller's own inbox, for its Client filter — read off their tasks, like the CSEs.</summary>
+    /// <summary>The clients across the caller's inbox, for its Client filter — read off the inbox, like the CSEs.</summary>
     [HttpGet("approval-tasks/clients")]
     [Authorize]
     [ProducesResponseType<ApiResponse<IEnumerable<RemsClientChoice>>>(StatusCodes.Status200OK)]
@@ -551,8 +578,36 @@ public sealed class RemsApprovalController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
 
-        var clients = await _tasks.ListClientsByApproverAsync(me, cancellationToken);
+        var clients = await _tasks.ListInboxClientsAsync(me, InboxTenantScope(), cancellationToken);
         return Ok(ApiResponseFactory.Success(clients, "Approval inbox clients retrieved."));
+    }
+
+    /// <summary>
+    /// The approvers across the caller's inbox, for its Approver filter: the caller alone, unless they
+    /// read the whole tenant.
+    /// </summary>
+    [HttpGet("approval-tasks/approvers")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsUserRef>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTaskApprovers(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var ids = await _tasks.ListInboxApproverIdsAsync(me, InboxTenantScope(), cancellationToken);
+        return Ok(ApiResponseFactory.Success(await UserRefsAsync(ids, cancellationToken), "Approval inbox approvers retrieved."));
+    }
+
+    /// <summary>The users as a filter offers them: named, A to Z.</summary>
+    private async Task<List<RemsUserRef>> UserRefsAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        var names = await _users.GetFullNamesAsync(ids, cancellationToken);
+        return ids
+            .Select(id => RemsWorkspaceMapper.UserRef(id, names)!)
+            .OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>The quick-filter counts for the inbox, under the same search and filters.</summary>
@@ -567,6 +622,7 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] Guid? approverUserId = null,
         [FromQuery] DateTime? sentFrom = null,
         [FromQuery] DateTime? sentTo = null,
         [FromQuery] DateTime? decidedFrom = null,
@@ -589,7 +645,8 @@ public sealed class RemsApprovalController : ControllerBase
             new RemsApprovalTaskQuery(
                 me, search, roleFilter, statusFilter, SortRequest.Default, Page: 1, Limit: 1,
                 roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
-                createdFrom, createdTo, updatedFrom, updatedTo),
+                createdFrom, createdTo, updatedFrom, updatedTo,
+                TenantId: InboxTenantScope(), ApproverUserId: approverUserId),
             cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "Approval inbox quick-filter counts retrieved."));
     }
@@ -619,7 +676,8 @@ public sealed class RemsApprovalController : ControllerBase
 
     /// <summary>
     /// The caller's own task with the full review packet (AC-REMS-019.9): the originating request, the
-    /// client, the entity under review.
+    /// client, the entity under review. A Tenant Admin or Super Admin may read any task of their tenant;
+    /// the packet then says it is not theirs (<c>isYours</c>), and nothing on it can be decided by them.
     /// </summary>
     [HttpGet("approval-tasks/{taskId:guid}")]
     [Authorize]
@@ -633,12 +691,14 @@ public sealed class RemsApprovalController : ControllerBase
 
         var task = await _tasks.GetTaskWithContextAsync(taskId, cancellationToken);
         // Record-level: an approver may read ONLY their own task; anything else is a 404 (never revealed).
-        if (task is null || task.ApproverId != me)
+        // The one exception reads the whole tenant, and reads it only.
+        var readsTenant = InboxTenantScope() is { } tenant && task?.TenantId == tenant;
+        if (task is null || (task.ApproverId != me && !readsTenant))
         {
             return NotFound(ApiResponseFactory.NotFound("Approval task not found."));
         }
 
-        var view = await BuildTaskViewAsync(task, cancellationToken);
+        var view = await BuildTaskViewAsync(task, me, cancellationToken);
         return Ok(ApiResponseFactory.Success(view, "REMS approval task retrieved."));
     }
 
@@ -771,7 +831,7 @@ public sealed class RemsApprovalController : ControllerBase
             _customerSync.Enqueue(pendingSync);
         }
 
-        var view = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), cancellationToken);
+        var view = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), me, cancellationToken);
         return Ok(ApiResponseFactory.Success(view, fullyApproved ? "Task approved; engagement fully approved." : "Task approved."));
     }
 
@@ -822,7 +882,7 @@ public sealed class RemsApprovalController : ControllerBase
         if (round.Status != RemsApprovalRoundStatus.Rejected)
         {
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            var openView = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), cancellationToken);
+            var openView = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), me, cancellationToken);
             return Ok(ApiResponseFactory.Success(
                 openView,
                 $"Declined. {round.DeclineCount} of {effective} declines needed to send this back — the approval is still open."));
@@ -882,7 +942,7 @@ public sealed class RemsApprovalController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var view = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), cancellationToken);
+        var view = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), me, cancellationToken);
         return Ok(ApiResponseFactory.Success(view, "Declined. The request is back with its initiator."));
     }
 
@@ -1288,7 +1348,9 @@ public sealed class RemsApprovalController : ControllerBase
     /// Builds the approver's review packet: the request that started it, the client, the entity under
     /// review with its addresses and contacts. The task-context load carries the whole graph.
     /// </summary>
-    private async Task<RemsApprovalTaskView> BuildTaskViewAsync(RemsApprovalTask task, CancellationToken cancellationToken)
+    // `me` is the reader: the packet is the same for the approver and for an admin reading over their
+    // shoulder, except that only the approver can decide it.
+    private async Task<RemsApprovalTaskView> BuildTaskViewAsync(RemsApprovalTask task, Guid me, CancellationToken cancellationToken)
     {
         var request = task.Request!;
         var client = request.Client!;
@@ -1328,7 +1390,7 @@ public sealed class RemsApprovalController : ControllerBase
             .ThenBy(t => t.CreatedOnUtc)
             .Select(t => new RemsApprovalDecisionView(
                 t.Id, RemsWorkspaceMapper.UserRef(t.ApproverId, names)!, t.ApproverRole.ToString(),
-                t.Status.ToString(), t.DecidedOnUtc, t.RejectionReason, t.Id == task.Id))
+                t.Status.ToString(), t.DecidedOnUtc, t.RejectionReason, IsYou: t.ApproverId == me))
             .ToList();
 
         var roundView = new RemsApprovalRoundView(
@@ -1342,12 +1404,16 @@ public sealed class RemsApprovalController : ControllerBase
             .Select(i => new RemsChecklistItemView(i.Id, i.DisplayOrder, i.Label, i.IsCompleted, i.CompletedOnUtc))
             .ToList();
 
-        var canDecide = task.Status == RemsApprovalTaskStatus.Pending && round.Status == RemsApprovalRoundStatus.Pending;
+        var isYours = task.ApproverId == me;
+        var canDecide = isYours
+            && task.Status == RemsApprovalTaskStatus.Pending && round.Status == RemsApprovalRoundStatus.Pending;
 
         return new RemsApprovalTaskView(
             task.Id, round.Id, round.RoundNumber, task.ApproverRole.ToString(), task.Status.ToString(),
             task.DecidedOnUtc, task.RejectionReason, canDecide, checklist, requestView, engagementView, roundView,
-            RecordAudit.From(task, RecordAudit.Names(names)));
+            RecordAudit.From(task, RecordAudit.Names(names)),
+            Approver: RemsWorkspaceMapper.UserRef(task.ApproverId, names),
+            IsYours: isYours);
     }
 
     /// <summary>

@@ -692,17 +692,23 @@ export const remsApi = {
   setRelatedEntityStatus: (kind, id, status) =>
     api.put(`/api/rems/related-entities/${kind}/${id}/status`, { status }).then(unwrap),
 
-  // ---- Approval inbox (WO-117 Part B / WO-114) — the caller's OWN approval tasks only ----
-  // The caller's own approval tasks (pending + historical), newest round first.
+  // ---- Approval inbox (WO-117 Part B / WO-114) — the caller's OWN approval tasks, or every approver's in
+  // the tenant for a Tenant Admin / Super Admin ----
+  // The caller's own approval tasks (pending + historical), newest round first; the whole tenant's for an
+  // admin, one row per approver on each request's current round. params: { approverUserId? } narrows those.
   myApprovalTasks: (params) => api.get("/api/rems/approval-tasks", remsListParams(params)).then(envelope),
-  // The CSEs across the caller's own inbox, for its CSE filter.
+  // The CSEs across the caller's inbox, for its CSE filter.
   myApprovalCses: () => api.get("/api/rems/approval-tasks/cses").then(unwrap),
-  // The clients across the caller's own inbox, for its Client filter.
+  // The clients across the caller's inbox, for its Client filter.
   myApprovalClients: () => api.get("/api/rems/approval-tasks/clients").then(unwrap),
+  // The approvers across the caller's inbox — only themselves, unless they read the whole tenant.
+  myApprovalApprovers: () => api.get("/api/rems/approval-tasks/approvers").then(unwrap),
   // The inbox's quick-filter counts, under the same search and filters as the list.
   myApprovalQuickCounts: (params) => api.get("/api/rems/approval-tasks/quick-counts", remsListParams(params)).then(unwrap),
-  // The caller's own approval task with the full review packet (404 for anyone else's task) — the same
-  // material as the staff engagement workspace, since that is what is being signed off.
+  // The caller's own approval task with the full review packet (404 for anyone else's task, unless the
+  // caller is a Tenant Admin / Super Admin, who may read any task in the tenant: `isYours` then says it is
+  // not theirs to decide) — the same material as the staff engagement workspace, since that is what is
+  // being signed off.
   approvalTask: (taskId) => api.get(`/api/rems/approval-tasks/${taskId}`).then(unwrap),
   // The caller's OWN approval task on a request — `{ taskId }`, or a 404 when they hold none.
   myApprovalTaskForRequest: (remsId) =>

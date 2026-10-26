@@ -41,7 +41,9 @@ public sealed class SetRemsApproversRequest
 
 /// <summary>
 /// One REQUEST in the caller's approvals inbox, carried by their task on its latest round — so <see
-/// cref="Role"/>, <see cref="Status"/> and <see cref="RoundNumber"/> say what they are to it now.
+/// cref="Role"/>, <see cref="Status"/> and <see cref="RoundNumber"/> say what they are to it now. On the
+/// tenant-wide inbox a Tenant Admin or Super Admin reads, a row is one REQUEST on its current round: the
+/// counts and <see cref="Approvers"/> say where it stands.
 /// </summary>
 public sealed record RemsApprovalTaskRow(
     Guid TaskId,
@@ -76,7 +78,17 @@ public sealed record RemsApprovalTaskRow(
     /// whose client is not posted. Sync now lives on this list, so <c>CanSyncNow</c> is answered for the
     /// approver reading it.
     /// </summary>
-    RemsMaconomySyncView? MaconomySync = null);
+    RemsMaconomySyncView? MaconomySync = null,
+    /// <summary>
+    /// Whose task carries the row: the caller on their own inbox; on the tenant-wide one, the approver who
+    /// last acted on the round, with everyone on it in <see cref="Approvers"/>.
+    /// </summary>
+    RemsUserRef? Approver = null,
+    /// <summary>
+    /// Every approver on the row's round and where they stand — the tenant-wide inbox only, where a row
+    /// is a request rather than one approver's task. Null on an approver's own inbox.
+    /// </summary>
+    IReadOnlyList<RemsApprovalDecisionView>? Approvers = null);
 
 /// <summary>A checklist line on an approval task.</summary>
 public sealed record RemsChecklistItemView(Guid Id, int DisplayOrder, string Label, bool IsCompleted, DateTime? CompletedOnUtc);
@@ -99,7 +111,14 @@ public sealed record RemsApprovalTaskView(
     RemsApprovalEngagementView Engagement,
     RemsApprovalRoundView Round,
     /// <summary>The TASK's own provenance — the packet is keyed on it — as every detail page ends with.</summary>
-    RecordAudit Audit);
+    RecordAudit Audit,
+    /// <summary>Whose task this is.</summary>
+    RemsUserRef? Approver = null,
+    /// <summary>
+    /// False when a Tenant Admin or Super Admin is reading another approver's task: the packet is theirs
+    /// to read, the checklist and the decision are not.
+    /// </summary>
+    bool IsYours = true);
 
 /// <summary>
 /// The originating REMS request as an approver sees it: the intake fields the partner raised, who is

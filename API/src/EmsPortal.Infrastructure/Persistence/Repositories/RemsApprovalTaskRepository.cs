@@ -79,25 +79,53 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
         return (max ?? 0) + 1;
     }
 
-    // The approver's latest task per request: nothing newer on the same request by round, then by id.
-    private IQueryable<RemsApprovalTask> CurrentTasksOf(Guid approverId)
+    // Whose inbox: the approver's latest task per request — nothing newer on the same request by round,
+    // then by id — or, for a Tenant Admin or Super Admin reading the whole tenant, every approver's task
+    // on the round each request is on now.
+    private IQueryable<RemsApprovalTask> InboxOf(Guid approverId, Guid? tenantId)
     {
+        if (tenantId is { } tenant)
+        {
+            var all = Tasks.Where(t => t.TenantId == tenant);
+            return all.Where(t => !all.Any(other => other.REMSId == t.REMSId && other.RoundNumber > t.RoundNumber));
+        }
         var mine = Tasks.Where(t => t.ApproverId == approverId);
         return mine.Where(t => !mine.Any(other =>
             other.REMSId == t.REMSId
             && (other.RoundNumber > t.RoundNumber || (other.RoundNumber == t.RoundNumber && other.Id > t.Id))));
     }
 
-    public async Task<IReadOnlyList<Guid>> ListCseIdsByApproverAsync(Guid approverId, CancellationToken cancellationToken = default)
-        => await CurrentTasksOf(approverId)
+    // The ROWS of that inbox. The approver's own is one task per request already. The tenant-wide one is
+    // read per request too: one row per round, carried by the task updated last — so the row's audit
+    // columns name who last acted on the round, and the default order puts the latest decisions first.
+    private IQueryable<RemsApprovalTask> InboxRowsOf(Guid approverId, Guid? tenantId)
+    {
+        var tasks = InboxOf(approverId, tenantId);
+        if (tenantId is null)
+        {
+            return tasks;
+        }
+        return tasks.Where(t => !tasks.Any(other =>
+            other.REMSId == t.REMSId
+            && (other.UpdatedOnUtc > t.UpdatedOnUtc || (other.UpdatedOnUtc == t.UpdatedOnUtc && other.Id > t.Id))));
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListInboxCseIdsAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default)
+        => await InboxOf(approverId, tenantId)
             .Where(t => t.Request!.CSEId != null)
             .Select(t => t.Request!.CSEId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<RemsClientChoice>> ListClientsByApproverAsync(Guid approverId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Guid>> ListInboxApproverIdsAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default)
+        => await InboxOf(approverId, tenantId)
+            .Select(t => t.ApproverId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<RemsClientChoice>> ListInboxClientsAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default)
     {
-        var clients = await CurrentTasksOf(approverId)
+        var clients = await InboxOf(approverId, tenantId)
             .Select(t => new
             {
                 Id = t.Request!.ClientId,
@@ -111,7 +139,7 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
 
     private IQueryable<RemsApprovalTask> InboxTasks(RemsApprovalTaskQuery query, bool withRoundStatus, bool withStatus)
     {
-        var tasks = CurrentTasksOf(query.ApproverId);
+        var tasks = InboxRowsOf(query.ApproverId, query.TenantId);
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var t = query.Search.Trim();
@@ -129,7 +157,16 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
         {
             tasks = tasks.Where(t => t.ApproverRole == role);
         }
-        if (withStatus && query.Status is { } status)
+        if (query.ApproverUserId is { } approverId)
+        {
+            // A tenant-wide row is a request: the round it is on has to hold the approver's task.
+            tasks = query.TenantId is null
+                ? tasks.Where(t => t.ApproverId == approverId)
+                : tasks.Where(t => _dbContext.RemsApprovalTasks.Any(o =>
+                    o.REMSId == t.REMSId && o.RoundNumber == t.RoundNumber && o.ApproverId == approverId));
+        }
+        // A decision belongs to a task; a request row has none to filter by.
+        if (withStatus && query.Status is { } status && query.TenantId is null)
         {
             tasks = tasks.Where(t => t.Status == status);
         }
@@ -221,11 +258,15 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
         {
             round[value] = await WhereRoundStatus(forRound, value).CountAsync(cancellationToken);
         }
-        var forDecision = InboxTasks(query, withRoundStatus: true, withStatus: false);
+        // No decision counts on the tenant-wide inbox: its rows are requests, which hold no decision of their own.
         var decision = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var status in new[] { RemsApprovalTaskStatus.Pending, RemsApprovalTaskStatus.Approved })
+        if (query.TenantId is null)
         {
-            decision[status.ToString()] = await forDecision.Where(t => t.Status == status).CountAsync(cancellationToken);
+            var forDecision = InboxTasks(query, withRoundStatus: true, withStatus: false);
+            foreach (var status in new[] { RemsApprovalTaskStatus.Pending, RemsApprovalTaskStatus.Approved })
+            {
+                decision[status.ToString()] = await forDecision.Where(t => t.Status == status).CountAsync(cancellationToken);
+            }
         }
         return new RemsApprovalTaskQuickCounts(round, decision);
     }
