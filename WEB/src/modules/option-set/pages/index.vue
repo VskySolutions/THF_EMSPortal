@@ -13,19 +13,19 @@
       @back="$router.back()"
     >
       <template #actions>
+        <!-- No label above the control: it would make this header taller than every other list's. The
+             options name the entity for themselves. -->
         <app-select
           v-model="entityFilter"
           :options="entityFilterOptions"
-          label="Entity"
+          aria-label="Entity"
           style="min-width: 200px;"
           :clearable="false"
           @update:model-value="load"
         />
+        <q-toggle v-if="canManageDeleted" v-model="showDeleted" label="Show deleted?" dense />
       </template>
     </app-list-header>
-    <q-toggle
-      v-if="canManageDeleted" v-model="showDeleted" label="Show deleted?" dense class="q-mb-md"
-    />
 
     <app-data-table
       page-key="option_sets"
