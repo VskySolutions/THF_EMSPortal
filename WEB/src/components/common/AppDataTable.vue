@@ -129,13 +129,14 @@ const rowsPerPageOptions = [10, 20, 50, 100];
 const prefs = props.pageKey ? usePreferences(props.pageKey) : null;
 
 // The page owns page, size AND sort — useListTable holds them, sends them to the server and remembers
-// them.
+// them. A total is what tells QTable the rows are one server page; a client-sorted list leaves it out,
+// so QTable sorts and pages the rows it was given by itself.
 const innerPagination = ref({
   page: 1,
   rowsPerPage: prefs?.get("pageSize", 20) ?? 20,
   sortBy: props.defaultSortBy,
   descending: props.defaultDescending,
-  rowsNumber: props.totalRecords,
+  ...(props.clientSort ? {} : { rowsNumber: props.totalRecords }),
   ...(props.pagination || {})
 });
 
@@ -143,7 +144,12 @@ const innerSelected = ref([]);
 watch(innerSelected, (val) => emit("update:selected", val));
 
 watch(() => props.totalRecords, (total) => {
-  innerPagination.value = { ...innerPagination.value, rowsNumber: total };
+  if (!props.clientSort) innerPagination.value = { ...innerPagination.value, rowsNumber: total };
+});
+
+// A client-sorted list pages by itself and never asks the server, so its page size is remembered here.
+watch(() => innerPagination.value.rowsPerPage, (size) => {
+  if (props.clientSort) prefs?.merge({ pageSize: size });
 });
 
 // The page's sort follows the page: a list that resets to page 1 on a new sort, or restores a remembered
