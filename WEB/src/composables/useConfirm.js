@@ -7,7 +7,10 @@ export function useConfirm () {
     message = "Are you sure you want to continue?",
     confirmLabel = "Confirm",
     cancelLabel = "Cancel",
-    type = "primary"
+    type = "primary",
+    // The message as markup, for a confirmation that lists what is about to happen. The caller escapes
+    // anything typed by a person.
+    html = false
   } = {}) =>
     new Promise((resolve) => {
       let settled = false;
@@ -20,6 +23,7 @@ export function useConfirm () {
       Dialog.create({
         title,
         message,
+        html,
         ok: {
           label: confirmLabel,
           unelevated: true,

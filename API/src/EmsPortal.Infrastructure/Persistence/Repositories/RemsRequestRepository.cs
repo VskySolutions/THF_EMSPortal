@@ -36,6 +36,43 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
     public Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default)
         => Requests.WorkspaceGraph().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
+    private IQueryable<RemsRequest> JobSyncGraph()
+        => Requests
+            .Include(r => r.Type)
+            .Include(r => r.Status)
+            .Include(r => r.Client).ThenInclude(c => c!.Person)
+            .Include(r => r.Client).ThenInclude(c => c!.EntityType)
+            .Include(r => r.ServiceLine)
+            .Include(r => r.JobTemplate);
+
+    public Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default)
+        => JobSyncGraph().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<RemsRequest>> ListApprovedForJobSyncAsync(CancellationToken cancellationToken = default)
+    {
+        const string approved = RemsRequestStatuses.Approved;
+        return await JobSyncGraph()
+            .Where(r => r.Status!.Value == approved)
+            .OrderByDescending(r => r.UpdatedOnUtc)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<RemsMaconomyJobSyncCounts> CountJobSyncAsync(DateTime staleBeforeUtc, CancellationToken cancellationToken = default)
+    {
+        const string approved = RemsRequestStatuses.Approved;
+        var counts = await Requests
+            .Where(r => r.Status!.Value == approved)
+            .GroupBy(_ => 1)
+            .Select(g => new RemsMaconomyJobSyncCounts(
+                g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Synced),
+                g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Failed
+                    || (r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && r.UpdatedOnUtc < staleBeforeUtc)),
+                g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && r.UpdatedOnUtc >= staleBeforeUtc),
+                g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.NotSynced)))
+            .FirstOrDefaultAsync(cancellationToken);
+        return counts ?? new RemsMaconomyJobSyncCounts(0, 0, 0, 0);
+    }
+
     public Task<RemsRequest?> GetByInviteCodeUnscopedAsync(string inviteCode, CancellationToken cancellationToken = default)
         => Requests.IgnoreQueryFilters().WorkspaceGraph()
             .FirstOrDefaultAsync(r => !r.Deleted && r.InviteCode == inviteCode, cancellationToken);

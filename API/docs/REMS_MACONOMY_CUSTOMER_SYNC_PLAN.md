@@ -4,7 +4,7 @@
 `feat/rems-maconomy-client-search`; all seven decisions in section 5 were answered on 22 Oct 2026 and the
 code in section 2 was written the same day (migration `20261022112337_AddRemsMaconomyCustomerSync`). What
 remains is section 3: the first create against the test instance, which confirms the customer card's write
-field names (`Maconomy:CustomerCard` in configuration) and the init-create / create link names the gateway
+field names (constants in `MaconomyCustomerDataMapping` since 31 Oct 2026; only the container is configuration) and the init-create / create link names the gateway
 follows.
 
 Builds on the client search as built (`REMS_MACONOMY_CLIENT_SEARCH_PLAN.md`): the per-tenant connection,
@@ -123,7 +123,7 @@ row only.
     `GET .../customer-sync/unsynced`, `POST .../customer-sync/{remsId}/run` (the settings page's Sync now) —
     `integrations.maconomy.manage` (Tenant Admin, Super Admin). ALWAYS the caller's own tenant: no `?tenantId=`
     override, unlike the connection endpoints (user, 22 Oct 2026).
-- Configuration: `Maconomy:CustomerCard` (container and the write field names: `name1`, `electronicmailaddress`,
+- Configuration: `Maconomy:CustomerCard:Container` only since 31 Oct 2026; the write field names (`name1`, `electronicmailaddress`,
   `telephone`, `specification6name`, `specification1name` — the instance refused `specification6` as a card
   field on 22 Oct 2026, the popup column IS the `…name` field) and `Maconomy:CustomerSyncStaleMinutes` (10).
 - Sync status on `RemsRequestDetail` and the list items; `ActivityEventTypes.RemsMaconomyCustomerSynced` /

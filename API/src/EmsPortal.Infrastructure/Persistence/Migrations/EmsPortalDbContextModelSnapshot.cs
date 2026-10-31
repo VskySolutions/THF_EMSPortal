@@ -1229,6 +1229,17 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit");
 
+                    b.Property<Guid?>("JobSyncChangedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("JobSyncChangedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("JobSyncEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("LastLoginError")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -1623,6 +1634,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("MaconomyNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("MetadataJson")
                         .HasColumnType("nvarchar(max)");
@@ -2912,6 +2927,27 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("JobTemplateId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("MaconomyJobNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("MaconomyJobSyncError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("MaconomyJobSyncStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("NotSynced");
+
+                    b.Property<Guid?>("MaconomyJobSyncedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("MaconomyJobSyncedOnUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid?>("OnBehalfOfUserId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2974,6 +3010,8 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("JobTemplateId");
 
+                    b.HasIndex("MaconomyJobSyncedById");
+
                     b.HasIndex("OnBehalfOfUserId");
 
                     b.HasIndex("ServiceLineId");
@@ -2991,6 +3029,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "InviteCode")
                         .IsUnique()
                         .HasFilter("[Deleted] = 0 AND [InviteCode] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "MaconomyJobNumber")
+                        .HasFilter("[MaconomyJobNumber] IS NOT NULL");
 
                     b.HasIndex("TenantId", "RemsNumber")
                         .IsUnique()
@@ -4736,6 +4777,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "JobTemplate")
                         .WithMany()
                         .HasForeignKey("JobTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("MaconomyJobSyncedById")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("EmsPortal.Domain.Entities.User", "OnBehalfOfUser")

@@ -100,6 +100,14 @@
         </q-td>
       </template>
 
+      <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved. -->
+      <template #body-cell-maconomyJobSync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <!-- Who holds the request. -->
       <template #body-cell-assignedAdmin="cell">
         <q-td :props="cell">
@@ -131,6 +139,20 @@
             :loading="handingBack === cell.row.remsId" @click.stop="handBack(cell.row)"
           >
             <q-tooltip>Hand back — put this in the queue for another admin to pick up</q-tooltip>
+          </q-btn>
+
+          <!-- Sync job now: post the approved engagement to Maconomy as a job. Offered only while the job
+               sync is on and the request is approved without a job; blocked, with the reason, until the
+               client is in Maconomy and a template job resolves. -->
+          <q-btn
+            v-if="cell.row.maconomyJobSync?.canSyncNow || cell.row.maconomyJobSync?.blockedReason" type="a"
+            flat round dense color="primary" icon="o_work"
+            :loading="syncingJobRems === cell.row.remsId" :disable="!cell.row.maconomyJobSync?.canSyncNow || !!syncingJobRems"
+            @click.stop="syncJobNow(cell.row)"
+          >
+            <q-tooltip max-width="320px">
+              {{ cell.row.maconomyJobSync?.canSyncNow ? "Sync job now — create this engagement's job in Maconomy" : cell.row.maconomyJobSync?.blockedReason }}
+            </q-tooltip>
           </q-btn>
 
           <!-- View and Edit are the same page in two modes. -->
@@ -221,7 +243,8 @@ import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
-import { maconomySyncLabel } from "modules/rems/maconomySync";
+import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
+import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
 
 const notify = useNotify();
 const { confirm } = useConfirm();
@@ -287,6 +310,8 @@ const columns = computed(() => [
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
+  // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
+  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
@@ -457,4 +482,7 @@ const openEmailLog = (row) => {
 };
 
 const rowLabel = (row) => [row.remsNumber, row.clientName].filter(Boolean).join(" — ");
+
+// Sync job now: the engagement posted to Maconomy as a job, with a confirmation naming what is sent.
+const { syncingJobRems, syncJobNow } = useMaconomyJobSync({ afterwards: () => load() });
 </script>

@@ -61,7 +61,13 @@ public static class DefaultOptionSets
         /// which is the difference between retiring a value and deleting one. A tenant can put it back
         /// in Administration → Option Sets, so this is a starting position like every other field here.
         /// </summary>
-        bool IsActive = true);
+        bool IsActive = true,
+        /// <summary>
+        /// The number Maconomy files the value under, where the Maconomy sync needs one: the specification 6
+        /// number on an entity type, the specification 1 number on an industry. Seeded so the sync works on
+        /// a new tenant; a Tenant Admin edits it under Option Sets like any other field here.
+        /// </summary>
+        string? MaconomyNumber = null);
 
     /// <summary>
     /// Two different kinds of protection, because two different things can be true of a list.
@@ -233,15 +239,15 @@ public static class DefaultOptionSets
             // ramp: these are categories, not stages. Like every colour here they are a STARTING point,
             // recolourable in Administration → Option Sets.
             new ItemDefinition("individual", "Individual", 1,
-                BackgroundColor: Teal, TextColor: OnDark),
+                BackgroundColor: Teal, TextColor: OnDark, MaconomyNumber: "1"),
             new ItemDefinition("not_for_profit", "Not-for-Profit", 2,
-                BackgroundColor: Purple, TextColor: OnDark),
+                BackgroundColor: Purple, TextColor: OnDark, MaconomyNumber: "3"),
             new ItemDefinition("insurance", "Insurance", 3,
-                BackgroundColor: Brand, TextColor: OnDark),
+                BackgroundColor: Brand, TextColor: OnDark, MaconomyNumber: "4"),
             new ItemDefinition("commercial", "Commercial", 4,
-                BackgroundColor: Blue, TextColor: OnDark),
+                BackgroundColor: Blue, TextColor: OnDark, MaconomyNumber: "5"),
             new ItemDefinition("government", "Government", 5,
-                BackgroundColor: Slate, TextColor: OnDark),
+                BackgroundColor: Slate, TextColor: OnDark, MaconomyNumber: "2"),
             // A trust or an estate is a legal entity with a name, a tax number and people who act for it,
             // so it is asked exactly what the three business groups are asked (see IsBusinessGroup) —
             // an EIN and the primary / financial / billing contacts. What it is NOT is an individual:
@@ -249,7 +255,7 @@ public static class DefaultOptionSets
             new ItemDefinition("trust_estate", "Trust and Estate", 6, Description:
                 "A trust or a decedent's estate. Asked the same questions as a business — it has an EIN " +
                 "and is acted for by trustees or personal representatives rather than by an individual.",
-                BackgroundColor: Brown, TextColor: OnDark),
+                BackgroundColor: Brown, TextColor: OnDark, MaconomyNumber: "6"),
         // The client's intake form is SHAPED by these codes: individual asks for a spouse, the business
         // family for an EIN and three contacts, government for a finance director and a contract block
         // (RemsFormPayloadValidator). Deleting or re-coding one would leave submitted forms nobody can
@@ -272,29 +278,29 @@ public static class DefaultOptionSets
             new ItemDefinition("entertainment", "Entertainment", 5),
             new ItemDefinition("financial_institutions_banking", "Financial Institutions/Banking", 6),
             new ItemDefinition("hospitality", "Hospitality", 7),
-            new ItemDefinition("manufacturing", "Manufacturing", 8),
-            new ItemDefinition("professional_service_firms", "Professional Service Firms", 9),
-            new ItemDefinition("real_estate", "Real Estate", 10),
-            new ItemDefinition("retail", "Retail", 11),
-            new ItemDefinition("health_care", "Health Care", 12),
-            new ItemDefinition("oil_gas_distribution", "Oil & Gas Distribution", 13),
-            new ItemDefinition("wholesale", "Wholesale", 14),
-            new ItemDefinition("technology", "Technology", 15),
-            new ItemDefinition("state_government", "State Government", 16),
-            new ItemDefinition("local_government", "Local Government", 17),
-            new ItemDefinition("federal_government", "Federal Government", 18),
-            new ItemDefinition("educational_institutions", "Educational Institutions", 19),
+            new ItemDefinition("manufacturing", "Manufacturing", 8, MaconomyNumber: "17"),
+            new ItemDefinition("professional_service_firms", "Professional Service Firms", 9, MaconomyNumber: "18"),
+            new ItemDefinition("real_estate", "Real Estate", 10, MaconomyNumber: "19"),
+            new ItemDefinition("retail", "Retail", 11, MaconomyNumber: "20"),
+            new ItemDefinition("health_care", "Health Care", 12, MaconomyNumber: "21"),
+            new ItemDefinition("oil_gas_distribution", "Oil & Gas Distribution", 13, MaconomyNumber: "22"),
+            new ItemDefinition("wholesale", "Wholesale", 14, MaconomyNumber: "23"),
+            new ItemDefinition("technology", "Technology", 15, MaconomyNumber: "24"),
+            new ItemDefinition("state_government", "State Government", 16, MaconomyNumber: "25"),
+            new ItemDefinition("local_government", "Local Government", 17, MaconomyNumber: "26"),
+            new ItemDefinition("federal_government", "Federal Government", 18, MaconomyNumber: "27"),
+            new ItemDefinition("educational_institutions", "Educational Institutions", 19, MaconomyNumber: "28"),
             // The four insurance trades, with no "Insurance -" on the front: the entity type beside the
             // picker already says Insurance. The VALUES keep the prefix — they are the codes engagements
             // are recorded against — and "Health" is deliberately not the "Health Care" above, which is
             // the trade a hospital is in. The two only ever meet in the option-set admin.
-            new ItemDefinition("insurance_health", "Health", 20),
-            new ItemDefinition("insurance_property_casualty", "Property and Casualty", 21),
-            new ItemDefinition("insurance_life", "Life", 22),
-            new ItemDefinition("insurance_other", "Other", 23),
-            new ItemDefinition("trade_associations", "Trade Associations", 24),
-            new ItemDefinition("charitable_organizations_foundations", "Charitable Organizations or Foundations", 25),
-            new ItemDefinition("other_not_for_profit", "Other Not-for-Profit", 26),
+            new ItemDefinition("insurance_health", "Health", 20, MaconomyNumber: "29"),
+            new ItemDefinition("insurance_property_casualty", "Property and Casualty", 21, MaconomyNumber: "30"),
+            new ItemDefinition("insurance_life", "Life", 22, MaconomyNumber: "31"),
+            new ItemDefinition("insurance_other", "Other", 23, MaconomyNumber: "32"),
+            new ItemDefinition("trade_associations", "Trade Associations", 24, MaconomyNumber: "33"),
+            new ItemDefinition("charitable_organizations_foundations", "Charitable Organizations or Foundations", 25, MaconomyNumber: "34"),
+            new ItemDefinition("other_not_for_profit", "Other Not-for-Profit", 26, MaconomyNumber: "35"),
             // RETIRED, not removed: a government client is filed as state, local or federal, and this
             // unqualified value is only what a few were recorded under before that was settled. Hidden
             // keeps those reading correctly; a firm that wants it back turns it on in Administration →

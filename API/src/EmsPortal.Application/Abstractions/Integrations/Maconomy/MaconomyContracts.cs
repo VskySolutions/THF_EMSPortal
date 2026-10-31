@@ -35,14 +35,24 @@ public sealed record SaveMaconomyConnectionInput(
     int DefaultLimit,
     bool IsEnabled);
 
-/// <summary>A record to create in a container: the card fields the instance is opened with, and the values written.</summary>
-public sealed record MaconomyCreateRequest(string Container, IReadOnlyList<string> Fields, IReadOnlyDictionary<string, string?> Values);
+/// <summary>
+/// One record to create on a card, as a mapping class produces it and the card writer sends it: the
+/// container, the fields the instance is opened with, the values posted on create, the values posted on
+/// the init step before it (a template reference Maconomy derives defaults from; null for a bare init),
+/// and the key field the reply must carry back. Knows nothing about customers or jobs.
+/// </summary>
+public sealed record MaconomyCardWrite(
+    string Container,
+    IReadOnlyList<string> Fields,
+    IReadOnlyDictionary<string, string?> Values,
+    IReadOnlyDictionary<string, string?>? InitValues,
+    string KeyField);
 
 /// <summary>The record Maconomy created, as field name → value text.</summary>
 public sealed record MaconomyCreatedRecord(IReadOnlyDictionary<string, string?> Data);
 
-/// <summary>What the portal posts as a new customer. A null field is left to Maconomy's defaults.</summary>
-public sealed record MaconomyNewCustomer(string Name, string? Email, string? Phone, string? EntityTypeNumber, string? IndustryNumber);
+/// <summary>The job Maconomy created: the number its series assigned, and the name as stored.</summary>
+public sealed record MaconomyCreatedJob(string Number, string Name);
 
 /// <summary>Why a call to Maconomy did not produce an answer.</summary>
 public enum MaconomyFailure

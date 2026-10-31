@@ -71,6 +71,7 @@ public sealed class RemsApprovalController : ControllerBase
     // STATIC-APPROVAL-POLICY
     private readonly IRemsApprovalPolicy _policy;
     private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IMaconomyJobSyncService _jobSync;
 
     public RemsApprovalController(
         IRemsRequestRepository requests,
@@ -85,10 +86,12 @@ public sealed class RemsApprovalController : ControllerBase
         INotificationDispatcher notifications,
         IOptionCodeResolver codes,
         IRemsApprovalPolicy policy,
-        IMaconomyCustomerSyncService customerSync)
+        IMaconomyCustomerSyncService customerSync,
+        IMaconomyJobSyncService jobSync)
     {
         _policy = policy;
         _customerSync = customerSync;
+        _jobSync = jobSync;
         _requests = requests;
         _delegations = delegations;
         _tasks = tasks;
@@ -490,7 +493,7 @@ public sealed class RemsApprovalController : ControllerBase
         // The audit actors, each request's CSE and each row's approvers, resolved in one read: a name
         // lookup per row would be one round trip per task. A tenant-wide row names its whole round.
         var auditNames = await _users.GetFullNamesAsync(
-            tasks.SelectMany(t => new[] { t.CreatedById, t.UpdatedById, t.Request?.CSEId, (Guid?)t.ApproverId }
+            tasks.SelectMany(t => new[] { t.CreatedById, t.UpdatedById, t.Request?.CSEId, t.Request?.MaconomyJobSyncedById, (Guid?)t.ApproverId }
                     .Concat(tenantScope is null
                         ? Array.Empty<Guid?>()
                         : t.Request!.ApprovalTasks.Where(o => o.RoundNumber == t.RoundNumber).Select(o => (Guid?)o.ApproverId)))
@@ -506,6 +509,9 @@ public sealed class RemsApprovalController : ControllerBase
         var syncEnabled = User.GetActiveTenantId() is { } tenantId
             && await _customerSync.IsEnabledAsync(tenantId, cancellationToken);
         var maySyncAny = User.HasPermission(Permissions.RemsEngagementsManage);
+        var jobContext = User.GetActiveTenantId() is { } jobTenant
+            ? await _jobSync.GetContextAsync(jobTenant, cancellationToken)
+            : MaconomyJobSyncContext.None;
 
         var rows = new List<RemsApprovalTaskRow>(tasks.Count);
         foreach (var t in tasks)
@@ -516,6 +522,9 @@ public sealed class RemsApprovalController : ControllerBase
             var maconomySync = RemsMaconomySyncViews.For(
                 request, client is not null && _customerSync.IsStale(client), syncEnabled,
                 canManage: t.ApproverId == me || maySyncAny);
+            var maconomyJobSync = RemsMaconomyJobSyncViews.ForListed(
+                request, jobContext, _jobSync.IsStale(request), canManage: t.ApproverId == me || maySyncAny,
+                NameOf(request.MaconomyJobSyncedById));
             // A tenant-wide row is the request: Decided is when its round closed, and every approver is on it.
             var approvers = tenantScope is null ? null : round.Tasks
                 .OrderBy(x => DisplayRank(x.ApproverRole))
@@ -536,6 +545,7 @@ public sealed class RemsApprovalController : ControllerBase
                 round.Tasks.Count,
                 NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc,
                 MaconomySync: maconomySync,
+                MaconomyJobSync: maconomyJobSync,
                 Approver: RemsWorkspaceMapper.UserRef(t.ApproverId, auditNames),
                 Approvers: approvers));
         }

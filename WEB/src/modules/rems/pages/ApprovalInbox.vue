@@ -149,6 +149,15 @@
         </q-td>
       </template>
 
+      <!-- Whether the approved engagement has become a Maconomy job: the job number once it has, the state
+           on the way otherwise. Blank until the request is approved. -->
+      <template #body-cell-maconomyJobSync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- A LINK, not a click handler: the task is a place, so the button is written as a route and
@@ -166,6 +175,19 @@
             :loading="syncingRems === cell.row.remsId" :disable="!!syncingRems" @click.stop="syncNow(cell.row)"
           >
             <q-tooltip>Sync now — post this client to Maconomy</q-tooltip>
+          </q-btn>
+          <!-- Sync job now: post the approved engagement to Maconomy as a job. Offered only while the job
+               sync is on and the request is approved without a job; blocked, with the reason, until the
+               client is in Maconomy and a template job resolves. -->
+          <q-btn
+            v-if="cell.row.maconomyJobSync?.canSyncNow || cell.row.maconomyJobSync?.blockedReason" type="a"
+            flat round dense color="primary" icon="o_work"
+            :loading="syncingJobRems === cell.row.remsId" :disable="!cell.row.maconomyJobSync?.canSyncNow || !!syncingJobRems"
+            @click.stop="syncJobNow(cell.row)"
+          >
+            <q-tooltip max-width="320px">
+              {{ cell.row.maconomyJobSync?.canSyncNow ? "Sync job now — create this engagement's job in Maconomy" : cell.row.maconomyJobSync?.blockedReason }}
+            </q-tooltip>
           </q-btn>
         </q-td>
       </template>
@@ -213,7 +235,8 @@ import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
 import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
-import { maconomySyncLabel } from "modules/rems/maconomySync";
+import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
+import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
 
 const router = useRouter();
 const notify = useNotify();
@@ -291,6 +314,8 @@ const columns = computed(() => [
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   // Whether the approved client has reached Maconomy; Sync now sits in the Actions column beside it.
   { name: "maconomySync", label: "Maconomy", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
+  // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
+  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the
   // reader's own decision below is not.
   {
@@ -439,6 +464,9 @@ const syncNow = async (row) => {
     load();
   }
 };
+
+// Sync job now: the engagement posted to Maconomy as a job, with a confirmation naming what is sent.
+const { syncingJobRems, syncJobNow } = useMaconomyJobSync({ afterwards: () => load() });
 
 // ---- Conversation ----
 // The REQUEST's thread, the same one the task detail shows under the checklist — so an approver can raise

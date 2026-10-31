@@ -157,6 +157,7 @@ public sealed class OptionSetService : IOptionSetService
             TextColor = NullIfBlank(input.TextColor),
             Icon = NullIfBlank(input.Icon),
             MetadataJson = NullIfBlank(input.MetadataJson),
+            MaconomyNumber = NullIfBlank(input.MaconomyNumber),
         };
 
         await _sets.AddItemAsync(item, cancellationToken);
@@ -217,6 +218,7 @@ public sealed class OptionSetService : IOptionSetService
         item.TextColor = NullIfBlank(input.TextColor);
         item.Icon = NullIfBlank(input.Icon);
         item.MetadataJson = NullIfBlank(input.MetadataJson);
+        item.MaconomyNumber = NullIfBlank(input.MaconomyNumber);
 
         _sets.UpdateItem(item);
         await SaveChangesAsync(cancellationToken);

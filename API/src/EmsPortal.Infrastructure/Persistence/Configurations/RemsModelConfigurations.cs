@@ -1,4 +1,5 @@
 using EmsPortal.Domain.Entities;
+using EmsPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -31,6 +32,10 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.Property(r => r.ContractNumber).HasMaxLength(64);
         builder.Property(r => r.PurchaseOrderNumber).HasMaxLength(64);
         builder.Property(r => r.PurchaseOrderAmount).HasPrecision(18, 2);
+        builder.Property(r => r.MaconomyJobNumber).HasMaxLength(64);
+        // Text, like the client's customer status, with the default spelt out so the rows that predate the column read as NotSynced.
+        builder.Property(r => r.MaconomyJobSyncStatus).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(RemsMaconomyJobSyncStatus.NotSynced);
+        builder.Property(r => r.MaconomyJobSyncError).HasMaxLength(1000);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(r => r.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(r => r.TenantId);
@@ -49,6 +54,7 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.HasOne(r => r.DepartmentDirector).WithMany().HasForeignKey(r => r.DepartmentDirectorId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.EngagementExecutive).WithMany().HasForeignKey(r => r.EngagementExecutiveId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.BillingManager).WithMany().HasForeignKey(r => r.BillingManagerId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<User>().WithMany().HasForeignKey(r => r.MaconomyJobSyncedById).OnDelete(DeleteBehavior.Restrict);
         // Type, status and client are on every row the API hands out; AutoInclude makes forgetting impossible.
         builder.Navigation(r => r.Type).AutoInclude();
         builder.Navigation(r => r.Status).AutoInclude();
@@ -57,6 +63,7 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.HasIndex(r => new { r.TenantId, r.RemsNumber }).IsUnique().HasFilter("[Deleted] = 0");
         builder.HasIndex(r => new { r.TenantId, r.InviteCode }).IsUnique().HasFilter("[Deleted] = 0 AND [InviteCode] IS NOT NULL");
         builder.HasIndex(r => new { r.TenantId, r.ClientId });
+        builder.HasIndex(r => new { r.TenantId, r.MaconomyJobNumber }).HasFilter("[MaconomyJobNumber] IS NOT NULL");
         builder.HasIndex(r => new { r.TenantId, r.StatusId, r.AdminAssignedToId, r.CreatedOnUtc });
         builder.HasIndex(r => new { r.TenantId, r.CreatedById, r.StatusId });
         builder.HasIndex(r => new { r.TenantId, r.OnBehalfOfUserId, r.StatusId });

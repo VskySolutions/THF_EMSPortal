@@ -61,6 +61,7 @@ public sealed class RemsRequestsController : ControllerBase
     private readonly IOptionCodeResolver _codes;
     private readonly IMaconomyClientDirectory _maconomy;
     private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IMaconomyJobSyncService _jobSync;
     /// <summary>Where the SPA is served from — the front half of the client's public form link.</summary>
     private readonly string _baseUrl;
 
@@ -79,6 +80,7 @@ public sealed class RemsRequestsController : ControllerBase
         IOptionCodeResolver codes,
         IMaconomyClientDirectory maconomy,
         IMaconomyCustomerSyncService customerSync,
+        IMaconomyJobSyncService jobSync,
         IOptions<AppOptions> appOptions)
     {
         _rems = rems;
@@ -95,6 +97,7 @@ public sealed class RemsRequestsController : ControllerBase
         _codes = codes;
         _maconomy = maconomy;
         _customerSync = customerSync;
+        _jobSync = jobSync;
         _baseUrl = appOptions.Value.BaseUrl;
     }
 
@@ -148,7 +151,7 @@ public sealed class RemsRequestsController : ControllerBase
         var (items, total) = await _rems.ListRequestsAsync(options, cancellationToken);
 
         var names = await _users.GetFullNamesAsync(
-            items.SelectMany(r => new[] { r.AdminAssignedToId, r.CSEId, r.CreatedById, r.UpdatedById })
+            items.SelectMany(r => new[] { r.AdminAssignedToId, r.CSEId, r.CreatedById, r.UpdatedById, r.MaconomyJobSyncedById })
                 .Where(id => id.HasValue).Select(id => id!.Value),
             cancellationToken);
         foreach (var item in items)
@@ -157,8 +160,9 @@ public sealed class RemsRequestsController : ControllerBase
         }
         var syncEnabled = await CustomerSyncEnabledAsync(cancellationToken);
         var canSync = User.HasPermission(Permissions.RemsEngagementsManage);
+        var jobContext = await JobSyncContextAsync(cancellationToken);
 
-        var rows = items.Select(r => ToRow(r, me, privileged, names, syncEnabled, canSync)).ToList();
+        var rows = items.Select(r => ToRow(r, me, privileged, names, syncEnabled, canSync, jobContext)).ToList();
         return Ok(ApiResponseFactory.Paginated(rows, "REMS requests retrieved.", page, limit, total));
     }
 
@@ -1702,7 +1706,7 @@ public sealed class RemsRequestsController : ControllerBase
     private RemsRequestRow ToRow(
         RemsRequest r, Guid me, bool privileged,
         IReadOnlyDictionary<Guid, string> names,
-        bool syncEnabled, bool canSync)
+        bool syncEnabled, bool canSync, MaconomyJobSyncContext jobContext)
     {
         var client = r.Client;
         var (ems, submission) = MapFormState(RemsWorkspaceMapper.FormStateOf(r));
@@ -1715,7 +1719,8 @@ public sealed class RemsRequestsController : ControllerBase
             NameOf(names, r.CreatedById), NameOf(names, r.UpdatedById), r.UpdatedOnUtc,
             ActionsFor(r, me, privileged),
             client?.MaconomyCustomerNumber,
-            MaconomySync: SyncViewFor(r, syncEnabled, canSync));
+            MaconomySync: SyncViewFor(r, syncEnabled, canSync),
+            MaconomyJobSync: JobSyncViewFor(r, jobContext, canSync, names));
     }
 
     /// <summary>Whether the caller's tenant posts approved new clients to Maconomy right now.</summary>
@@ -1726,10 +1731,18 @@ public sealed class RemsRequestsController : ControllerBase
     private RemsMaconomySyncView? SyncViewFor(RemsRequest r, bool syncEnabled, bool canSync)
         => RemsMaconomySyncViews.For(r, r.Client is { } client && _customerSync.IsStale(client), syncEnabled, canSync);
 
+    /// <summary>The tenant's job sync, read once per call: the switch, the settings and the template map every row is judged against.</summary>
+    private async Task<MaconomyJobSyncContext> JobSyncContextAsync(CancellationToken cancellationToken)
+        => User.GetActiveTenantId() is { } tenantId ? await _jobSync.GetContextAsync(tenantId, cancellationToken) : MaconomyJobSyncContext.None;
+
+    /// <summary>The job chip for a request; the synced-by name comes from the names already looked up for the row.</summary>
+    private RemsMaconomyJobSyncView? JobSyncViewFor(RemsRequest r, MaconomyJobSyncContext context, bool canManage, IReadOnlyDictionary<Guid, string> names)
+        => RemsMaconomyJobSyncViews.ForListed(r, context, _jobSync.IsStale(r), canManage, NameOf(names, r.MaconomyJobSyncedById));
+
     private async Task<RemsRequestDetail> BuildDetailAsync(RemsRequest rems, Guid me, bool privileged, CancellationToken cancellationToken)
     {
         var names = await _users.GetFullNamesAsync(
-            new[] { rems.AdminAssignedToId, rems.CSEId, rems.CreatedById, rems.UpdatedById }
+            new[] { rems.AdminAssignedToId, rems.CSEId, rems.CreatedById, rems.UpdatedById, rems.MaconomyJobSyncedById }
                 .Where(x => x.HasValue).Select(x => x!.Value),
             cancellationToken);
         var form = RemsWorkspaceMapper.FormStateOf(rems);
@@ -1750,6 +1763,8 @@ public sealed class RemsRequestsController : ControllerBase
 
         var maconomySync = SyncViewFor(
             rems, await CustomerSyncEnabledAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage));
+        var maconomyJobSync = JobSyncViewFor(
+            rems, await JobSyncContextAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage), names);
 
         return new RemsRequestDetail(
             rems.Id, rems.RemsNumber,
@@ -1772,7 +1787,8 @@ public sealed class RemsRequestsController : ControllerBase
             ClientFormLink(form),
             client?.MaconomyCustomerNumber,
             MaconomyUnavailable: client is { IsMaconomyClient: true, Maconomy: null },
-            MaconomySync: maconomySync);
+            MaconomySync: maconomySync,
+            MaconomyJobSync: maconomyJobSync);
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>

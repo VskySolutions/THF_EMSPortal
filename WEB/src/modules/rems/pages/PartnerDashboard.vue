@@ -114,6 +114,15 @@
         </q-td>
       </template>
 
+      <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved;
+           read-only here, since Sync job now lives on the Approvals list and EMS Review. -->
+      <template #body-cell-maconomyJobSync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <!-- What kind of entity the client is, as the badge Related Entities draws for the same value — the
            tenant's word for it in the tenant's colour, rather than the stored code. -->
       <template #body-cell-entityType="cell">
@@ -210,7 +219,7 @@ import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
-import { maconomySyncLabel } from "modules/rems/maconomySync";
+import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
 import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -312,6 +321,7 @@ const columns = computed(() => [
   },
   { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
   { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.
   { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", sortable: true, default: false, filterable: false },

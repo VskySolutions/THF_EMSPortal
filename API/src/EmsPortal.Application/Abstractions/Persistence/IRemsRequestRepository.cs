@@ -21,6 +21,15 @@ public interface IRemsRequestRepository
     /// </summary>
     Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default);
 
+    /// <summary>The request with what the Maconomy job sync reads: type, status, client with person, service line, job template.</summary>
+    Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>The caller's tenant's approved requests, newest change first, with the same graph loaded. The Job tab's table.</summary>
+    Task<IReadOnlyList<RemsRequest>> ListApprovedForJobSyncAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>How the caller's tenant's approved requests stand with the Maconomy job sync; a Syncing older than the cut-off counts as failed.</summary>
+    Task<RemsMaconomyJobSyncCounts> CountJobSyncAsync(DateTime staleBeforeUtc, CancellationToken cancellationToken = default);
+
     /// <summary>The request an invite code opens, outside the tenant filter, with type, status and client.</summary>
     Task<RemsRequest?> GetByInviteCodeUnscopedAsync(string inviteCode, CancellationToken cancellationToken = default);
 
@@ -106,3 +115,6 @@ public interface IRemsRequestRepository
     void UpdateTaxDueDate(RemsTaxDueDate dueDate);
     void RemoveTaxDueDate(RemsTaxDueDate dueDate);
 }
+
+/// <summary>Approved requests by Maconomy job sync state: created, failed (lost attempts included), under way, and still to post.</summary>
+public sealed record RemsMaconomyJobSyncCounts(int Synced, int Failed, int Syncing, int Waiting);

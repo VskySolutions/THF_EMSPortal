@@ -138,7 +138,7 @@ internal sealed class MaconomyGateway : IMaconomyGateway
     public async Task<MaconomyCreatedRecord> CreateAsync(
         MaconomyEndpoint endpoint,
         string reconnectToken,
-        MaconomyCreateRequest create,
+        MaconomyCardWrite create,
         CancellationToken cancellationToken = default)
     {
         // The sequence THF's Maconomy team gave (22 Oct 2026), spelt out rather than discovered from links:
@@ -166,8 +166,11 @@ internal sealed class MaconomyGateway : IMaconomyGateway
             }
 
             var paneUrl = $"{instancesUrl}/{Segment(instanceId)}/data/panes/card";
+            // A template reference goes on the init where the caller says so, so the record Maconomy hands
+            // back already carries the template's defaults; otherwise init is bare.
+            object initBody = create.InitValues is { Count: > 0 } ? new { data = create.InitValues } : new { };
             var (template, templateConcurrency) = await PostContainersAsync(
-                reconnectToken, $"{paneUrl}/init", new { }, concurrency, $"{create.Container} init", cancellationToken);
+                reconnectToken, $"{paneUrl}/init", initBody, concurrency, $"{create.Container} init", cancellationToken);
             template.Dispose();
 
             var (created, _) = await PostContainersAsync(

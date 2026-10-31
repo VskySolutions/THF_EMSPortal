@@ -2,6 +2,7 @@ using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.Tenancy;
 using EmsPortal.Application.Abstractions.UniversalFeatures;
+using EmsPortal.Application.Integrations.Maconomy.Mapping;
 using EmsPortal.Domain.Entities;
 using EmsPortal.Domain.Enums;
 using EmsPortal.Shared.Configuration;
@@ -18,6 +19,8 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
     private readonly IRemsRequestRepository _requests;
     private readonly IMaconomyConnectionRepository _connections;
     private readonly IMaconomyCustomerWriter _writer;
+    private readonly IMaconomyCardWriter _cards;
+    private readonly IMaconomyNumberMaps _numbers;
     private readonly IMaconomyClientDirectory _directory;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
@@ -31,6 +34,8 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         IRemsRequestRepository requests,
         IMaconomyConnectionRepository connections,
         IMaconomyCustomerWriter writer,
+        IMaconomyCardWriter cards,
+        IMaconomyNumberMaps numbers,
         IMaconomyClientDirectory directory,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
@@ -43,6 +48,8 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         _requests = requests;
         _connections = connections;
         _writer = writer;
+        _cards = cards;
+        _numbers = numbers;
         _directory = directory;
         _unitOfWork = unitOfWork;
         _activity = activity;
@@ -230,7 +237,10 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
             {
                 throw new PortalRefusal("The client has no email address, and the duplicate check needs one.");
             }
-            var payload = PayloadFor(client, email);
+            if (MaconomyCustomerDataMapping.CustomerNameOf(client).Length == 0)
+            {
+                throw new PortalRefusal("The client has no name to post.");
+            }
             var matches = await _writer.FindByEmailAsync(connection, email, cancellationToken);
             if (matches.Count > 1)
             {
@@ -243,7 +253,9 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
                 await SucceedAsync(client, remsId, matches[0].Number, RemsMaconomyCustomerSyncStatus.Linked, actorId, cancellationToken);
                 return;
             }
-            var created = await _writer.CreateAsync(connection, payload, cancellationToken);
+            // The mapping says what is sent; the card writer sends it; the container is the instance's own.
+            var write = MaconomyCustomerDataMapping.Map(client, email, await _numbers.GetAsync(client.TenantId, cancellationToken)) with { Container = _options.CustomerCard.Container };
+            var created = MaconomyCustomerDataMapping.FromCreated((await _cards.CreateAsync(connection, write, cancellationToken)).Data, write);
             await SucceedAsync(client, remsId, created.Number, RemsMaconomyCustomerSyncStatus.Synced, actorId, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -315,39 +327,6 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         {
             _logger.LogInformation("{EventType} for client {ClientId}: {Detail}", eventType, client.Id, detail);
         }
-    }
-
-    private static MaconomyNewCustomer PayloadFor(Client client, string email)
-    {
-        var name = CustomerNameOf(client);
-        if (name.Length == 0)
-        {
-            throw new PortalRefusal("The client has no name to post.");
-        }
-        var phone = client.PrimaryPhone ?? client.Person?.MobileNumber;
-        return new MaconomyNewCustomer(
-            name,
-            email,
-            string.IsNullOrWhiteSpace(phone) ? null : phone.Trim(),
-            MaconomyCustomerService.EntityTypeNumberOf(client.EntityType?.Value),
-            MaconomyCustomerService.IndustryNumberOf(client.Industry?.Value));
-    }
-
-    /// <summary>The name Maconomy files the customer under: the legal name, or "Last, First Suffix".</summary>
-    public static string CustomerNameOf(Client client)
-    {
-        if (client.IsOrganisation)
-        {
-            return client.LegalName?.Trim() ?? string.Empty;
-        }
-        var person = client.Person;
-        var last = person?.LastName?.Trim();
-        if (!string.IsNullOrEmpty(last))
-        {
-            var given = string.Join(" ", new[] { person!.FirstName?.Trim(), person.Suffix?.Trim() }.Where(s => !string.IsNullOrEmpty(s)));
-            return given.Length > 0 ? $"{last}, {given}" : last;
-        }
-        return client.DisplayName.Trim();
     }
 
     private static string? WhyNotPosted(RemsRequest request, Client client, bool requireApproved)

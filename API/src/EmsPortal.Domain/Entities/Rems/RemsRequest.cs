@@ -1,3 +1,5 @@
+using EmsPortal.Domain.Enums;
+
 namespace EmsPortal.Domain.Entities;
 
 /// <summary>
@@ -48,6 +50,14 @@ public class RemsRequest : AuditableEntity
     public string? PurchaseOrderNumber { get; set; }
     public decimal? PurchaseOrderAmount { get; set; }
     public bool? IsFloridaOnePercentFeeApplicable { get; set; }
+
+    // ---- Maconomy job: the engagement posted to Maconomy as a job, by hand, from a list's Sync job now ----
+    public string? MaconomyJobNumber { get; set; }
+    public RemsMaconomyJobSyncStatus MaconomyJobSyncStatus { get; set; } = RemsMaconomyJobSyncStatus.NotSynced;
+    /// <summary>Who pressed the sync that created the job, and when.</summary>
+    public Guid? MaconomyJobSyncedById { get; set; }
+    public DateTime? MaconomyJobSyncedOnUtc { get; set; }
+    public string? MaconomyJobSyncError { get; set; }
 
     // ---- Navigations ----
     public OptionSetItem? Type { get; set; }

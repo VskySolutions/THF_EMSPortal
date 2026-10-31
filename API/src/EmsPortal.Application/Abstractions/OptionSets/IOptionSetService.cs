@@ -40,7 +40,8 @@ public sealed record CreateOptionItemInput(
     string? BackgroundColor,
     string? TextColor,
     string? Icon,
-    string? MetadataJson);
+    string? MetadataJson,
+    string? MaconomyNumber);
 
 public sealed record UpdateOptionItemInput(
     string Value,
@@ -52,7 +53,8 @@ public sealed record UpdateOptionItemInput(
     string? BackgroundColor,
     string? TextColor,
     string? Icon,
-    string? MetadataJson);
+    string? MetadataJson,
+    string? MaconomyNumber);
 
 /// <summary>Stable error codes raised by <see cref="IOptionSetService"/> for the API to map to HTTP.</summary>
 public static class OptionSetErrorCodes

@@ -35,6 +35,16 @@
           hint="Optional. Shown as this value's tooltip wherever it appears."
         />
 
+        <!-- The number Maconomy files this value under, where the Maconomy sync needs one: the specification 6
+             number on an entity type, the specification 1 number on an industry, the template job number on a
+             job template. Blank means Maconomy gets no value for it. -->
+        <app-text-field
+          v-model="form.maconomyNumber"
+          label="Maconomy number"
+          maxlength="64"
+          hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Job template: the template job number."
+        />
+
         <!-- Cascading lists: tie this value to a parent-list item. -->
         <app-select
           v-if="parentOptions.length"
@@ -141,6 +151,7 @@ const blankForm = () => ({
   label: "",
   value: "",
   description: "",
+  maconomyNumber: "",
   parentItemId: null,
   isDefault: false,
   isActive: true,
@@ -165,6 +176,7 @@ watch(
         label: props.item.label,
         value: props.item.value,
         description: props.item.description || "",
+        maconomyNumber: props.item.maconomyNumber || "",
         parentItemId: props.item.parentItemId,
         isDefault: props.item.isDefault,
         isActive: props.item.isActive,
@@ -185,6 +197,7 @@ const submit = async () => {
       label: form.label.trim(),
       value: form.value.trim(),
       description: form.description.trim() || null,
+      maconomyNumber: form.maconomyNumber.trim() || null,
       parentItemId: form.parentItemId || null,
       isDefault: form.isDefault,
       backgroundColor: form.backgroundColor || null,

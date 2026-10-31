@@ -79,6 +79,8 @@ public sealed record RemsApprovalTaskRow(
     /// approver reading it.
     /// </summary>
     RemsMaconomySyncView? MaconomySync = null,
+    /// <summary>Where posting the engagement to Maconomy as a job has got to; Sync job now lives on this list too.</summary>
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
     /// <summary>
     /// Whose task carries the row: the caller on their own inbox; on the tenant-wide one, the approver who
     /// last acted on the round, with everyone on it in <see cref="Approvers"/>.

@@ -76,6 +76,13 @@ public class OptionSetItem : AuditableEntity
     /// <summary>Optional extra metadata as a JSON object, e.g. <c>{"days":30}</c>.</summary>
     public string? MetadataJson { get; set; }
 
+    /// <summary>
+    /// The number Maconomy files this value under, where the Maconomy sync needs one: the specification 6
+    /// number on a REMS Entity Type, the specification 1 number on a REMS Industry, the template job number
+    /// on a REMS Job Template. Set by hand under Option Sets; null means Maconomy gets no value for it.
+    /// </summary>
+    public string? MaconomyNumber { get; set; }
+
     /// <summary>The owning list (navigation).</summary>
     public OptionSet? OptionSet { get; set; }
 }

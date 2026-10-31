@@ -68,6 +68,7 @@ internal sealed class OptionSetItemConfiguration : IEntityTypeConfiguration<Opti
 
         // Long enough for a sentence or two of explanation — it is a tooltip, not documentation.
         builder.Property(i => i.Description).HasMaxLength(512);
+        builder.Property(i => i.MaconomyNumber).HasMaxLength(64);
 
         builder.Property(i => i.SortOrder).IsRequired();
         builder.Property(i => i.IsDefault).IsRequired();

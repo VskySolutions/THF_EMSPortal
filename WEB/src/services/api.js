@@ -278,7 +278,23 @@ export const maconomyApi = {
   customerSyncUnsynced: () => api.get("/api/integrations/maconomy/customer-sync/unsynced").then(unwrap),
   // Sync now for one request → its sync view { status, customerNumber, failureReason, … }. A failed post
   // is a 200 with status "failed"; only a refusal (sync off, not eligible) is an error.
-  runCustomerSync: (remsId) => api.post(`/api/integrations/maconomy/customer-sync/${remsId}/run`).then(unwrap)
+  runCustomerSync: (remsId) => api.post(`/api/integrations/maconomy/customer-sync/${remsId}/run`).then(unwrap),
+
+  // ---- The job sync: an approved request's engagement posted to Maconomy as a job, by hand ----
+  // Also always the caller's own tenant. Nothing posts a job by itself: Sync job now is pressed on a list.
+  // → { connected, enabled, changedOnUtc, changedByName, projectManagerNumber, defaultTemplateNumber (both from
+  //     the server configuration), synced, failed, syncing, waiting, templates: [{ jobTemplateId, code, label,
+  //     templateJobNumber }] } — the template numbers are the REMS Job Template option items' Maconomy numbers.
+  jobSync: () => api.get("/api/integrations/maconomy/job-sync").then(unwrap),
+  // Start offers the action on approved requests; Stop hides it everywhere. Both → the overview.
+  startJobSync: () => api.post("/api/integrations/maconomy/job-sync/start").then(unwrap),
+  stopJobSync: () => api.post("/api/integrations/maconomy/job-sync/stop").then(unwrap),
+  // Every approved request and where its job stands: [{ remsId, remsNumber, clientName, customerNumber,
+  // serviceLine, jobTemplate, updatedOnUtc, sync }].
+  jobSyncRequests: () => api.get("/api/integrations/maconomy/job-sync/requests").then(unwrap),
+  // Sync job now for one request → its job sync view. A failed post is a 200 with status "failed"; only a
+  // refusal (sync off, not eligible) is an error.
+  runJobSync: (remsId) => api.post(`/api/integrations/maconomy/job-sync/${remsId}/run`).then(unwrap)
 };
 
 // The tenant's branding: its theme (name, colours, type, buttons) and its images. `tenantId` is the Super
@@ -587,6 +603,12 @@ export const remsApi = {
   // { status, customerNumber, failureReason, syncedOnUtc, canSyncNow, … }. A failed post is a 200 with
   // status "failed"; a refusal (sync off, not eligible, already running) is a 409.
   maconomySyncNow: (id) => api.post(`/api/rems/requests/${id}/maconomy-sync`).then(unwrap),
+  // Sync job now: post this approved request's engagement to Maconomy as a job, inline → the job sync view
+  // { status, jobNumber, syncedByName, syncedOnUtc, failureReason, syncEnabled, canSyncNow, blockedReason }.
+  maconomyJobSyncNow: (id) => api.post(`/api/rems/requests/${id}/maconomy-job-sync`).then(unwrap),
+  // What a press would send, for the confirmation before it → { sync, remsNumber, clientName, customerNumber,
+  // serviceLine, jobTemplate, templateJobNumber, projectManagerNumber, jobName }.
+  maconomyJobSyncPreview: (id) => api.get(`/api/rems/requests/${id}/maconomy-job-sync`).then(unwrap),
   // One client on file, in the picker's shape.
   client: (id, excludingRemsId) =>
     api.get(`/api/rems/clients/${id}`, { params: { excludingRemsId } }).then(unwrap),

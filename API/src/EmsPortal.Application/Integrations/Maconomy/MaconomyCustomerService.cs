@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
+using EmsPortal.Application.Integrations.Maconomy.Mapping;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Domain.Entities;
 using EmsPortal.Shared.Configuration;
@@ -25,11 +26,9 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     private const int MaxWords = 6;
     private static readonly char[] WordBreaks = { ' ', ',' };
 
-    // Only what is shown or filled in: every extra field is more for Maconomy to send on each call.
-    private static readonly string[] Fields =
-    {
-        "customernumber", "name1", "specification6name", "specification1name", "electronicmailaddress", "telephone",
-    };
+    // Only what is shown or filled in: every extra field is more for Maconomy to send on each call. The
+    // names are the mapping's, so a field renamed for the write is renamed for the read in the same edit.
+    private static readonly string[] Fields = MaconomyCustomerDataMapping.Fields;
 
     // The restriction is written in Maconomy's query language with the search text inside a quoted
     // literal, so a quote — or a backslash, or a control character — would break out of it.
@@ -43,6 +42,7 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     private readonly IMaconomySessionManager _session;
     private readonly IMaconomyGateway _gateway;
     private readonly IMemoryCache _cache;
+    private readonly IMaconomyNumberMaps _numbers;
     private readonly MaconomyOptions _options;
 
     public MaconomyCustomerService(
@@ -50,12 +50,14 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         IMaconomySessionManager session,
         IMaconomyGateway gateway,
         IMemoryCache cache,
+        IMaconomyNumberMaps numbers,
         IOptions<MaconomyOptions> options)
     {
         _connections = connections;
         _session = session;
         _gateway = gateway;
         _cache = cache;
+        _numbers = numbers;
         _options = options.Value;
     }
 
@@ -63,6 +65,7 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         Guid tenantId, string? search, int? limit, CancellationToken cancellationToken = default)
     {
         var connection = await RequireConnectionAsync(tenantId, cancellationToken);
+        var map = await _numbers.GetAsync(tenantId, cancellationToken);
 
         var term = Sanitize(search);
         if (term.Length < SearchMinLength)
@@ -95,7 +98,7 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
             + $"or electronicmailaddress like '*{term}*' or telephone like '*{term}*'";
         var result = await FilterAsync(connection, restriction, rows, cancellationToken);
 
-        var options = result.Records.Select(ToOption).Where(option => option.Value.Length > 0).ToList();
+        var options = result.Records.Select(r => ToOption(r, map)).Where(option => option.Value.Length > 0).ToList();
         var found = new MaconomyCustomerSearch(options, Complete: result.Records.Count < rows);
         Remember(cacheKey, found);
         return found;
@@ -116,12 +119,13 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         }
 
         var connection = await RequireConnectionAsync(tenantId, cancellationToken);
+        var map = await _numbers.GetAsync(tenantId, cancellationToken);
         foreach (var chunk in wanted.Chunk(Math.Clamp(_options.NumbersPerCall, 1, NumbersPerCallMax)))
         {
             // Maconomy's query language has no "in"; a chain of "or" is one call all the same.
             var restriction = string.Join(" or ", chunk.Select(number => $"customernumber = '{number}'"));
             var result = await FilterAsync(connection, restriction, chunk.Length, cancellationToken);
-            foreach (var customer in result.Records.Select(ToDetails).Where(c => c.Number.Length > 0))
+            foreach (var customer in result.Records.Select(r => ToDetails(r, map)).Where(c => c.Number.Length > 0))
             {
                 found[customer.Number] = customer;
             }
@@ -133,9 +137,10 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         Guid tenantId, CancellationToken cancellationToken = default)
     {
         var connection = await RequireConnectionAsync(tenantId, cancellationToken);
+        var map = await _numbers.GetAsync(tenantId, cancellationToken);
         var cap = Math.Max(1, _options.PreloadMaxRows);
         var result = await FilterAsync(connection, "customernumber like '*'", cap, cancellationToken);
-        var customers = result.Records.Select(ToDetails).Where(c => c.Number.Length > 0).ToList();
+        var customers = result.Records.Select(r => ToDetails(r, map)).Where(c => c.Number.Length > 0).ToList();
         return (customers, result.Records.Count < cap);
     }
 
@@ -163,96 +168,6 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         => !string.IsNullOrEmpty(value)
             && CultureInfo.InvariantCulture.CompareInfo.IndexOf(
                 value, term, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
-
-    // THF's Maconomy holds the customer's entity type in specification 6, as a number. The codes are the
-    // REMS.EntityType option set's; a number not listed is shown as Maconomy sent it.
-    private static (string Code, string Name)? EntityTypeOf(string specification6) => specification6 switch
-    {
-        "1" => ("individual", "Individual"),
-        "2" => ("government", "Government"),
-        "3" => ("not_for_profit", "Not-for-Profit"),
-        "4" => ("insurance", "Insurance"),
-        "5" => ("commercial", "Commercial"),
-        "6" => ("trust_estate", "Trust and Estate"),
-        _ => null,
-    };
-
-    /// <summary>The specification 6 number a REMS entity type code is filed under, or null for a code Maconomy has no number for.</summary>
-    public static string? EntityTypeNumberOf(string? entityTypeCode)
-    {
-        var code = (entityTypeCode ?? string.Empty).Trim();
-        if (code.Length == 0)
-        {
-            return null;
-        }
-        foreach (var number in new[] { "1", "2", "3", "4", "5", "6" })
-        {
-            if (EntityTypeOf(number) is { } type && string.Equals(type.Code, code, StringComparison.OrdinalIgnoreCase))
-            {
-                return number;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>The specification 1 number a REMS industry code is filed under, or null for a code Maconomy has no number for.</summary>
-    public static string? IndustryNumberOf(string? industryCode)
-    {
-        var code = (industryCode ?? string.Empty).Trim();
-        return code.Length == 0
-            ? null
-            : Industries.FirstOrDefault(i => string.Equals(i.Code, code, StringComparison.OrdinalIgnoreCase)).Number;
-    }
-
-    // Specification 1 is the customer's industry. THF numbers the values 17 to 38; the portal fills the
-    // picker with the REMS.Industry code each stands for. Matched by the number when the value starts
-    // with one ("17", "17-Manufacturing"), by the label otherwise.
-    private static readonly (string Number, string Label, string Code)[] Industries =
-    {
-        ("17", "Manufacturing", "manufacturing"),
-        ("18", "Professional Service Firms", "professional_service_firms"),
-        ("19", "Real Estate", "real_estate"),
-        ("20", "Retail", "retail"),
-        ("21", "Health Care", "health_care"),
-        ("22", "Oil & Gas Distribution", "oil_gas_distribution"),
-        ("23", "Wholesale", "wholesale"),
-        ("24", "Technology", "technology"),
-        ("25", "State government", "state_government"),
-        ("26", "Local government", "local_government"),
-        ("27", "Federal government", "federal_government"),
-        ("28", "Educational Institutions", "educational_institutions"),
-        ("29", "Insurance - Health", "insurance_health"),
-        ("30", "Insurance - Property and Casualty", "insurance_property_casualty"),
-        ("31", "Insurance - Life", "insurance_life"),
-        ("32", "Insurance - Other", "insurance_other"),
-        ("33", "Trade associations", "trade_associations"),
-        ("34", "Charitable organizations or Foundations", "charitable_organizations_foundations"),
-        ("35", "Other Not-for-Profit", "other_not_for_profit"),
-        ("36", "Individual", "individual"),
-        ("37", "Distribution", "distribution"),
-        ("38", "Trust / Estate", "trust_estate"),
-    };
-
-    /// <summary>The REMS.Industry code a specification 1 value stands for, or null when it stands for none.</summary>
-    public static string? IndustryOf(string? specification1)
-    {
-        var text = (specification1 ?? string.Empty).Trim();
-        if (text.Length == 0)
-        {
-            return null;
-        }
-        var number = new string(text.TakeWhile(char.IsDigit).ToArray());
-        if (number.Length > 0)
-        {
-            return Industries.FirstOrDefault(i => i.Number == number).Code;
-        }
-        var key = Letters(text);
-        return Industries.FirstOrDefault(i => Letters(i.Label) == key).Code;
-    }
-
-    // Letters and digits alone, lower-cased: "Insurance - Health" and "insurance health" are one value.
-    private static string Letters(string value)
-        => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     private async Task<MaconomyConnection> RequireConnectionAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -319,14 +234,14 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
     private static string SearchKey(Guid tenantId, int rows, string term)
         => $"maconomy:customers:{tenantId:N}:{rows}:{term.ToLowerInvariant()}";
 
-    /// <summary>"number - name (specification 6 name)" to read, blanks left out; the number to store.</summary>
-    private static MaconomyCustomerOption ToOption(IReadOnlyDictionary<string, string?> record)
+    /// <summary>"number - name (specification 6 name)" to read, blanks left out; the number to store. Public for the mapping check harness.</summary>
+    public static MaconomyCustomerOption ToOption(IReadOnlyDictionary<string, string?> record, MaconomyNumberMap numbers)
     {
-        var number = Value(record, "customernumber");
-        var name = Value(record, "name1");
-        var specification6 = Value(record, "specification6name");
-        var entityType = EntityTypeOf(specification6);
-        var specification6Name = entityType?.Name ?? specification6;
+        var number = Value(record, MaconomyCustomerDataMapping.NumberField);
+        var name = Value(record, MaconomyCustomerDataMapping.NameField);
+        var specification6 = Value(record, MaconomyCustomerDataMapping.EntityTypeField);
+        var entityType = numbers.EntityTypeOf(specification6);
+        var specification6Name = entityType?.Label ?? specification6;
         var text = string.Join(" - ", new[] { number, name }.Where(s => s.Length > 0));
         if (specification6Name.Length > 0)
         {
@@ -334,18 +249,18 @@ public sealed class MaconomyCustomerService : IMaconomyCustomerService
         }
         return new MaconomyCustomerOption(
             text, number, specification6Name.Length > 0 ? specification6Name : null, entityType?.Code,
-            Optional(record, "electronicmailaddress"), Optional(record, "telephone"), name,
-            IndustryOf(Value(record, "specification1name")));
+            Optional(record, MaconomyCustomerDataMapping.EmailField), Optional(record, MaconomyCustomerDataMapping.PhoneField), name,
+            numbers.IndustryOf(Value(record, MaconomyCustomerDataMapping.IndustryField))?.Code);
     }
 
-    private static MaconomyClientDetails ToDetails(IReadOnlyDictionary<string, string?> record)
+    public static MaconomyClientDetails ToDetails(IReadOnlyDictionary<string, string?> record, MaconomyNumberMap numbers)
         => new(
-            Value(record, "customernumber"),
-            Value(record, "name1"),
-            EntityTypeOf(Value(record, "specification6name"))?.Code,
-            Optional(record, "electronicmailaddress"),
-            Optional(record, "telephone"),
-            IndustryOf(Value(record, "specification1name")));
+            Value(record, MaconomyCustomerDataMapping.NumberField),
+            Value(record, MaconomyCustomerDataMapping.NameField),
+            numbers.EntityTypeOf(Value(record, MaconomyCustomerDataMapping.EntityTypeField))?.Code,
+            Optional(record, MaconomyCustomerDataMapping.EmailField),
+            Optional(record, MaconomyCustomerDataMapping.PhoneField),
+            numbers.IndustryOf(Value(record, MaconomyCustomerDataMapping.IndustryField))?.Code);
 
     private static string Value(IReadOnlyDictionary<string, string?> record, string field)
         => record.TryGetValue(field, out var value) ? (value ?? string.Empty).Trim() : string.Empty;

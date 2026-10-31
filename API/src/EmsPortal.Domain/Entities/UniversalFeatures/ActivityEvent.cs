@@ -97,4 +97,8 @@ public static class ActivityEventTypes
     // The customer sync: what became of posting the request's new client to Maconomy.
     public const string RemsMaconomyCustomerSynced = "RemsMaconomyCustomerSynced";
     public const string RemsMaconomyCustomerSyncFailed = "RemsMaconomyCustomerSyncFailed";
+
+    // The job sync: what became of posting the engagement to Maconomy as a job.
+    public const string RemsMaconomyJobSynced = "RemsMaconomyJobSynced";
+    public const string RemsMaconomyJobSyncFailed = "RemsMaconomyJobSyncFailed";
 }

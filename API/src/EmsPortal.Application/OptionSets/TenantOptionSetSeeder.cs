@@ -56,6 +56,7 @@ public static class TenantOptionSetSeeder
                     SortOrder = i.SortOrder,
                     IsActive = i.IsActive,
                     MetadataJson = i.MetadataJson,
+                    MaconomyNumber = i.MaconomyNumber,
                     BackgroundColor = i.BackgroundColor,
                     TextColor = i.TextColor,
                     Icon = i.Icon,

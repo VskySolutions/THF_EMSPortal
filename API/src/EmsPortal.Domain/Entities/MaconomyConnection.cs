@@ -58,4 +58,15 @@ public class MaconomyConnection : AuditableEntity
     public DateTime? CustomerSyncChangedOnUtc { get; set; }
 
     public Guid? CustomerSyncChangedById { get; set; }
+
+    // ---- The job sync: posting an approved engagement to Maconomy as a job, by hand ----
+    // The project manager and the default template job are platform configuration (Maconomy:JobCard);
+    // the template numbers live on the REMS Job Template option items.
+
+    /// <summary>Whether Sync job now is offered at all. Off by default; Start/Stop on the Job tab. While off, the action is hidden.</summary>
+    public bool JobSyncEnabled { get; set; }
+
+    public DateTime? JobSyncChangedOnUtc { get; set; }
+
+    public Guid? JobSyncChangedById { get; set; }
 }

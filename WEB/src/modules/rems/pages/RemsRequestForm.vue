@@ -9,6 +9,8 @@
           <app-option-badge v-if="request" :option="requestStatusOption(request)" />
           <!-- Whether the approved client has reached Maconomy: a separate fact from the status beside it. -->
           <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
+          <!-- And whether the approved engagement has become a Maconomy job. -->
+          <maconomy-sync-chip v-if="request?.maconomyJobSync" kind="job" :sync="request.maconomyJobSync" />
 
           <!-- What the page is doing with what has been typed. -->
           <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
@@ -202,6 +204,13 @@
                 <div v-if="request?.maconomySync" class="rf-maconomy-sync q-mt-md">
                   <maconomy-sync-chip :sync="request.maconomySync" />
                   <span class="text-body2 text-grey-8">{{ maconomySyncNote }}</span>
+                </div>
+                <!-- The engagement as a Maconomy job. Read-only here too: Sync job now lives in the lists'
+                     Actions column and on the Maconomy settings page's Job tab. Shown once the request is
+                     approved. -->
+                <div v-if="request?.maconomyJobSync" class="rf-maconomy-sync q-mt-sm">
+                  <maconomy-sync-chip kind="job" :sync="request.maconomyJobSync" />
+                  <span class="text-body2 text-grey-8">{{ maconomyJobSyncNote }}</span>
                 </div>
                 <!-- The client's other businesses, and whether each has been turned into its own request
                      yet. -->
@@ -1522,6 +1531,28 @@ const maconomySyncNote = computed(() => {
       return s.syncEnabled
         ? "Not posted to Maconomy yet. Sync now is on the Approvals list and the Maconomy settings page."
         : "Not posted to Maconomy: the customer sync is switched off. Start it under Tenant Settings → Maconomy, then sync by hand.";
+  }
+});
+
+// The engagement as a Maconomy job, read the same way.
+const maconomyJobSyncNote = computed(() => {
+  const s = request.value?.maconomyJobSync;
+  if (!s) return "";
+  const when = s.syncedOnUtc ? ` on ${dateFmt.formatDateTime(s.syncedOnUtc)}` : "";
+  const who = s.syncedByName ? ` by ${s.syncedByName}` : "";
+  switch (s.status) {
+    case "synced":
+      return `Created in Maconomy${when}${who}.`;
+    case "failed":
+      return s.failureReason || "The last attempt failed.";
+    case "syncing":
+      return "Posting the job to Maconomy now.";
+    default:
+      if (!s.syncEnabled) {
+        return "No Maconomy job: the job sync is switched off. Start it under Tenant Settings → Maconomy → Job.";
+      }
+      return s.blockedReason ||
+        "No Maconomy job yet. Sync job now is on the Approvals list, EMS Review and the Maconomy settings page's Job tab.";
   }
 });
 

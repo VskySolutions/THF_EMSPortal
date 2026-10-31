@@ -61,6 +61,7 @@ public sealed class RemsEngagementController : ControllerBase
     // STATIC-APPROVAL-POLICY
     private readonly IRemsApprovalPolicy _policy;
     private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IMaconomyJobSyncService _jobSync;
     private readonly IMaconomyClientDirectory _directory;
     private readonly RemsClientIntake _intake;
 
@@ -79,11 +80,13 @@ public sealed class RemsEngagementController : ControllerBase
         IOptionCodeResolver codes,
         IRemsApprovalPolicy policy,
         IMaconomyCustomerSyncService customerSync,
+        IMaconomyJobSyncService jobSync,
         IMaconomyClientDirectory directory,
         RemsClientIntake intake)
     {
         _policy = policy;
         _customerSync = customerSync;
+        _jobSync = jobSync;
         _directory = directory;
         _intake = intake;
         _requests = requests;
@@ -168,7 +171,8 @@ public sealed class RemsEngagementController : ControllerBase
             CanPickUp: mayAssign && i.AdminAssignedToId is null,
             CanHandBack: mayAssign && i.AdminAssignedToId is { } holder && (elevated || holder == me),
             NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
-            MaconomySyncStatus: syncStatuses.TryGetValue(i.RemsId, out var sync) ? sync : null));
+            MaconomySyncStatus: syncStatuses.TryGetValue(i.RemsId, out var sync) ? sync.Customer : null,
+            MaconomyJobSync: sync.Job));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }
@@ -1316,18 +1320,47 @@ public sealed class RemsEngagementController : ControllerBase
     /// The sync chip per list row. The state lives on the client now and the row does not carry it, so
     /// the rows that can show one — a Maconomy customer's, or an approved request's — are read back.
     /// </summary>
-    private async Task<Dictionary<Guid, string>> SyncStatusesAsync(IReadOnlyList<RemsClientFormItem> items, CancellationToken cancellationToken)
+    /// <summary>
+    /// The two Maconomy chips per row, for the rows that can carry one: the customer status word and the
+    /// job view. Each needs the request itself, so only approved rows and Maconomy clients are read.
+    /// </summary>
+    private async Task<Dictionary<Guid, (string? Customer, RemsMaconomyJobSyncView? Job)>> SyncStatusesAsync(
+        IReadOnlyList<RemsClientFormItem> items, CancellationToken cancellationToken)
     {
-        var statuses = new Dictionary<Guid, string>();
-        foreach (var item in items.Where(i => i.MaconomyCustomerNumber is not null || i.RequestStatus == RemsRequestStatuses.Approved))
+        var statuses = new Dictionary<Guid, (string? Customer, RemsMaconomyJobSyncView? Job)>();
+        var candidates = items
+            .Where(i => i.MaconomyCustomerNumber is not null || i.RequestStatus == RemsRequestStatuses.Approved)
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return statuses;
+        }
+        var jobContext = User.GetActiveTenantId() is { } tenantId
+            ? await _jobSync.GetContextAsync(tenantId, cancellationToken)
+            : MaconomyJobSyncContext.None;
+        foreach (var item in candidates)
         {
             var rems = await _requests.GetByIdAsync(item.RemsId, cancellationToken);
-            // Only the status word is read here; the flags For() also works out belong to the request page.
-            if (rems?.Client is { } client
-                && RemsMaconomySyncViews.For(rems, _customerSync.IsStale(client), enabled: false, canManage: false) is { } view)
+            if (rems is null)
             {
-                statuses[item.RemsId] = view.Status;
+                continue;
             }
+            // Only the status word is read here; the flags For() also works out belong to the request page.
+            var customer = rems.Client is { } client
+                ? RemsMaconomySyncViews.For(rems, _customerSync.IsStale(client), enabled: false, canManage: false)?.Status
+                : null;
+            RemsMaconomyJobSyncView? job = null;
+            if (item.RequestStatus == RemsRequestStatuses.Approved)
+            {
+                string? syncedBy = null;
+                if (rems.MaconomyJobSyncedById is { } by)
+                {
+                    var names = await _users.GetFullNamesAsync(new[] { by }, cancellationToken);
+                    names.TryGetValue(by, out syncedBy);
+                }
+                job = RemsMaconomyJobSyncViews.ForListed(rems, jobContext, _jobSync.IsStale(rems), canManage: true, syncedBy);
+            }
+            statuses[item.RemsId] = (customer, job);
         }
         return statuses;
     }

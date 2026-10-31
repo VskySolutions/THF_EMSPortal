@@ -34,6 +34,6 @@ public interface IMaconomyGateway
     Task<MaconomyCreatedRecord> CreateAsync(
         MaconomyEndpoint endpoint,
         string reconnectToken,
-        MaconomyCreateRequest create,
+        MaconomyCardWrite create,
         CancellationToken cancellationToken = default);
 }

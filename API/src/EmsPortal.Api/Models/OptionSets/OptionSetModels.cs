@@ -33,6 +33,9 @@ public sealed class CreateOptionItemRequest
     /// <summary>Material icon name shown beside the value, e.g. "o_support_agent".</summary>
     public string? Icon { get; set; }
     public string? MetadataJson { get; set; }
+
+    /// <summary>The number Maconomy files this value under (entity type, industry, template job); null for none.</summary>
+    public string? MaconomyNumber { get; set; }
 }
 
 public sealed class UpdateOptionItemRequest
@@ -47,6 +50,9 @@ public sealed class UpdateOptionItemRequest
     public string? TextColor { get; set; }
     public string? Icon { get; set; }
     public string? MetadataJson { get; set; }
+
+    /// <summary>The number Maconomy files this value under (entity type, industry, template job); null for none.</summary>
+    public string? MaconomyNumber { get; set; }
 }
 
 public sealed class ReorderItemsRequest
@@ -92,7 +98,8 @@ public sealed record OptionSetItemResponse(
     string? Icon,
     /// <summary>True for a value the application writes: it cannot be deleted, hidden or re-coded.</summary>
     bool IsSystem,
-    string? MetadataJson);
+    string? MetadataJson,
+    string? MaconomyNumber);
 
 public sealed record OptionSetDetailResponse(
     Guid Id,

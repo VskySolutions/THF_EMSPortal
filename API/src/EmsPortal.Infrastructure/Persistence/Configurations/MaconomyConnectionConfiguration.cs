@@ -26,6 +26,7 @@ internal sealed class MaconomyConnectionConfiguration : IEntityTypeConfiguration
         builder.Property(c => c.DefaultLimit).IsRequired();
         builder.Property(c => c.IsEnabled).IsRequired();
         builder.Property(c => c.CustomerSyncEnabled).IsRequired().HasDefaultValue(false);
+        builder.Property(c => c.JobSyncEnabled).IsRequired().HasDefaultValue(false);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Restrict);
 

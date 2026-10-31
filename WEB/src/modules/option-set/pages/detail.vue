@@ -85,6 +85,8 @@
               </q-item-label>
               <q-item-label caption>
                 {{ item.value }}
+                <!-- The number Maconomy files this value under, where the Maconomy sync uses one. -->
+                <span v-if="item.maconomyNumber"> · Maconomy {{ item.maconomyNumber }}</span>
                 <span v-if="parentLabelMap[item.parentItemId]"> · under {{ parentLabelMap[item.parentItemId] }}</span>
               </q-item-label>
             </q-item-section>
