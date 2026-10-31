@@ -178,6 +178,7 @@ const sections = [
     key: "administration",
     label: "Administration",
     icon: "o_corporate_fare",
+    startCollapsed: true,
     items: [
       { label: "Tenants", icon: "o_apartment", to: "/tenants", permissions: [Permissions.TenantsWrite] },
       { label: "Person", icon: "o_badge", to: "/persons", permissions: [Permissions.PersonsRead] },
@@ -187,6 +188,7 @@ const sections = [
     key: "access-management",
     label: "Access Management",
     icon: "o_lock",
+    startCollapsed: true,
     items: [
       { label: "Permission Groups", icon: "o_workspaces", to: "/permission-groups", permissions: [Permissions.GroupsManage] },
       { label: "Roles", icon: "o_admin_panel_settings", to: "/roles", permissions: [Permissions.RolesWrite] },
@@ -245,8 +247,9 @@ const visibleSections = computed(() =>
 
 // Per-group collapse state, persisted to LocalStorage so the user's expand/collapse choices survive a
 // page refresh. The stored object holds the groups the user has set by hand ({ [sectionKey]: true =
-// collapsed, false = expanded }); a group not in it follows its own default. Tenant Settings and
-// Account start collapsed, so the drawer opens on the work rather than on the housekeeping.
+// collapsed, false = expanded }); a group not in it follows its own default. Administration, Access
+// Management, Tenant Settings and Account start collapsed (user, 31 Oct 2026), so the drawer opens on
+// the work rather than on the housekeeping.
 const STORAGE_KEY = "appMenuCollapsed";
 const collapsed = reactive(LocalStorage.getItem(STORAGE_KEY) || {});
 const isOpen = (section) =>
