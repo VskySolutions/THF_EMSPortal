@@ -2,15 +2,19 @@
   <q-dialog v-model="open">
     <q-card style="min-width: 360px;">
       <q-card-section class="text-h6">{{ item ? "Edit value" : "New value" }}</q-card-section>
-      <q-card-section class="q-pt-none column q-gutter-md">
+      <!-- One grid rather than a column gutter with a pair row inside it: Quasar's col-gutter margins
+           override the column's and push the nested pair 16px left and up. -->
+      <q-card-section class="q-pt-none row q-col-gutter-md">
         <app-text-field
           v-model="form.label"
+          class="col-12"
           label="Label *"
           hint="Shown to users, e.g. NET 30"
         />
         <!-- The stored code. -->
         <app-text-field
           v-model="form.value"
+          class="col-12"
           label="Value *"
           :readonly="isSystemItem"
           :hint="isSystemItem
@@ -29,6 +33,7 @@
              look alike can explain itself at the point of use. -->
         <app-text-field
           v-model="form.description"
+          class="col-12"
           label="Description"
           type="textarea"
           autogrow
@@ -40,6 +45,7 @@
              job template. Blank means Maconomy gets no value for it. -->
         <app-text-field
           v-model="form.maconomyNumber"
+          class="col-12"
           label="Maconomy number"
           maxlength="64"
           hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Job template: the template job number."
@@ -49,35 +55,35 @@
         <app-select
           v-if="parentOptions.length"
           v-model="form.parentItemId"
+          class="col-12"
           :options="parentOptions"
           label="Valid under (parent)"
           clearable
         />
 
         <!-- Display colours shown for this value on the front UI. -->
-        <div class="row q-col-gutter-md">
-          <app-text-field v-model="form.backgroundColor" class="col" label="Background colour" placeholder="#e3f2fd" clearable>
-            <template #append>
-              <q-icon name="o_palette" class="cursor-pointer" :style="{ color: form.backgroundColor || '#9e9e9e' }">
-                <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                  <q-color v-model="form.backgroundColor" format-model="hex" default-view="palette" />
-                </q-popup-proxy>
-              </q-icon>
-            </template>
-          </app-text-field>
-          <app-text-field v-model="form.textColor" class="col" label="Text colour" placeholder="#0d47a1" clearable>
-            <template #append>
-              <q-icon name="o_format_color_text" class="cursor-pointer" :style="{ color: form.textColor || '#9e9e9e' }">
-                <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                  <q-color v-model="form.textColor" format-model="hex" default-view="palette" />
-                </q-popup-proxy>
-              </q-icon>
-            </template>
-          </app-text-field>
-        </div>
+        <app-text-field v-model="form.backgroundColor" class="col-12 col-sm-6" label="Background colour" placeholder="#e3f2fd" clearable>
+          <template #append>
+            <q-icon name="o_palette" class="cursor-pointer" :style="{ color: form.backgroundColor || '#9e9e9e' }">
+              <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                <q-color v-model="form.backgroundColor" format-model="hex" default-view="palette" />
+              </q-popup-proxy>
+            </q-icon>
+          </template>
+        </app-text-field>
+        <app-text-field v-model="form.textColor" class="col-12 col-sm-6" label="Text colour" placeholder="#0d47a1" clearable>
+          <template #append>
+            <q-icon name="o_format_color_text" class="cursor-pointer" :style="{ color: form.textColor || '#9e9e9e' }">
+              <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                <q-color v-model="form.textColor" format-model="hex" default-view="palette" />
+              </q-popup-proxy>
+            </q-icon>
+          </template>
+        </app-text-field>
         <!-- The icon shown beside this value wherever it is rendered — an approver role, an email event. -->
         <app-text-field
           v-model="form.icon"
+          class="col-12"
           label="Icon"
           placeholder="o_support_agent"
           clearable
@@ -88,7 +94,7 @@
           </template>
         </app-text-field>
 
-        <div class="row items-center q-gutter-sm">
+        <div class="col-12 row items-center q-gutter-sm">
           <span class="text-caption text-grey-7">Preview:</span>
           <q-chip
             :style="{ backgroundColor: form.backgroundColor || '#e0e0e0', color: form.textColor || '#212121' }"
@@ -97,12 +103,16 @@
           />
         </div>
 
-        <q-toggle v-model="form.isDefault" label="Default selection" />
+        <div class="col-12">
+          <q-toggle v-model="form.isDefault" label="Default selection" />
+        </div>
         <!-- Not offered on a value the application writes: hiding it would leave a stage the workflow still
              reaches with nothing to render, and the API refuses it. -->
         <!-- Hiding a value is refused only on a closed list, where it is a state the application still
              sets. -->
-        <q-toggle v-if="item && !(isSystemItem && setIsClosed)" v-model="form.isActive" label="Active" />
+        <div v-if="item && !(isSystemItem && setIsClosed)" class="col-12">
+          <q-toggle v-model="form.isActive" label="Active" />
+        </div>
       </q-card-section>
       <q-card-actions align="right">
         <q-btn v-close-popup flat no-caps label="Cancel" />
