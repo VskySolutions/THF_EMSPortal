@@ -28,6 +28,29 @@ public static class MaconomyJobDataMapping
     public static readonly string[] Fields = { NumberField, NameField, CustomerField, TemplateField, ProjectManagerField };
 
     /// <summary>
+    /// The mapping in words, for the Job tab. Kept beside <see cref="Map"/> so a change to what is sent
+    /// is a change to what the page says.
+    /// </summary>
+    public static MaconomyCardMapping Describe(string container) => new(container, new[]
+    {
+        new MaconomyFieldMapping(
+            NumberField, "Job number", "Maconomy's number series",
+            "Never sent. Written back onto the request once the job is created.", ReadBack: true),
+        new MaconomyFieldMapping(
+            NameField, "Job name", "Client name.Service Line",
+            "A person as \"Last First\", an organisation by its legal name, a Maconomy-picked client as Maconomy names it; then a dot and the Service Line label.", ReadBack: false),
+        new MaconomyFieldMapping(
+            CustomerField, "Customer number", "The client's Maconomy customer number",
+            "From the customer sync, or the Maconomy customer picked on the request. Without one the request is not eligible.", ReadBack: false),
+        new MaconomyFieldMapping(
+            TemplateField, "Template job", "The Job Template's Maconomy number, else the default template job",
+            "Set per value under Option Sets → REMS Job Template; the default is server configuration (Maconomy:JobCard).", ReadBack: false),
+        new MaconomyFieldMapping(
+            ProjectManagerField, "Project manager", "The configured employee number",
+            "Server configuration (Maconomy:JobCard); every job names the same one.", ReadBack: false),
+    });
+
+    /// <summary>
     /// What the portal posts as a new job: a header against a template job, nothing below it. Total: it
     /// maps whatever is there, blanks included, so the confirmation can show a request that is not yet
     /// eligible; eligibility is <see cref="MaconomyJobSyncRules"/>' business, checked before the writer is called.

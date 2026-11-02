@@ -183,3 +183,14 @@ No migration, no endpoint, no UI, no configuration key on disk. Nothing the user
 3. The customer search still returns the same rows for a known number (the read side on the constants).
 
 About two hours.
+
+---
+
+## 6. Since
+
+**2 Nov 2026 — the mapping in words.** Each mapping class also carries `Describe(container)`: one
+`MaconomyFieldMapping` (field, label, what the portal fills it from, the rule, read back or sent) per card
+field, in the order the write names them. `GET /api/integrations/maconomy/mapping` serves both cards with
+the configured containers, and the Customer and Job tabs show them (`MaconomyMappingCard.vue`). A change
+to `Map` is a change to `Describe`: they sit side by side so the page never says something the code
+stopped doing.

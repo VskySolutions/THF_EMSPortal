@@ -11,6 +11,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using EmsPortal.Api.RateLimiting;
+using EmsPortal.Application.Integrations.Maconomy.Mapping;
+using EmsPortal.Shared.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -40,6 +43,7 @@ public sealed class MaconomyController : ControllerBase
     private readonly IMaconomyJobSyncService _jobSync;
     private readonly IMaconomyClientDirectory _directory;
     private readonly IMaconomyNumberMaps _numbers;
+    private readonly MaconomyOptions _options;
 
     public MaconomyController(
         IMaconomyConnectionService connections,
@@ -50,7 +54,8 @@ public sealed class MaconomyController : ControllerBase
         IMaconomyCustomerSyncService customerSync,
         IMaconomyJobSyncService jobSync,
         IMaconomyClientDirectory directory,
-        IMaconomyNumberMaps numbers)
+        IMaconomyNumberMaps numbers,
+        IOptions<MaconomyOptions> options)
     {
         _connections = connections;
         _customers = customers;
@@ -61,6 +66,7 @@ public sealed class MaconomyController : ControllerBase
         _jobSync = jobSync;
         _directory = directory;
         _numbers = numbers;
+        _options = options.Value;
     }
 
     // ---- The customer sync ----
@@ -356,6 +362,22 @@ public sealed class MaconomyController : ControllerBase
             overview.ProjectManagerNumber, overview.DefaultTemplateNumber,
             overview.Synced, overview.Failed, overview.Syncing, overview.Waiting, templates);
     }
+
+    // ---- The mapping ----
+
+    /// <summary>
+    /// How the portal fills the customer card and the job card, in words, for the Customer and Job tabs.
+    /// The same for every tenant: the mapping is code, the containers server configuration.
+    /// </summary>
+    [HttpGet("mapping")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyMappingResponse>>(StatusCodes.Status200OK)]
+    public IActionResult GetMapping()
+        => Ok(ApiResponseFactory.Success(
+            new MaconomyMappingResponse(
+                MaconomyCustomerDataMapping.Describe(_options.CustomerCard.Container),
+                MaconomyJobDataMapping.Describe(_options.JobCard.Container)),
+            "Maconomy mapping retrieved."));
 
     // ---- The connection ----
 

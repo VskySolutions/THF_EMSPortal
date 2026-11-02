@@ -25,6 +25,32 @@ public static class MaconomyCustomerDataMapping
     public static readonly string[] Fields = { NumberField, NameField, EmailField, PhoneField, EntityTypeField, IndustryField };
 
     /// <summary>
+    /// The mapping in words, for the Customer tab. Kept beside <see cref="Map"/> so a change to what is
+    /// sent is a change to what the page says.
+    /// </summary>
+    public static MaconomyCardMapping Describe(string container) => new(container, new[]
+    {
+        new MaconomyFieldMapping(
+            NumberField, "Customer number", "Maconomy's number series",
+            "Never sent. Written back onto the client as its Maconomy customer number once the card is created.", ReadBack: true),
+        new MaconomyFieldMapping(
+            NameField, "Name", "The client's name",
+            "An organisation: its legal name. A person: \"Last, First Suffix\" as typed. Else the display name.", ReadBack: false),
+        new MaconomyFieldMapping(
+            EmailField, "Email", "The client's primary email, else the person's",
+            "Checked against Maconomy first: a customer already holding it is linked instead of created.", ReadBack: false),
+        new MaconomyFieldMapping(
+            PhoneField, "Telephone", "The client's primary phone, else the person's mobile number",
+            "Blank is left out, so Maconomy applies its own default.", ReadBack: false),
+        new MaconomyFieldMapping(
+            EntityTypeField, "Specification 6", "The Entity Type's Maconomy number",
+            "Set per value under Option Sets → REMS Entity Type. A value without one is left out.", ReadBack: false),
+        new MaconomyFieldMapping(
+            IndustryField, "Specification 1", "The Industry's Maconomy number",
+            "Set per value under Option Sets → REMS Industry. A value without one is left out.", ReadBack: false),
+    });
+
+    /// <summary>
     /// What the portal posts as a new customer. A blank value is left out, so Maconomy applies its own
     /// default. The email is passed in because the sync has already checked it against Maconomy; the
     /// numbers are the tenant's option items' (the specification 6 number on the entity type, the

@@ -152,6 +152,14 @@
             </q-card-section>
           </q-card>
         </div>
+
+        <!-- What a new customer is created with, so an admin sees the mapping without reading code. -->
+        <div class="col-12 col-md-7">
+          <maconomy-mapping-card title="Customer card mapping" :mapping="mapping.customer" :loading="mappingLoading">
+            What a Brand New Client is posted as, once, when the customer is created. Nothing is updated
+            afterwards, and a blank value is left out so Maconomy applies its own default.
+          </maconomy-mapping-card>
+        </div>
       </div>
 
       <!-- The customer sync: a fully approved Brand New Client request posts its client to Maconomy. It is
@@ -253,7 +261,51 @@
         No token held yet. Test the connection on the Authentication tab first.
       </q-banner>
 
-      <q-card flat bordered>
+      <div class="row q-col-gutter-md">
+        <!-- What every job is created with, and where each value is kept. -->
+        <div class="col-12 col-md-5">
+          <q-card flat bordered>
+            <q-card-section class="q-py-sm text-subtitle2 text-primary">
+              <q-icon name="o_tune" size="18px" class="q-mr-xs" />Job defaults
+            </q-card-section>
+            <q-separator />
+            <q-card-section>
+              <div class="ms-facts text-body2 text-grey-8">
+                <div>
+                  <q-icon name="o_badge" size="16px" class="q-mr-xs" />
+                  Project manager:
+                  <template v-if="job.projectManagerNumber">employee <b>{{ job.projectManagerNumber }}</b></template>
+                  <span v-else class="text-negative">not configured — every sync is refused until it is</span>
+                  <span class="text-caption text-grey-7">(server configuration, Maconomy:JobCard)</span>
+                </div>
+                <div v-if="job.defaultTemplateNumber">
+                  <q-icon name="o_description" size="16px" class="q-mr-xs" />
+                  Default template job: <b>{{ job.defaultTemplateNumber }}</b>, used when a request's Job Template carries
+                  no Maconomy number <span class="text-caption text-grey-7">(server configuration)</span>
+                </div>
+                <div>
+                  <q-icon name="o_account_tree" size="16px" class="q-mr-xs" />
+                  {{ numberedTemplates }} of {{ job.templates.length }} job templates carry a Maconomy number
+                  <template v-if="numberedTemplates < job.templates.length">
+                    — set the rest under
+                    <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Job Template</router-link>
+                  </template>
+                </div>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+
+        <!-- What a job is created with, so an admin sees the mapping without reading code. -->
+        <div class="col-12 col-md-7">
+          <maconomy-mapping-card title="Job card mapping" :mapping="mapping.job" :loading="mappingLoading">
+            What an approved engagement is posted as: a job header against a template job, nothing below it.
+            Sync job now is offered on a request only once every value is there.
+          </maconomy-mapping-card>
+        </div>
+      </div>
+
+      <q-card flat bordered class="q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary row items-center">
           <q-icon name="o_work" size="18px" class="q-mr-xs" />Job sync
           <span v-if="canChooseTenant" class="text-caption text-grey-7 q-ml-sm">— your own tenant</span>
@@ -270,30 +322,6 @@
           </p>
           <div v-if="job.changedOnUtc" class="text-caption text-grey-7 q-mb-md">
             {{ job.enabled ? "Started" : "Stopped" }} {{ fmt.formatDateTime(job.changedOnUtc) }}{{ job.changedByName ? ` by ${job.changedByName}` : "" }}.
-          </div>
-
-          <!-- What every job is created with, and where each value is kept. -->
-          <div class="ms-facts text-body2 text-grey-8 q-mb-md">
-            <div>
-              <q-icon name="o_badge" size="16px" class="q-mr-xs" />
-              Project manager:
-              <template v-if="job.projectManagerNumber">employee <b>{{ job.projectManagerNumber }}</b></template>
-              <span v-else class="text-negative">not configured — every sync is refused until it is</span>
-              <span class="text-caption text-grey-7">(server configuration, Maconomy:JobCard)</span>
-            </div>
-            <div v-if="job.defaultTemplateNumber">
-              <q-icon name="o_description" size="16px" class="q-mr-xs" />
-              Default template job: <b>{{ job.defaultTemplateNumber }}</b>, used when a request's Job Template carries
-              no Maconomy number <span class="text-caption text-grey-7">(server configuration)</span>
-            </div>
-            <div>
-              <q-icon name="o_account_tree" size="16px" class="q-mr-xs" />
-              {{ numberedTemplates }} of {{ job.templates.length }} job templates carry a Maconomy number
-              <template v-if="numberedTemplates < job.templates.length">
-                — set the rest under
-                <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Job Template</router-link>
-              </template>
-            </div>
           </div>
 
           <div class="row q-col-gutter-md q-mb-md">
@@ -397,6 +425,7 @@ import AppTextField from "components/common/AppTextField.vue";
 import AppPasswordField from "components/common/AppPasswordField.vue";
 import MaconomyCustomerSelect from "modules/maconomy/components/MaconomyCustomerSelect.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
+import MaconomyMappingCard from "modules/maconomy/components/MaconomyMappingCard.vue";
 
 const notify = useNotify();
 const { confirm } = useConfirm();
@@ -486,7 +515,7 @@ const load = async () => {
 
 // The global scope switch announces itself; this page is not a list, so it listens for itself.
 const loadAll = () => { load(); loadSync(); loadJob(); };
-onMounted(() => { loadAll(); window.addEventListener("tenant-switched", loadAll); });
+onMounted(() => { loadAll(); loadMapping(); window.addEventListener("tenant-switched", loadAll); });
 onUnmounted(() => window.removeEventListener("tenant-switched", loadAll));
 
 const requiredRule = (v) => (v !== null && v !== undefined && String(v).trim() !== "") || "Required";
@@ -655,6 +684,23 @@ const syncNow = async (row) => {
   } finally {
     syncingRems.value = null;
     await loadSync();
+  }
+};
+
+// ---- The mapping ----
+// How each card is filled, in words, from the mapping code itself. The same for every tenant, so it is
+// read once and not again on a tenant switch.
+const mapping = ref({ customer: null, job: null });
+const mappingLoading = ref(false);
+
+const loadMapping = async () => {
+  mappingLoading.value = true;
+  try {
+    mapping.value = (await maconomyApi.mapping()) || { customer: null, job: null };
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    mappingLoading.value = false;
   }
 };
 

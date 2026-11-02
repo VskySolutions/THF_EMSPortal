@@ -294,7 +294,11 @@ export const maconomyApi = {
   jobSyncRequests: () => api.get("/api/integrations/maconomy/job-sync/requests").then(unwrap),
   // Sync job now for one request → its job sync view. A failed post is a 200 with status "failed"; only a
   // refusal (sync off, not eligible) is an error.
-  runJobSync: (remsId) => api.post(`/api/integrations/maconomy/job-sync/${remsId}/run`).then(unwrap)
+  runJobSync: (remsId) => api.post(`/api/integrations/maconomy/job-sync/${remsId}/run`).then(unwrap),
+
+  // How each card is filled, in words, for the Customer and Job tabs — the same for every tenant:
+  // → { customer: { container, fields: [{ field, label, source, rule, readBack }] }, job: { … } }.
+  mapping: () => api.get("/api/integrations/maconomy/mapping").then(unwrap)
 };
 
 // The tenant's branding: its theme (name, colours, type, buttons) and its images. `tenantId` is the Super

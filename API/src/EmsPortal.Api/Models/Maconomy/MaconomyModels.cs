@@ -1,3 +1,5 @@
+using EmsPortal.Application.Integrations.Maconomy.Mapping;
+
 namespace EmsPortal.Api.Models.Maconomy;
 
 // ---- Requests ----
@@ -60,3 +62,6 @@ public sealed record MaconomyLoginResponse(bool Connected, DateTime IssuedOnUtc,
 /// </summary>
 public sealed record MaconomyCustomerOptionResponse(
     string Text, string Value, string? Specification6Name, string? EntityType, string? EmailAddress, string? PhoneNumber);
+
+/// <summary>How the portal fills each card, in words, for the Customer and Job tabs. The mapping is code, the containers configuration.</summary>
+public sealed record MaconomyMappingResponse(MaconomyCardMapping Customer, MaconomyCardMapping Job);
