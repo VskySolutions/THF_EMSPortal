@@ -34,9 +34,16 @@
           <q-card-section class="row q-col-gutter-md">
             <app-text-field v-model="name" label="Name" class="col-12 col-sm-6" />
             <app-text-field :model-value="tenant.identifier" readonly label="Identifier" class="col-12 col-sm-6" />
+            <!-- The people who look after the tenant's integrations, not its users: the portal writes to them
+                 when something it runs for the tenant breaks, such as the Maconomy connection switching itself
+                 off after repeated failed logins. -->
+            <app-email-list-field
+              v-model="developerEmails" label="Developer emails" class="col-12"
+              info="Emailed when an integration the portal runs for this tenant breaks — for example when the Maconomy connection is switched off after repeated failed logins or timeouts. Enter, a comma or a semicolon ends an address."
+            />
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn unelevated no-caps color="primary" label="Save" :loading="savingName" :disable="name === tenant.name" @click="saveName" />
+            <q-btn unelevated no-caps color="primary" label="Save" :loading="savingBasics" :disable="!basicsChanged" @click="saveBasics" />
           </q-card-actions>
         </q-card>
 
@@ -160,6 +167,7 @@ import { useAuthStore } from "stores/auth";
 import { useTenantStore } from "stores/tenant";
 import AppDetailHeader from "components/common/AppDetailHeader.vue";
 import AppTextField from "components/common/AppTextField.vue";
+import AppEmailListField from "components/common/AppEmailListField.vue";
 import AppDataTable from "components/common/AppDataTable.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
 import UserCreateDrawer from "components/user/UserCreateDrawer.vue";
@@ -180,7 +188,12 @@ const tenantId = route.params.id;
 const tenant = ref(null);
 const loading = ref(false);
 const name = ref("");
-const savingName = ref(false);
+const developerEmails = ref([]);
+const savingBasics = ref(false);
+// Save is offered only for an edit: the same list in the same order is no change.
+const basicsChanged = computed(() => !!tenant.value &&
+  (name.value !== tenant.value.name ||
+    developerEmails.value.join(";") !== (tenant.value.developerEmails || []).join(";")));
 const archiveError = ref("");
 
 // ---- Tabs ----
@@ -204,6 +217,7 @@ const load = async () => {
   try {
     tenant.value = await tenantApi.get(tenantId);
     name.value = tenant.value.name;
+    developerEmails.value = [...(tenant.value.developerEmails || [])];
   } catch (err) {
     notify.error(getApiErrorMessage(err));
   } finally {
@@ -211,10 +225,10 @@ const load = async () => {
   }
 };
 
-const saveName = async () => {
-  savingName.value = true;
+const saveBasics = async () => {
+  savingBasics.value = true;
   try {
-    await tenantApi.update(tenantId, { name: name.value });
+    await tenantApi.update(tenantId, { name: name.value, developerEmails: developerEmails.value });
     notify.success("Tenant updated.");
     load();
     // The new name has to reach the toolbar, and — when this is a tenant the user is actually assigned
@@ -224,7 +238,7 @@ const saveName = async () => {
   } catch (err) {
     notify.error(getApiErrorMessage(err));
   } finally {
-    savingName.value = false;
+    savingBasics.value = false;
   }
 };
 

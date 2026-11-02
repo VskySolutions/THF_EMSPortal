@@ -580,6 +580,8 @@ public sealed class MaconomyController : ControllerBase
             token,
             c.LastLoginError,
             c.LastLoginErrorUtc,
+            c.ConsecutiveFailureCount,
+            c.AutoDisabledOnUtc,
             c.CreatedById is { } cid && names.TryGetValue(cid, out var creator) ? creator : null,
             c.CreatedOnUtc,
             c.UpdatedById is { } uid && names.TryGetValue(uid, out var updater) ? updater : null,

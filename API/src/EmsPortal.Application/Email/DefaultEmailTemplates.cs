@@ -164,6 +164,24 @@ public static class DefaultEmailTemplates
             <p><a href="{{RequestLink}}">Open the request</a></p>
             """,
             new[] { "ClientName", "RemsNumber", "SubmittedOn", "RequestLink" }),
+
+        new Definition(
+            EmailTemplateKey.MaconomyConnectionDisabled,
+            "Maconomy Connection Switched Off",
+            "Sent to the developer emails named on the tenant when the portal switches its Maconomy connection off after repeated failed logins or timeouts.",
+            "Maconomy connection switched off for {{TenantName}}",
+            """
+            <p>The portal has switched off the Maconomy connection for <strong>{{TenantName}}</strong> after {{FailureCount}} failed attempts in a row.</p>
+            <p><strong>Last error:</strong> {{ErrorMessage}}</p>
+            <ul>
+              <li><strong>Instance:</strong> {{InstanceCode}} at {{BaseUrl}}</li>
+              <li><strong>User:</strong> {{UserName}}</li>
+              <li><strong>Switched off:</strong> {{DisabledOn}}</li>
+            </ul>
+            <p>The customer lookup, the customer sync and the job sync are stopped until the connection is switched on again. Check the credentials and the address, then switch it on under Settings &rsaquo; Maconomy and save.</p>
+            <p><a href="{{SettingsLink}}">Open the Maconomy settings</a></p>
+            """,
+            new[] { "TenantName", "FailureCount", "ErrorMessage", "InstanceCode", "BaseUrl", "UserName", "DisabledOn", "SettingsLink" }),
     }.ToDictionary(d => d.Key);
 
     /// <summary>All template definitions, in key order.</summary>

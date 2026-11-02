@@ -50,6 +50,18 @@ public class MaconomyConnection : AuditableEntity
     /// <summary>Switches the lookup off without losing the credentials.</summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Refused logins and unanswered calls in a row since Maconomy last answered. Back to zero on an answer,
+    /// and on an admin's save with the connection on.
+    /// </summary>
+    public int ConsecutiveFailureCount { get; set; }
+
+    /// <summary>
+    /// When the portal itself switched the connection off, the failures having reached
+    /// <c>Maconomy:FailuresBeforeDisable</c>. Null while it has not, and again once an admin switches it on.
+    /// </summary>
+    public DateTime? AutoDisabledOnUtc { get; set; }
+
     // ---- The customer sync: posting a fully approved brand-new client to Maconomy ----
 
     /// <summary>Whether a request's approval queues its new client for posting. Off by default; Start/Stop on the settings page.</summary>

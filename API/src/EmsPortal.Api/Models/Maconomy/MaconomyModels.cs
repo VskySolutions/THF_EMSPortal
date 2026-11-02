@@ -46,6 +46,8 @@ public sealed record MaconomyConnectionResponse(
     MaconomyTokenStatus Token,
     string? LastLoginError,
     DateTime? LastLoginErrorUtc,
+    int ConsecutiveFailureCount,
+    DateTime? AutoDisabledOnUtc,
     string? CreatedByName,
     DateTime CreatedOnUtc,
     string? UpdatedByName,

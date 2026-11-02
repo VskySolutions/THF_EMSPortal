@@ -119,6 +119,13 @@
           :clearable="false"
           :options="allZones"
         />
+        <!-- Who the portal writes to when an integration it runs for the tenant breaks. -->
+        <app-email-list-field
+          v-model="form.developerEmails"
+          label="Developer emails"
+          class="q-mt-md"
+          info="Emailed when an integration the portal runs for this tenant breaks — for example when the Maconomy connection is switched off after repeated failed logins or timeouts."
+        />
       </q-form>
     </app-form-drawer>
   </q-page>
@@ -142,6 +149,7 @@ import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppListHeader from "components/common/AppListHeader.vue";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
+import AppEmailListField from "components/common/AppEmailListField.vue";
 
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
@@ -206,7 +214,7 @@ const editing = ref(false);
 const saving = ref(false);
 const identifierError = ref("");
 const formRef = ref(null);
-const form = reactive({ tenantId: null, name: "", identifier: "", timeZoneId: "UTC" });
+const form = reactive({ tenantId: null, name: "", identifier: "", timeZoneId: "UTC", developerEmails: [] });
 
 // The whole list goes to AppSelect, which narrows it as you type: it filters in a computed rather than
 // through QSelect's filter/done-callback round trip, so there is nothing left here to filter.
@@ -217,6 +225,7 @@ const resetForm = () => {
   form.name = "";
   form.identifier = "";
   form.timeZoneId = "UTC";
+  form.developerEmails = [];
   identifierError.value = "";
   editing.value = false;
 };
@@ -233,6 +242,7 @@ const openEdit = (row) => {
   form.name = row.name;
   form.identifier = row.identifier;
   form.timeZoneId = row.timeZoneId || "UTC";
+  form.developerEmails = [...(row.developerEmails || [])];
   formOpen.value = true;
 };
 
@@ -243,11 +253,12 @@ const submitForm = async ({ clearDraft } = {}) => {
 
   saving.value = true;
   try {
+    const payload = { name: form.name, timeZoneId: form.timeZoneId, developerEmails: form.developerEmails };
     if (editing.value) {
-      await tenantApi.update(form.tenantId, { name: form.name, timeZoneId: form.timeZoneId });
+      await tenantApi.update(form.tenantId, payload);
       notify.success("Tenant updated.");
     } else {
-      await tenantApi.create({ name: form.name, identifier: form.identifier, timeZoneId: form.timeZoneId });
+      await tenantApi.create({ ...payload, identifier: form.identifier });
       notify.success("Tenant created.");
     }
     clearDraft?.();

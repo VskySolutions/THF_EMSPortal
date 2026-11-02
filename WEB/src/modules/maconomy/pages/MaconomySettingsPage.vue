@@ -67,16 +67,24 @@
               <q-toggle v-model="form.isEnabled" label="Connection enabled">
                 <q-tooltip max-width="320px">
                   Off keeps the credentials but stops the customer lookup, the customer sync and the job sync;
-                  the Customer and Job tabs close until it is on again.
+                  the Customer and Job tabs close until it is on again. The portal switches it off by itself
+                  after repeated refused logins or timeouts, and emails the developers named on the tenant.
                 </q-tooltip>
               </q-toggle>
             </q-form>
 
             <!-- What the stored credentials have achieved so far. -->
             <div v-if="exists" class="q-mt-md">
+              <!-- The portal's own switch-off, as against an admin's: it says so, and what to do about it. -->
+              <q-banner v-if="connection.autoDisabledOnUtc" dense class="bg-red-1 text-negative rounded-borders q-mb-sm">
+                <template #avatar><q-icon name="o_power_settings_new" color="negative" /></template>
+                Switched off by the portal at {{ fmt.formatDateTime(connection.autoDisabledOnUtc) }} after
+                {{ connection.consecutiveFailureCount }} failed attempts in a row; the developers named on the tenant
+                were emailed. Check the credentials and the address, then switch the connection on and save.
+              </q-banner>
               <q-banner v-if="connection.lastLoginError" dense class="bg-red-1 text-negative rounded-borders q-mb-sm">
                 <template #avatar><q-icon name="o_error" color="negative" /></template>
-                Last login failed{{ connection.lastLoginErrorUtc ? ` at ${fmt.formatDateTime(connection.lastLoginErrorUtc)}` : "" }}:
+                Maconomy last failed{{ connection.lastLoginErrorUtc ? ` at ${fmt.formatDateTime(connection.lastLoginErrorUtc)}` : "" }}:
                 {{ connection.lastLoginError }}
               </q-banner>
               <div class="row items-center text-body2 text-grey-8">

@@ -52,4 +52,10 @@ public enum EmailTemplateKey
     /// email allowlist. Rendered/dispatched via <c>IRemsEmailNotifier</c>.
     /// </summary>
     RemsFormReminder = 16,
+
+    /// <summary>
+    /// The portal switched a tenant's Maconomy connection off after repeated refused logins or timeouts.
+    /// Sent to the developer addresses named on the tenant, never to its users. On the email allowlist.
+    /// </summary>
+    MaconomyConnectionDisabled = 17,
 }

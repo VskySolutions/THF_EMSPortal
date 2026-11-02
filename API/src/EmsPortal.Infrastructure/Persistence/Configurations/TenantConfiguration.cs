@@ -28,6 +28,10 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.CreatedDate)
             .IsRequired();
 
+        // Room for the twenty addresses the API accepts, semicolon-separated.
+        builder.Property(t => t.DeveloperEmails)
+            .HasMaxLength(2000);
+
         // Tenant identifiers must be unique, URL-safe slugs.
         builder.HasIndex(t => t.Identifier).IsUnique().HasFilter("[Deleted] = 0");
     }

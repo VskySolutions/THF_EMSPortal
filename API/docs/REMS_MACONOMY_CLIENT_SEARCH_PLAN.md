@@ -120,8 +120,17 @@ The techniques behind those numbers:
    each term for 2 minutes, and stops asking altogether for a tenant with no Maconomy connection.
 4. **A pause after a failure** (`FailureCooldownSeconds`): after a refused sign-in or a timeout Maconomy is
    left alone for a minute. Without it every search is one more failed sign-in on the service account.
-5. **Fewer fields per call**: only the five the portal shows are asked for.
-6. **Optional: hold every customer** (`PreloadAllCustomers`). One call of about 4 s every 10 minutes, after
+5. **A switch-off after repeated failures** (`FailuresBeforeDisable`, 2 Nov 2026): the third refused sign-in
+   or unanswered call in a row — real attempts, so ones the pause let through — turns the connection off,
+   exactly as an admin would on the Authentication tab (`IsEnabled`, with `AutoDisabledOnUtc` saying the
+   portal did it), and emails the developer addresses named on the tenant (Tenants › the tenant › Developer
+   emails; `Tenants.DeveloperEmails`, semicolon-separated) with the error, through the tenant's SMTP
+   account and the `MaconomyConnectionDisabled` template. Nobody named means a log line and an audit entry
+   only. The count (`ConsecutiveFailureCount`) restarts whenever Maconomy answers; an admin switching the
+   connection on and saving starts it afresh. Testing the connection while it is off still counts, but a
+   connection already off is not switched off again, so there is one email per switch-off.
+6. **Fewer fields per call**: only the five the portal shows are asked for.
+7. **Optional: hold every customer** (`PreloadAllCustomers`). One call of about 4 s every 10 minutes, after
    which no search calls Maconomy at all. Off by default, because it keeps the whole customer list in the
    API's memory and a customer created in Maconomy is not found until the next refresh.
 
@@ -134,6 +143,7 @@ The techniques behind those numbers:
 | `CustomerCacheSeconds` | 600 | How long client details are served before being re-read. |
 | `NumbersPerCall` | 100 | Customer numbers asked for in one call (capped at 200). |
 | `FailureCooldownSeconds` | 60 | Pause after a refused sign-in or an unreachable Maconomy. |
+| `FailuresBeforeDisable` | 3 | Refused sign-ins or unanswered calls in a row before the connection is switched off and the tenant's developers emailed. Zero never switches it off. |
 | `SearchCacheSeconds` | 120 | How long a search result is reused. |
 | `PreloadAllCustomers` | false | Hold every customer in memory; searches then make no call. |
 | `PreloadMaxRows` | 50000 | Row cap for that one read. |

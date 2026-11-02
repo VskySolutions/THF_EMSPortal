@@ -42,6 +42,13 @@ public sealed class MaconomyOptions
     public int FailureCooldownSeconds { get; set; } = 60;
 
     /// <summary>
+    /// Refused logins or unanswered calls in a row before the portal switches the connection off and
+    /// emails the developers named on the tenant. Attempts the cooldown absorbs are not attempts. The
+    /// count restarts whenever Maconomy answers. Zero never switches it off.
+    /// </summary>
+    public int FailuresBeforeDisable { get; set; } = 3;
+
+    /// <summary>
     /// Reads EVERY customer into memory once per <see cref="CustomerCacheSeconds"/>, so the client search
     /// makes no call at all. Off: only the customers the portal's requests name are held, and a search
     /// asks Maconomy.

@@ -66,6 +66,7 @@ public sealed class TenantsController : ControllerBase
             Name = request.Name,
             Identifier = request.Identifier,
             TimeZoneId = string.IsNullOrWhiteSpace(request.TimeZoneId) ? "UTC" : request.TimeZoneId,
+            DeveloperEmails = TenantDeveloperEmails.Join(request.DeveloperEmails),
             Status = TenantStatus.Active,
             CreatedDate = DateTime.UtcNow,
         };
@@ -131,7 +132,7 @@ public sealed class TenantsController : ControllerBase
         var filtered = SortsWith(names).Apply(candidates, sortBy, descending).ToList();
         var pageTenants = filtered.Skip((page - 1) * limit).Take(limit).ToList();
         var pageItems = pageTenants.Select(t => new TenantSummary(
-            t.Id, t.Name, t.Identifier, t.Status.ToString(), t.TimeZoneId,
+            t.Id, t.Name, t.Identifier, t.Status.ToString(), t.TimeZoneId, TenantDeveloperEmails.Parse(t.DeveloperEmails),
             NameOf(names, t.CreatedById), NameOf(names, t.UpdatedById), t.CreatedOnUtc, t.UpdatedOnUtc));
 
         return Ok(ApiResponseFactory.Paginated(pageItems, "Tenants retrieved.", page, limit, filtered.Count));
@@ -150,6 +151,7 @@ public sealed class TenantsController : ControllerBase
 
         var detail = new TenantDetail(
             tenant.Id, tenant.Name, tenant.Identifier, tenant.Status.ToString(), tenant.TimeZoneId,
+            TenantDeveloperEmails.Parse(tenant.DeveloperEmails),
             await RecordAudit.ForAsync(_users, tenant, cancellationToken));
 
         return Ok(ApiResponseFactory.Success(detail, "Tenant retrieved."));
@@ -169,6 +171,10 @@ public sealed class TenantsController : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.TimeZoneId))
         {
             tenant.TimeZoneId = request.TimeZoneId;
+        }
+        if (request.DeveloperEmails is not null)
+        {
+            tenant.DeveloperEmails = TenantDeveloperEmails.Join(request.DeveloperEmails);
         }
         _tenants.Update(tenant);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
