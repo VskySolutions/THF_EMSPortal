@@ -42,6 +42,25 @@ internal static class RemsSetupAccess
             || IsParticipant(rems, me)
             || user.HasPermission(Permissions.RemsEngagementsManage);
 
+    /// <summary>
+    /// May VIEW the request on the read-only page, which is the firm's: open to every signed-in user once
+    /// the request has left its draft, and to the setup's readers while it is one.
+    /// </summary>
+    public static bool CanView(ClaimsPrincipal user, RemsRequest rems, Guid me)
+        => !IsDraft(rems) || CanRead(user, rems, me);
+
+    /// <summary>
+    /// Whether the reader sees the money on the setup: the fee estimate, the engagement fee, the
+    /// realization, the purchase-order amount and the rate card. Everyone with a hand in the request does
+    /// (the people named on it, the REMS Admins, the elevated roles), and so does its Department Director,
+    /// the one approver the packet shows them to (AC-REMS-019.10). Anyone else reads the setup without them.
+    /// </summary>
+    public static bool MaySeeFinancials(ClaimsPrincipal user, RemsRequest rems, Guid me)
+        => CanRead(user, rems, me) || rems.DepartmentDirectorId == me;
+
+    private static bool IsDraft(RemsRequest rems)
+        => rems.Status is null || rems.Status.Value == RemsRequestStatuses.Draft;
+
     /// <summary>May WRITE the setup: whoever the request is with at this stage.</summary>
     /// <param name="initiatorHasCover"> Whether <see cref="PrincipalOf"/> has any REMS delegation in force today (<c>IRemsDelegationRepository.HasActiveDelegateAsync</c>). Passed in rather than looked up here so this stays a pure rule; a caller with no CSE in play may pass false without querying. </param>
     public static bool CanWork(ClaimsPrincipal user, RemsRequest rems, Guid me, bool initiatorHasCover)

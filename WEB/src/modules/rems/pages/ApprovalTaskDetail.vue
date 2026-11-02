@@ -1,7 +1,7 @@
 <template>
   <q-page padding>
     <app-detail-header :items="breadcrumbs" :back-to="{ name: 'rems_approvals' }">
-      <template #actions>
+      <template #status>
         <!-- The ENGAGEMENT's status, which is the request's answer rather than the reader's: it turns
              Approved only when the round does. -->
         <app-option-badge v-if="task" :option="engagementStatus" />

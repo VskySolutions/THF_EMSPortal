@@ -13,6 +13,7 @@ using EmsPortal.Domain.Entities;
 using EmsPortal.Domain.Enums;
 using EmsPortal.Shared.Contracts;
 using EmsPortal.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EmsPortal.Api.Controllers;
@@ -158,9 +159,6 @@ public sealed class RemsEngagementController : ControllerBase
         // Asked once for the whole page: the permission is the caller's, so only the row's own claimed/
         // unclaimed state varies. Drafts cannot reach this list, so being unclaimed is the whole test.
         var mayAssign = User.HasPermission(Permissions.RemsRequestsAssign);
-        // Whether this caller can prise a request loose from whoever holds it — the remedy when the admin
-        // on it is away. Ordinary admins give back only their own.
-        var elevated = RemsSetupAccess.IsElevated(User);
         var syncStatuses = await SyncStatusesAsync(items, cancellationToken);
 
         var rows = items.Select(i => new RemsClientFormRow(
@@ -169,7 +167,9 @@ public sealed class RemsEngagementController : ControllerBase
             HasForm: true, i.Submitted, i.SubmittedOnUtc,
             RemsWorkspaceMapper.UserRef(i.AdminAssignedToId, names), RemsWorkspaceMapper.UserRef(i.CSEId, names),
             CanPickUp: mayAssign && i.AdminAssignedToId is null,
-            CanHandBack: mayAssign && i.AdminAssignedToId is { } holder && (elevated || holder == me),
+            // The holder's move alone: an elevated caller works a held request around its admin
+            // (RemsSetupAccess.CanWork), and does not give it up for them.
+            CanHandBack: mayAssign && i.AdminAssignedToId is { } holder && holder == me,
             NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
             MaconomySyncStatus: syncStatuses.TryGetValue(i.RemsId, out var sync) ? sync.Customer : null,
             MaconomyJobSync: sync.Job));
@@ -230,7 +230,9 @@ public sealed class RemsEngagementController : ControllerBase
     /// client's rows — distinct from the editable workspace data.
     /// </summary>
     [HttpGet("requests/{remsId:guid}/submission")]
-    [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsRead)]
+    // Open to every signed-in user: the read-only request page is the firm's. GuardCanRead keeps a draft to
+    // its readers.
+    [Authorize]
     [ProducesResponseType<ApiResponse<RemsSubmissionView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Submission(Guid remsId, CancellationToken cancellationToken)
     {
@@ -361,7 +363,9 @@ public sealed class RemsEngagementController : ControllerBase
     /// detail.
     /// </summary>
     [HttpGet("requests/{remsId:guid}/engagement")]
-    [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsRead)]
+    // Open to every signed-in user: the read-only request page is the firm's. GuardCanRead keeps a draft to
+    // its readers.
+    [Authorize]
     [ProducesResponseType<ApiResponse<RemsEngagementWorkspace>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Workspace(Guid remsId, CancellationToken cancellationToken)
     {
@@ -396,8 +400,32 @@ public sealed class RemsEngagementController : ControllerBase
         var additionalEntities = await AdditionalEntitiesAsync(rems, cancellationToken);
 
         var workspace = RemsWorkspaceMapper.Workspace(rems, names, additionalEntities, departmentDirectors);
+        // The figures are the one thing the firm-wide read-only page does not show everybody.
+        if (User.GetUserId() is { } reader && !RemsSetupAccess.MaySeeFinancials(User, rems, reader))
+        {
+            workspace = workspace with { Engagement = WithoutFinancials(workspace.Engagement) };
+        }
         return Ok(ApiResponseFactory.Success(workspace, "REMS engagement workspace retrieved."));
     }
+
+    /// <summary>The engagement with its money withheld (the fee rows null, the rate card without rates), flagged so the page says why.</summary>
+    private static RemsEngagementView? WithoutFinancials(RemsEngagementView? engagement)
+        => engagement is null
+            ? null
+            : engagement with
+            {
+                FirstYearFeeEstimate = null,
+                EngagementFee = null,
+                RealizationPercentage = null,
+                Government = engagement.Government is { } government
+                    ? government with
+                    {
+                        PurchaseOrderAmount = null,
+                        PersonnelRates = government.PersonnelRates.Select(r => r with { BillRatePerHour = null }).ToList(),
+                    }
+                    : null,
+                FinancialsRestricted = true,
+            };
 
     /// <summary>
     /// The other businesses this client named, with the request each has produced. Resolved to REMS
@@ -1245,7 +1273,10 @@ public sealed class RemsEngagementController : ControllerBase
     private static bool IsEditable(RemsRequest rems)
         => RemsDerived.EngagementStatusOf(rems) is RemsEngagementStatus.Draft or RemsEngagementStatus.Rejected;
 
-    /// <summary>The refusal for reading a request's setup, or null to carry on.</summary>
+    /// <summary>
+    /// The refusal for reading a request's setup, or null to carry on. Only a draft can be refused: the rest
+    /// is open to everyone (<see cref="RemsSetupAccess.CanView"/>).
+    /// </summary>
     private IActionResult? GuardCanRead(RemsRequest rems)
     {
         if (User.GetUserId() is not { } me)
@@ -1253,10 +1284,10 @@ public sealed class RemsEngagementController : ControllerBase
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
 
-        return RemsSetupAccess.CanRead(User, rems, me)
+        return RemsSetupAccess.CanView(User, rems, me)
             ? null
             : StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponseFactory.Forbidden("Not permitted to view this request's engagement."));
+                ApiResponseFactory.Forbidden("This draft's engagement is only open to the people named on it."));
     }
 
     /// <summary>The refusal for WRITING a request's setup, or null to carry on.</summary>

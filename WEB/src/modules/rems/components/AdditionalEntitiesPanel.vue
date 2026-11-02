@@ -30,9 +30,11 @@
             :to="{ name: 'rems_request', params: { id: row.createdRemsId } }"
           />
           <q-btn
-            v-else unelevated dense no-caps size="sm" color="primary" icon="o_add"
+            v-else-if="!readonly" unelevated dense no-caps size="sm" color="primary" icon="o_add"
             label="Create EMS" @click="$emit('create-ems', row)"
           />
+          <!-- Read-only: the gap is stated, not offered — Create EMS is on the form. -->
+          <span v-else class="text-caption text-orange-9">No EMS yet</span>
         </q-item-section>
       </q-item>
     </q-list>
@@ -44,7 +46,9 @@
 import { computed } from "vue";
 
 const props = defineProps({
-  rows: { type: Array, default: () => [] }
+  rows: { type: Array, default: () => [] },
+  // On the read-only request page: a row without a request says so instead of offering to raise one.
+  readonly: { type: Boolean, default: false }
 });
 defineEmits(["create-ems"]);
 

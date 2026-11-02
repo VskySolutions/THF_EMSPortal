@@ -134,15 +134,16 @@
 
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- View and Edit are the same page in two modes. -->
+          <!-- Two pages. View reads the whole request on one page and is everybody's; the other opens it as
+               the form, with every move in its header — Edit to the initiator, Manage to an admin. -->
           <q-btn flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)">
             <q-tooltip>View</q-tooltip>
           </q-btn>
           <q-btn
             v-if="cell.row.actions?.canEdit"
-            flat round dense color="primary" icon="o_edit" :to="editRoute(cell.row)"
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
           >
-            <q-tooltip>Edit</q-tooltip>
+            <q-tooltip>{{ workAction.label }}</q-tooltip>
           </q-btn>
           <!-- What has been emailed to the client about this request, and the way to chase them again. -->
           <q-btn
@@ -244,7 +245,7 @@ const auditColumns = useAuditColumns();
 const {
   typeLabel, typeHint, requestStatusOption, formStatusOption, submissionStateLabel, emsFormActivity,
   entityTypeLabel, entityTypeOption, entityTypeOptions, statusFilterOptions, formStateFilterOptions,
-  submissionStateFilterOptions, typeOptions
+  submissionStateFilterOptions, typeOptions, workAction
 } = useRemsMeta();
 
 const canCreate = computed(() => has(Permissions.RemsRequestsCreate));

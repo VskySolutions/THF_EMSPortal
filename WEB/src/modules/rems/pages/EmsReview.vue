@@ -155,17 +155,18 @@
             </q-tooltip>
           </q-btn>
 
-          <!-- View and Edit are the same page in two modes. -->
+          <!-- Two pages. View reads the whole request on one page and is everybody's; Manage opens it as
+               the form, with the review moves in its header. -->
           <q-btn
             flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)"
           >
             <q-tooltip>View</q-tooltip>
           </q-btn>
           <q-btn
-            flat round dense color="primary" icon="o_edit" :to="editRoute(cell.row)"
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
             :disable="!!editBlocked(cell.row)"
           >
-            <q-tooltip>{{ editBlocked(cell.row) || "Edit" }}</q-tooltip>
+            <q-tooltip>{{ editBlocked(cell.row) || workAction.label }}</q-tooltip>
           </q-btn>
           <!-- What the client has been emailed about this request and what came back, plus the reminder for
                one who still has not answered. -->
@@ -252,7 +253,7 @@ const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const { has } = usePermissions();
 const {
-  requestStatusOption, submissionStateOption, statusFilterOptions, engagementOwnerDenial
+  requestStatusOption, submissionStateOption, statusFilterOptions, engagementOwnerDenial, workAction
 } = useRemsMeta();
 
 // The "EMS State" column is a boolean on the row.

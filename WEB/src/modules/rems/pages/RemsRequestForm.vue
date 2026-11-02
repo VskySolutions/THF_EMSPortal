@@ -1,108 +1,115 @@
 <template>
   <q-page padding>
     <app-detail-header :items="breadcrumbs" :back-to="backTo">
+      <!-- Where the request stands, at the end of its name: its status, where its client and its job stand
+           in Maconomy, and what the page is doing with what has been typed. -->
+      <template #status>
+        <!-- The row helper rather than the bare code, so a request nobody has picked up says so here
+             exactly as it does in EMS Review instead of reading as though an admin is already on it. -->
+        <app-option-badge v-if="request" :option="requestStatusOption(request)" />
+        <!-- Whether the approved client has reached Maconomy: a separate fact from the status beside it. -->
+        <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
+        <!-- And whether the approved engagement has become a Maconomy job. -->
+        <maconomy-sync-chip v-if="request?.maconomyJobSync" kind="job" :sync="request.maconomyJobSync" />
+        <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
+          <q-spinner v-if="saveState === 'saving'" size="14px" />
+          <q-icon v-else :name="saveChip.icon" size="15px" />
+          <q-tooltip>{{ saveMessage ? `${saveChip.text} — ${saveMessage}` : saveChip.text }}</q-tooltip>
+        </div>
+      </template>
+
       <template #actions>
-        <!-- EVERY action on the request lives here. -->
+        <!-- EVERY action on the request lives here, and every one is the same kind of button — a labelled
+             rectangle with its icon: outlined for the reads and the secondary moves, filled for the one move
+             the stage is about. Back, beside them, is that shape on every page. -->
         <div class="rf-head">
-          <!-- The row helper rather than the bare code, so a request nobody has picked up says so here
-               exactly as it does in EMS Review instead of reading as though an admin is already on it. -->
-          <app-option-badge v-if="request" :option="requestStatusOption(request)" />
-          <!-- Whether the approved client has reached Maconomy: a separate fact from the status beside it. -->
-          <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
-          <!-- And whether the approved engagement has become a Maconomy job. -->
-          <maconomy-sync-chip v-if="request?.maconomyJobSync" kind="job" :sync="request.maconomyJobSync" />
-
-          <!-- What the page is doing with what has been typed. -->
-          <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
-            <q-spinner v-if="saveState === 'saving'" size="14px" />
-            <q-icon v-else :name="saveChip.icon" size="15px" />
-            <q-tooltip>{{ saveMessage ? `${saveChip.text} — ${saveMessage}` : saveChip.text }}</q-tooltip>
-          </div>
-
-          <!-- The mode switch. -->
-          <q-btn
-            v-if="request && !isEditing && canEditAnything"
-            unelevated no-caps color="primary" icon="o_edit" label="Edit"
-            @click="setMode('edit')"
-          />
+          <!-- The read-only page offers Conversation and Back and nothing else: every move on the request is
+               made from the form, which the lists open as Edit or Manage. -->
           <q-btn
             v-if="request" outline no-caps color="primary" icon="o_forum" label="Conversation"
             @click="conversationOpen = true"
           />
-          <!-- What the client has actually been sent, and whether it landed. -->
-          <q-btn
-            v-if="canReadEmailLog" outline no-caps color="primary" icon="o_mark_email_read"
-            label="Email log" @click="emailLogOpen = true"
-          />
+          <template v-if="isEditing">
+            <!-- The reads: the whole request on one page; what the client has been sent and whether it
+                 landed; what has HAPPENED to the request, as against what it says; and the client's own form
+                 link, for chasing them by any means other than the portal. -->
+            <q-btn v-if="request" outline no-caps color="primary" icon="o_visibility" label="View" :to="viewRoute">
+              <q-tooltip>The whole request on one page, read-only</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="canReadEmailLog" outline no-caps color="primary" icon="o_mark_email_read" label="Email log"
+              @click="emailLogOpen = true"
+            >
+              <q-tooltip>What the client has been sent, and whether it landed</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="request" outline no-caps color="primary" icon="o_history" label="Activity"
+              @click="activityOpen = true"
+            >
+              <q-tooltip>Activity log and tags</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="clientFormLink" outline no-caps color="primary" icon="o_content_copy" label="Client link"
+              @click="copyClientFormLink"
+            >
+              <q-tooltip>Copy the client's intake form link</q-tooltip>
+            </q-btn>
 
-          <!-- What has HAPPENED to this request, as against the page below it, which is what it SAYS. -->
-          <q-btn
-            v-if="request" outline round dense color="primary" icon="o_history" @click="activityOpen = true"
-          >
-            <q-tooltip>Activity log and tags</q-tooltip>
-          </q-btn>
+            <!-- The moves. Each one hands the request on, and no stage offers more than two of them. -->
+            <!-- Claiming the request. -->
+            <q-btn
+              v-if="canPickUp" unelevated no-caps color="amber-8" icon="o_pan_tool_alt"
+              label="Pick up" :loading="acting" @click="pickUp"
+            >
+              <q-tooltip>Take this request on — its engagement setup becomes yours to work</q-tooltip>
+            </q-btn>
 
-          <!-- Claiming the request. -->
-          <q-btn
-            v-if="canPickUp" unelevated no-caps color="amber-8" icon="o_pan_tool_alt"
-            label="Pick up" :loading="acting" @click="pickUp"
-          >
-            <q-tooltip>Take this request on — its engagement setup becomes yours to work</q-tooltip>
-          </q-btn>
-
-          <!-- The workflow moves: each one hands the request to somebody else. -->
-          <!-- On the form, submitting to the client belongs at the end of the tabs, where the work it
-               completes is; the read-only page keeps it here. -->
-          <q-btn
-            v-if="canSendToClient && !hasFinishTab" unelevated no-caps color="teal-7" icon="o_send"
-            label="Submit to Client" :disable="!readyToSend" @click="openSend"
-          >
-            <q-tooltip v-if="!readyToSend">{{ sendBlockedReason }}</q-tooltip>
-          </q-btn>
-          <q-btn
-            v-if="canRemind" unelevated no-caps color="amber-8" icon="o_notifications_active"
-            label="Send reminder" @click="openReminder"
-          />
-          <!-- The client's own form link, for chasing them by any means other than the portal — a call, a
-               message from somebody's own mailbox. -->
-          <q-btn
-            v-if="clientFormLink" outline no-caps color="primary" icon="o_content_copy"
-            label="Client Form" @click="copyClientFormLink"
-          >
-            <q-tooltip>Copy the client's intake form link</q-tooltip>
-          </q-btn>
-          <!-- The reply to Send back, and the only one of these buttons the INITIATOR or the CSE presses:
+            <!-- The workflow moves: each one hands the request to somebody else. -->
+            <!-- Submitting to the client belongs at the end of the tabs, where the work it completes is; it
+               is up here only on a request with no tabs past the first. -->
+            <q-btn
+              v-if="canSendToClient && !hasFinishTab" unelevated no-caps color="teal-7" icon="o_send"
+              label="Submit to Client" :disable="!readyToSend" @click="openSend"
+            >
+              <q-tooltip v-if="!readyToSend">{{ sendBlockedReason }}</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="canRemind" unelevated no-caps color="amber-8" icon="o_notifications_active"
+              label="Send reminder" @click="openReminder"
+            />
+            <!-- The reply to Send back, and the only one of these buttons the INITIATOR or the CSE presses:
                it appears on a request that came back to them for rework. -->
-          <q-btn
-            v-if="canReturnToAdmin" unelevated no-caps color="primary" icon="o_assignment_turned_in"
-            label="Return to admin" :loading="acting" @click="returnToAdmin"
-          >
-            <q-tooltip max-width="300px">
-              Done with the changes — hand the request back to the admin reviewing it, who is told it is
-              waiting
-            </q-tooltip>
-          </q-btn>
-          <!-- Send back and Hand back are two different moves that sound like one, and they sit two buttons
+            <q-btn
+              v-if="canReturnToAdmin" unelevated no-caps color="primary" icon="o_assignment_turned_in"
+              label="Return to admin" :loading="acting" @click="returnToAdmin"
+            >
+              <q-tooltip max-width="300px">
+                Done with the changes — hand the request back to the admin reviewing it, who is told it is
+                waiting
+              </q-tooltip>
+            </q-btn>
+            <!-- Send back and Hand back are two different moves that sound like one, and they sit two buttons
                apart. -->
-          <q-btn
-            v-if="canSendBack" outline no-caps color="orange-9" icon="o_assignment_return"
-            label="Send back" @click="sendBackOpen = true"
-          >
-            <q-tooltip max-width="300px">
-              Ask the partner or the CSE to change something — the request stays yours and comes back to
-              you once they have
-            </q-tooltip>
-          </q-btn>
-          <!-- Giving the request back to the queue. -->
-          <q-btn
-            v-if="canHandBack" outline no-caps color="grey-8" icon="o_undo"
-            label="Hand back" :loading="acting" @click="handBack"
-          >
-            <q-tooltip max-width="300px">
-              Give this request up — it goes back to EMS Review for any admin to pick up, and stops being
-              yours
-            </q-tooltip>
-          </q-btn>
+            <q-btn
+              v-if="canSendBack" outline no-caps color="orange-9" icon="o_assignment_return"
+              label="Send back" @click="sendBackOpen = true"
+            >
+              <q-tooltip max-width="300px">
+                Ask the partner or the CSE to change something — the request stays yours and comes back to
+                you once they have
+              </q-tooltip>
+            </q-btn>
+            <!-- Giving the request back to the queue. -->
+            <q-btn
+              v-if="canHandBack" outline no-caps color="grey-8" icon="o_undo"
+              label="Hand back" :loading="acting" @click="handBack"
+            >
+              <q-tooltip max-width="300px">
+                Give this request up — it goes back to EMS Review for any admin to pick up, and stops being
+                yours
+              </q-tooltip>
+            </q-btn>
+          </template>
         </div>
       </template>
     </app-detail-header>
@@ -137,7 +144,8 @@
         </ul>
       </q-banner>
 
-      <q-banner v-if="lockedReason" dense class="rf-alert rf-alert--lock q-mb-md">
+      <!-- Why the form is read-only: on the form alone, which is where it could be otherwise. -->
+      <q-banner v-if="isEditing && lockedReason" dense class="rf-alert rf-alert--lock q-mb-md">
         <template #avatar><q-icon name="o_lock" color="blue-9" /></template>
         {{ lockedReason }}
       </q-banner>
@@ -157,7 +165,7 @@
                 </div>
                 <!-- Correcting the client's answers, in the corner of the pane that holds them. -->
                 <q-btn
-                  v-if="canEditSubmission" flat dense no-caps size="sm" color="primary" icon="o_edit"
+                  v-if="isEditing && canEditSubmission" flat dense no-caps size="sm" color="primary" icon="o_edit"
                   label="Edit Form" @click="editFormOpen = true"
                 >
                   <q-tooltip max-width="280px">
@@ -215,8 +223,7 @@
                 <!-- The client's other businesses, and whether each has been turned into its own request
                      yet. -->
                 <additional-entities-panel
-                  v-if="additionalEntities.length" :rows="additionalEntities" class="q-mt-md"
-                  @create-ems="createFollowUp"
+                  v-if="additionalEntities.length" :rows="additionalEntities" readonly class="q-mt-md"
                 />
               </div>
             </q-card>
@@ -259,27 +266,22 @@
             </q-card>
 
             <!-- ---------- Approval ---------- -->
-            <!-- Only ever shown to someone who may read it: the approver list is gated on managing
-                 engagements. -->
-            <q-card v-if="showApprovalSection" flat bordered class="rf-card rf-section">
+            <!-- Who the engagement routes to, as the admins see it, and every round that has been sent with
+                 every signature on it. Everybody gets the rounds once the client's intake is in; the approver
+                 list itself is readable by the admins alone. -->
+            <q-card v-if="showApprovalOnView" flat bordered class="rf-card rf-section">
               <div class="rf-section__head">
                 <q-icon name="o_approval" size="20px" color="primary" />
                 <div class="rf-section__title">Approval</div>
               </div>
               <q-separator />
               <div class="rf-section__body">
-                <template v-if="engagement">
-                  <engagement-approval
-                    v-if="canManageApproval"
-                    :engagement="engagement" :can-send="canRouteForApproval"
-                    :marketing-saved="marketingComplete" @status-changed="load"
-                  />
-                  <q-banner v-else dense class="rf-alert rf-alert--lock">
-                    <template #avatar><q-icon name="o_gavel" color="blue-9" /></template>
-                    {{ approvalNote }}
-                  </q-banner>
-                  <approval-history :engagement-id="engagement.id" class="q-mt-md" />
-                </template>
+                <engagement-approval v-if="canManageApproval" :engagement="engagement" readonly />
+                <q-banner v-else dense class="rf-alert rf-alert--lock">
+                  <template #avatar><q-icon name="o_gavel" color="blue-9" /></template>
+                  {{ approvalNote }}
+                </q-banner>
+                <approval-history :engagement-id="engagement.id" mode="rounds" class="q-mt-md" />
               </div>
             </q-card>
           </template>
@@ -462,7 +464,7 @@
       <email-log-dialog v-model="emailLogOpen" :rems-id="remsId" :subtitle="subtitle" @sent="load" />
       <activity-dialog v-model="activityOpen" :rems-id="remsId" :subtitle="subtitle" />
       <edit-submitted-form-dialog
-        v-if="canEditSubmission" v-model="editFormOpen" :rems-id="remsId" :subtitle="subtitle"
+        v-if="isEditing && canEditSubmission" v-model="editFormOpen" :rems-id="remsId" :subtitle="subtitle"
         @saved="onSubmissionCorrected"
       />
     </template>
@@ -471,7 +473,8 @@
 
 <script setup>
 // THE REMS form: one component behind two pages — the read-only request, in sections, and the tabbed
-// form it is created and edited on.
+// form it is created and edited on. The read-only page is everybody's and offers Conversation and Back
+// alone; every move on the request is made from the form, which the lists open as Edit or Manage.
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
@@ -689,8 +692,7 @@ const canEditSetup = computed(() => {
   if (isAdminStage.value) return isHoldingAdmin.value;
   return isInitiatorStage.value;
 });
-// Whether there is anything on this page this user could change at this stage — what decides if the Edit
-// switch is offered at all.
+// Whether there is anything on this page this user could change at this stage.
 const canEditAnything = computed(() => canEditClient.value || canEditSetup.value);
 
 // Whether the page has anything of its own to write. Same answer as above, kept separate because they are
@@ -758,7 +760,10 @@ const canRouteForApproval = computed(() =>
 // Claiming the request, and giving it back.
 const canPickUp = computed(() =>
   awaitingPickUp.value && isAdmin.value && has(Permissions.RemsRequestsAssign));
-const canHandBack = computed(() => isHoldingAdmin.value && has(Permissions.RemsRequestsAssign));
+// The holder's move alone — not an elevated reader's, who works a held request around its admin rather
+// than giving it up for them — so never on a request nobody holds, either.
+const canHandBack = computed(() =>
+  !!assignedAdminId.value && assignedAdminId.value === auth.user?.userId && has(Permissions.RemsRequestsAssign));
 
 const pickUp = async () => {
   // Asked the same way Hand back is, and for the same reason: this moves the request from everybody to one
@@ -856,8 +861,15 @@ const showSubmittedPane = computed(() => !isNew.value && hasSubmission.value);
 // Whether the client's answers are this caller's to correct.
 const canEditSubmission = computed(() => showSubmittedPane.value && isAdmin.value && !frozen.value);
 
+// Whether the form has anything for this user at all: a section to edit, or a move to make. The lists
+// offer Edit / Manage on the server's twin of this answer; this is what sends a reader with neither back
+// to the read-only page.
+const canManage = computed(() =>
+  canEditAnything.value || canEditSubmission.value || canPickUp.value || canHandBack.value ||
+  canSendBack.value || canReturnToAdmin.value || canSendToClient.value || canRemind.value);
+
 // The pane's caption.
-const submittedNote = computed(() => (canEditSubmission.value
+const submittedNote = computed(() => (isEditing.value && canEditSubmission.value
   ? "What the client submitted. Corrections are recorded against the admin who makes them."
   : "Read-only snapshot of exactly what the client submitted."));
 
@@ -951,6 +963,9 @@ const intakeSubmitted = computed(() =>
   !isNew.value && ![REMS_STATUS.DRAFT, REMS_STATUS.AWAITING_CUSTOMER].includes(status.value));
 const showApprovalSection = computed(() =>
   !!engagement.value && intakeSubmitted.value && (canManageApproval.value || approvalStarted.value));
+// The read-only page shows the section to everyone from the same point: the rounds are the firm's to
+// read, and before the first one the note says whose move it is.
+const showApprovalOnView = computed(() => !!engagement.value && intakeSubmitted.value);
 
 const approvalNote = computed(() => {
   const s = engagement.value?.status;
@@ -1020,7 +1035,6 @@ const prevTab = computed(() => stepTab(-1));
 const nextTab = computed(() => stepTab(1));
 
 // Where the initiator's own work ends. What lies past Commission is somebody else's: the approvers' round.
-// Only the form has one — the read-only page keeps Submit to Client in its header.
 const FINISH_TAB = "commission";
 const hasFinishTab = computed(() =>
   isEditing.value && tabs.value.some((t) => t.name === FINISH_TAB && !t.disable));
@@ -1091,6 +1105,10 @@ const clientRows = computed(() => [
 const setupRows = computed(() => {
   const e = engagement.value;
   if (!e) return [];
+  // The money, or why it is not there: the server withholds it from a reader the request is not with, as
+  // the approval packet does for every approver but the Department Director.
+  const withheld = e.financialsRestricted ? "Reserved for the people on this request" : "";
+  const money = (v) => withheld || currency(v);
   // The same sequence the form is filled in, so reading a request and typing one describe it in the same
   // order.
   return [
@@ -1103,11 +1121,14 @@ const setupRows = computed(() => {
     // Every row from here down is asked of some departments and not others, so the summary asks the same
     // questions the form did.
     ...(isAssuranceDepartment(e.department)
-      ? [{ label: "Engagement Fee", value: currency(e.engagementFee) }]
+      ? [{ label: "Engagement Fee", value: money(e.engagementFee) }]
       : isGcsDepartment(e.department)
         ? []
-        : [{ label: "First-Year Fee Estimate", value: currency(e.firstYearFeeEstimate) }]),
-    { label: "% Realization", value: e.realizationPercentage == null ? "" : `${e.realizationPercentage}%` },
+        : [{ label: "First-Year Fee Estimate", value: money(e.firstYearFeeEstimate) }]),
+    {
+      label: "% Realization",
+      value: withheld || (e.realizationPercentage == null ? "" : `${e.realizationPercentage}%`)
+    },
     ...(isCasDepartment(e.department)
       ? [
         { label: "Billing Frequency", value: labelOf(billingPeriodOptions.value, e.billingPeriod) },
@@ -1122,7 +1143,7 @@ const setupRows = computed(() => {
     ...(isGcsDepartment(e.department)
       ? [
         { label: "Purchase Order No.", value: e.government?.purchaseOrderNumber },
-        { label: "Purchase Order Amount", value: currency(e.government?.purchaseOrderAmount) },
+        { label: "Purchase Order Amount", value: money(e.government?.purchaseOrderAmount) },
         { label: "PO Beginning Date", value: dateOnly(e.government?.purchaseOrderStartDate) },
         { label: "PO Ending Date", value: dateOnly(e.government?.purchaseOrderEndDate) },
         { label: "Purchase Order", value: e.government?.purchaseOrderMediaId ? "On file" : "Not yet provided" },
@@ -1130,7 +1151,7 @@ const setupRows = computed(() => {
         // the picker uses, so a level since retired from it still has a name.
         {
           label: "Bill Rate by Personnel Level",
-          value: (e.government?.personnelRates || []).map((r) =>
+          value: withheld || (e.government?.personnelRates || []).map((r) =>
             `${r.personnelLevelLabel || labelOf(personnelLevelOptions.value, r.personnelLevel)}: ${currency(r.billRatePerHour)}/hr`),
           wide: true
         }
@@ -1595,6 +1616,12 @@ const load = async () => {
     } finally {
       loading.value = false;
     }
+    // The form is for working the request. A reader with nothing to work on it — a stale link, or the
+    // move they just made having handed it on — gets the page that reads it instead.
+    if (route.name === ROUTE_EDIT && request.value && !canManage.value) {
+      notify.info("Nothing on this request is yours to work right now, so it opened read-only.");
+      router.replace({ name: ROUTE_VIEW, params: { id: remsId.value } });
+    }
   } finally {
     clientBaseline = clientSnapshot();
     // A tick, so the sections re-rendering off the freshly seeded state settles before edits count again.
@@ -1625,16 +1652,9 @@ watch(tab, async (name) => {
   if (name === "approval") await refreshEngagement();
 });
 
-// Reading and editing are two paths now, so switching between them is a navigation rather than a query
-// flip.
-const setMode = async (mode) => {
-  await flushSaves();
-  router.replace({
-    name: mode === "edit" ? ROUTE_EDIT : ROUTE_VIEW,
-    params: { id: remsId.value },
-    query: { ...route.query }
-  });
-};
+// The read-only page, from the form's header. Leaving commits the debounce (onBeforeRouteLeave), so this
+// is a plain link.
+const viewRoute = computed(() => ({ name: ROUTE_VIEW, params: { id: remsId.value } }));
 
 // ---- The one save: filing the draft ----
 // A request has to exist before anything else on this page can be written against it, so the client section is
@@ -1960,7 +1980,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", warnOnUnload));
    button size, and comes out a dot rather than a square that would sit among the buttons looking like
    one more of them. Round, because it carries an icon and no words: the badges beside it are pills for
    the same reason, and neither is the rounded rectangle a button is. Both numbers are inherited down the
-   actions row, so this stays in step with them without repeating either here. */
+   header bar, so this stays in step with them without repeating either here. */
 .rf-save {
   display: inline-flex;
   align-items: center;

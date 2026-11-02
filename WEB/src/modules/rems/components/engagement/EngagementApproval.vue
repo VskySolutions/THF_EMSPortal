@@ -5,14 +5,14 @@
         <!-- STATIC-APPROVAL-POLICY: the fixed rules read differently from the platform list. -->
         <template v-if="staticRouting">
           Who this engagement routes to, all at the same time: every commission recipient, the CSE, the
-          Department Director, everyone holding the Shareholder role, plus anyone you add below. The
-          Department Director and the Shareholders are skipped by the tax rules. Sending for approval locks
-          the list.
+          Department Director, everyone holding the Shareholder role, plus anyone
+          {{ readonly ? "the admin added" : "you add below" }}. The Department Director and the Shareholders
+          are skipped by the tax rules.<template v-if="!readonly"> Sending for approval locks the list.</template>
         </template>
         <template v-else>
           Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
           the setup, and every commission recipient — all automatically, and none of them removable — plus
-          anyone you add below. Sending for approval locks the list.
+          anyone {{ readonly ? "the admin added" : "you add below" }}.<template v-if="!readonly"> Sending for approval locks the list.</template>
         </template>
       </div>
       <app-option-badge :option="statusMeta" class="q-pa-sm text-body2" />
@@ -31,7 +31,7 @@
       <template #avatar><q-icon name="o_cancel" color="red-9" /></template>
       <div class="text-weight-medium">This engagement was rejected and returned for rework.</div>
       <div v-if="rejectionReason" class="q-mt-xs" style="white-space: pre-wrap;">Reason: {{ rejectionReason }}</div>
-      <div class="q-mt-xs">Update the setup as needed, then resubmit for approval.</div>
+      <div v-if="!readonly" class="q-mt-xs">Update the setup as needed, then resubmit for approval.</div>
     </q-banner>
 
     <div v-if="loading" class="row flex-center q-pa-lg"><q-spinner color="primary" size="28px" /></div>
@@ -116,7 +116,9 @@ const props = defineProps({
   // Whether the caller holds rems.approvals.send.
   canSend: { type: Boolean, default: false },
   // Whether marketing has been saved (the tab is only reachable then; belt-and-braces here too).
-  marketingSaved: { type: Boolean, default: false }
+  marketingSaved: { type: Boolean, default: false },
+  // The read-only request page: the list and where the round stands, with nothing to pick or press.
+  readonly: { type: Boolean, default: false }
 });
 const emit = defineEmits(["status-changed"]);
 
@@ -134,9 +136,10 @@ const statusMeta = computed(() => engagementStatusOption(status.value));
 const rejectionReason = computed(() => props.engagement.rejectionReason);
 
 // The Send action only appears for a Draft engagement, when the caller may send and marketing is saved.
-const canShowSend = computed(() => status.value === "Draft" && props.canSend && props.marketingSaved);
+const canShowSend = computed(() =>
+  !props.readonly && status.value === "Draft" && props.canSend && props.marketingSaved);
 // Resubmission is offered on a Rejected engagement to a caller holding rems.approvals.send (AC-REMS-020.3).
-const canShowResubmit = computed(() => status.value === "Rejected" && props.canSend);
+const canShowResubmit = computed(() => !props.readonly && status.value === "Rejected" && props.canSend);
 
 const approvers = ref([]);
 const loading = ref(false);
@@ -175,7 +178,7 @@ const canRoute = computed(() => !blockedReason.value);
 
 // ---- Add approvers ----
 // Editable while the engagement is unsent; once routed, the API locks the list too.
-const canPick = computed(() => ["Draft", "Rejected"].includes(status.value));
+const canPick = computed(() => !props.readonly && ["Draft", "Rejected"].includes(status.value));
 const approverOptions = ref([]);
 const loadingOptions = ref(false);
 // ONLY the added approvers.

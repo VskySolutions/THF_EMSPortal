@@ -361,7 +361,8 @@ public sealed class RemsApprovalController : ControllerBase
     [ProducesResponseType<ApiResponse<IEnumerable<RemsApprovalRoundHistory>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> History(Guid id, CancellationToken cancellationToken)
     {
-        if (User.GetUserId() is not { } me)
+        // Open to every signed-in user: the read-only request page carries the rounds, and it is the firm's.
+        if (User.GetUserId() is null)
         {
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
@@ -369,15 +370,6 @@ public sealed class RemsApprovalController : ControllerBase
         if (await _requests.GetByIdAsync(id, cancellationToken) is not { } request)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        // The permission first: it is free, and it is what the staff reading this hold. The approver check
-        // is a query, so only a caller the permission did not cover pays for it.
-        if (!User.HasPermission(Permissions.RemsRequestsRead)
-            && !await _tasks.IsApproverOnRequestAsync(request.Id, me, cancellationToken))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponseFactory.Forbidden("Not permitted to view this engagement's approval history."));
         }
 
         var tasks = await _tasks.ListByRequestAsync(id, cancellationToken);

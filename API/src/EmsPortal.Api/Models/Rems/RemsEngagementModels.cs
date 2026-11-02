@@ -159,7 +159,9 @@ public sealed record RemsEngagementView(
     IReadOnlyList<RemsCommissionSplitView> CommissionSplits,
     RemsAuditDetailView? Audit,
     RemsGovernmentDetailView? Government,
-    RemsTaxDetailView? Tax);
+    RemsTaxDetailView? Tax,
+    /// <summary>True when the money has been withheld from this reader (RemsSetupAccess.MaySeeFinancials): the fee rows are null and the rate card carries no rates.</summary>
+    bool FinancialsRestricted = false);
 
 /// <summary>A commission split (employee + percentage).</summary>
 public sealed record RemsCommissionSplitView(Guid Id, RemsUserRef Employee, decimal Percentage);

@@ -50,7 +50,6 @@ public sealed class RemsRequestsController : ControllerBase
     private readonly IRemsRequestRepository _rems;
     private readonly IClientRepository _clients;
     private readonly IClientNumberGenerator _clientNumbers;
-    private readonly IRemsApprovalTaskRepository _approvals;
     private readonly IRemsDelegationRepository _delegations;
     private readonly IRemsNumberGenerator _numberGenerator;
     private readonly IUserRepository _users;
@@ -69,7 +68,6 @@ public sealed class RemsRequestsController : ControllerBase
         IRemsRequestRepository rems,
         IClientRepository clients,
         IClientNumberGenerator clientNumbers,
-        IRemsApprovalTaskRepository approvals,
         IRemsDelegationRepository delegations,
         IRemsNumberGenerator numberGenerator,
         IUserRepository users,
@@ -86,7 +84,6 @@ public sealed class RemsRequestsController : ControllerBase
         _rems = rems;
         _clients = clients;
         _clientNumbers = clientNumbers;
-        _approvals = approvals;
         _delegations = delegations;
         _numberGenerator = numberGenerator;
         _users = users;
@@ -232,8 +229,9 @@ public sealed class RemsRequestsController : ControllerBase
         return Ok(ApiResponseFactory.Success(counts, "REMS request quick-filter counts retrieved."));
     }
 
-    // Ungated with the list that leads here, and for the same reason. CanSee below is the real boundary:
-    // a request that is not the caller's to read is a 403 whatever permissions they hold.
+    // Ungated with the list that leads here. The read-only request page is the firm's: every signed-in
+    // user reads a request once it has left its draft, and CanView below keeps a draft to its initiator
+    // and the admins. What a reader may DO with it is decided elsewhere (the row actions, the setup gates).
     [HttpGet("{id:guid}")]
     [Authorize]
     [ProducesResponseType<ApiResponse<RemsRequestDetail>>(StatusCodes.Status200OK)]
@@ -251,12 +249,10 @@ public sealed class RemsRequestsController : ControllerBase
         }
 
         var privileged = IsPrivileged();
-        // An approver is the one reader the list rule cannot name: they are not the initiator.
-        if (!CanSee(rems, me, privileged)
-            && !await _approvals.IsApproverOnRequestAsync(rems.Id, me, cancellationToken))
+        if (!CanView(rems, me, privileged))
         {
             return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponseFactory.Forbidden("Not permitted to view this request."));
+                ApiResponseFactory.Forbidden("This draft is only open to the person raising it."));
         }
 
         var detail = await BuildDetailAsync(rems, me, privileged, cancellationToken);
@@ -701,9 +697,9 @@ public sealed class RemsRequestsController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
         }
 
-        // Yours to give back, or an elevated caller's to prise loose — the remedy when the admin holding a
-        // request is away and somebody else has to work it.
-        if (rems.AdminAssignedToId is { } holder && holder != me && !RemsSetupAccess.IsElevated(User))
+        // Yours to give back and nobody else's: an elevated caller works a held request around its admin
+        // (RemsSetupAccess.CanWork), and does not give it up for them.
+        if (rems.AdminAssignedToId is { } holder && holder != me)
         {
             return StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponseFactory.Forbidden("Only the admin holding this request can hand it back."));
@@ -1161,6 +1157,13 @@ public sealed class RemsRequestsController : ControllerBase
         => IsDraft(r)
             ? privileged || IsMine(r, me)
             : privileged || IsMine(r, me) || r.AdminAssignedToId == me || r.CSEId == me;
+
+    /// <summary>
+    /// Record-level READ of one request: open to everyone once it has left its draft (the read-only page
+    /// is the firm's), and the visibility rule above while it is one.
+    /// </summary>
+    private static bool CanView(RemsRequest r, Guid me, bool privileged)
+        => !IsDraft(r) || CanSee(r, me, privileged);
 
     /// <summary>
     /// Whose request this is: the person who created it, or the principal they created it FOR. A

@@ -1,5 +1,6 @@
 import { ref, computed } from "vue";
 import { useAuthStore } from "stores/auth";
+import { Permissions } from "composables/usePermissions";
 import { optionSetApi, EntityType } from "services/api";
 import { useRemsOptionCatalog, ensureRemsOptionsLoaded } from "modules/rems/useRemsOptionCatalog";
 import { REMS_STATUS } from "modules/rems/remsStatus";
@@ -286,6 +287,12 @@ export function useRemsMeta () {
     }
     return null;
   };
+  // The row action that opens a request as a FORM, named for who presses it: whoever runs the review
+  // (rems.engagements.manage) manages a request — picks it up, works it, sends it back, routes it — and
+  // everyone else edits their own. View, beside it, reads the whole request and is everybody's.
+  const workAction = computed(() => (auth.hasPermission(Permissions.RemsEngagementsManage)
+    ? { label: "Manage", icon: "o_edit_note" }
+    : { label: "Edit", icon: "o_edit" }));
   // The email-log / EMS-inbox action is meaningful once a form has been sent to the customer.
   const emsFormActivity = (row) =>
     !!row?.clientSubmissionState || ["Sent", "Submitted"].includes(row?.emsFormState);
@@ -368,6 +375,7 @@ export function useRemsMeta () {
     approverRoleLabel,
     approvalStatusLabel,
     engagementOwnerDenial,
+    workAction,
     emsDetailAvailable,
     emsFormActivity
   };

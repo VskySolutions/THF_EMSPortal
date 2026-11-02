@@ -160,10 +160,15 @@
 
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- A LINK, not a click handler: the task is a place, so the button is written as a route and
-               renders as a real <a href> — which is what makes middle-click and "open in new tab" work. -->
-          <q-btn flat round dense color="primary" icon="o_visibility" :to="taskRoute(cell.row)">
-            <q-tooltip>{{ seesTenant ? "Open" : "Open for review" }}</q-tooltip>
+          <!-- LINKS, not click handlers: each is a place, so the button is written as a route and renders
+               as a real <a href> — which is what makes middle-click and "open in new tab" work. View reads
+               the whole request on one page, as on every other list; Review is the task itself, where the
+               checklist and the decision are. -->
+          <q-btn flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)">
+            <q-tooltip>View</q-tooltip>
+          </q-btn>
+          <q-btn flat round dense color="primary" icon="o_fact_check" :to="taskRoute(cell.row)">
+            <q-tooltip>{{ seesTenant ? "Open the task" : "Review and decide" }}</q-tooltip>
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
             <q-tooltip>Conversation</q-tooltip>
@@ -439,6 +444,8 @@ const approverHint = (a) => {
 };
 
 const taskRoute = (row) => ({ name: "rems_approval_task", params: { taskId: row.taskId } });
+// The request itself, read-only, on one page.
+const viewRoute = (row) => ({ name: "rems_request", params: { id: row.remsId } });
 // Still a push for the ROW click, which has nowhere to hang an href.
 const openTask = (row) => router.push(taskRoute(row));
 

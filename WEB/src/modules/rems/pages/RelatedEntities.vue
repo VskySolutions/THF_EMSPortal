@@ -72,14 +72,11 @@
                it: the button is at the far right and the reason the row is at the top is here. -->
           <entity-pinned-mark :pinned="isPinned(cell.row.remsId)" />
           <q-btn
-            v-if="cell.row.canView"
             flat dense no-caps color="primary" class="text-weight-medium"
             :label="cell.row.remsNumber" :to="requestRoute(cell.row)"
           >
             <q-tooltip>Open the request</q-tooltip>
           </q-btn>
-          <!-- Not everyone on this shared board is on every request: the number stays, the way in does not. -->
-          <span v-else class="text-weight-medium q-px-sm">{{ cell.row.remsNumber }}</span>
         </q-td>
       </template>
 
@@ -132,15 +129,16 @@
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- The same four a REMS request carries on every other list, in the same order and worded the
-               same way: read it, work it, see what the client has been told, talk about it. -->
-          <q-btn v-if="cell.row.canView" flat round dense color="primary" icon="o_visibility" :to="requestRoute(cell.row)">
+               same way: read it (everybody's), work it (Edit or Manage), see what the client has been told,
+               talk about it. -->
+          <q-btn flat round dense color="primary" icon="o_visibility" :to="requestRoute(cell.row)">
             <q-tooltip>View</q-tooltip>
           </q-btn>
           <q-btn
             v-if="cell.row.canEdit"
-            flat round dense color="primary" icon="o_edit" :to="editRoute(cell.row)"
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
           >
-            <q-tooltip>Edit</q-tooltip>
+            <q-tooltip>{{ workAction.label }}</q-tooltip>
           </q-btn>
           <!-- Every row here has a submitted form, so there is always a log to read — unlike My Requests,
                where the action waits until something has actually been sent. -->
@@ -224,7 +222,7 @@ const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const {
   entityTypeLabel, entityTypeOption, entityTypeOptions, requestStatusOption, statusFilterOptions,
-  relatedEntityStatusOption, relatedEntityStatusOptions
+  relatedEntityStatusOption, relatedEntityStatusOptions, workAction
 } = useRemsMeta();
 
 // requestStatusOption reads a REQUEST shape (`status` + `assignedAdmin`); this list calls the first field
