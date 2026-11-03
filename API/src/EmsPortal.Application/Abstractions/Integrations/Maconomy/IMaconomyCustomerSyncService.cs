@@ -5,8 +5,9 @@ namespace EmsPortal.Application.Abstractions.Integrations.Maconomy;
 /// <summary>
 /// Posts an approved brand-new client to Maconomy as a customer. The sync state is three columns on the
 /// client (<see cref="Client.MaconomySyncStatus"/>, <see cref="Client.MaconomySyncedOnUtc"/>,
-/// <see cref="Client.MaconomySyncError"/>); the request that made the client postable is only the
-/// subject of the activity log.
+/// <see cref="Client.MaconomySyncError"/>); the request that made the client postable is the subject of
+/// the activity log, and the engagement that follows as a Maconomy job once the customer is there
+/// (<see cref="IMaconomyJobSyncService"/>).
 /// </summary>
 public interface IMaconomyCustomerSyncService
 {

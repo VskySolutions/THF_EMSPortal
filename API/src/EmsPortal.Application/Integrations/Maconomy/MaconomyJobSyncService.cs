@@ -21,6 +21,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
     private readonly IMaconomyCardWriter _writer;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
+    private readonly IMaconomyJobSyncQueue _queue;
     private readonly ITenantContext _tenant;
     private readonly MaconomyOptions _options;
     private readonly ILogger<MaconomyJobSyncService> _logger;
@@ -32,6 +33,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         IMaconomyCardWriter writer,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
+        IMaconomyJobSyncQueue queue,
         ITenantContext tenant,
         IOptions<MaconomyOptions> options,
         ILogger<MaconomyJobSyncService> logger)
@@ -42,6 +44,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         _writer = writer;
         _unitOfWork = unitOfWork;
         _activity = activity;
+        _queue = queue;
         _tenant = tenant;
         _options = options.Value;
         _logger = logger;
@@ -66,12 +69,87 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
     public Task<RemsRequest?> GetAsync(Guid remsId, CancellationToken cancellationToken = default)
         => _requests.GetForJobSyncAsync(remsId, cancellationToken);
 
+    public async Task<RemsRequest?> RecordPendingAsync(RemsRequest request, bool requireApproved, CancellationToken cancellationToken = default)
+    {
+        if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Synced
+            || (request.MaconomyJobSyncStatus is RemsMaconomyJobSyncStatus.Pending or RemsMaconomyJobSyncStatus.Syncing && !IsStale(request)))
+        {
+            return null;
+        }
+        if (requireApproved && !string.Equals(request.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        // Without a customer there is nothing to put the job under; the customer sync queues it once it has made one.
+        if (request.Client is not { IsMaconomyClient: true })
+        {
+            return null;
+        }
+        var connection = await _connections.GetByTenantAsync(request.TenantId, cancellationToken);
+        if (connection is not { IsEnabled: true, JobSyncEnabled: true })
+        {
+            return null;
+        }
+        request.MaconomyJobSyncStatus = RemsMaconomyJobSyncStatus.Pending;
+        request.MaconomyJobSyncError = null;
+        _requests.Update(request);
+        return request;
+    }
+
+    public void Enqueue(RemsRequest request) => _queue.Enqueue(request.Id, request.TenantId);
+
+    public async Task<RemsRequest?> RunAsync(Guid remsId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        if (!_tenant.IsResolved)
+        {
+            _tenant.Set(tenantId, string.Empty);
+        }
+        var request = await _requests.GetForJobSyncAsync(remsId, cancellationToken);
+        if (request is null || request.TenantId != tenantId)
+        {
+            _logger.LogWarning("Request {RemsId} for tenant {TenantId} no longer exists; nothing to post to Maconomy as a job.", remsId, tenantId);
+            return null;
+        }
+        if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Synced)
+        {
+            return request;
+        }
+        if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && !IsStale(request))
+        {
+            _logger.LogInformation("Maconomy job sync for request {RemsId} is already under way; the job leaves it alone.", remsId);
+            return request;
+        }
+        var connection = await _connections.GetByTenantAsync(tenantId, cancellationToken);
+        var context = await GetContextAsync(tenantId, cancellationToken);
+        if (context.Connected && !context.Enabled)
+        {
+            // Switched off since it was queued: back to waiting, for Sync job now once it is on again.
+            if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Pending)
+            {
+                request.MaconomyJobSyncStatus = RemsMaconomyJobSyncStatus.NotSynced;
+                _requests.Update(request);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            return request;
+        }
+        // Not connected, or the request lacks something: recorded as the failure it is, for Sync job now.
+        var reason = context.Connected ? MaconomyJobSyncRules.WhyNotPostable(request, context) : MaconomyJobSyncRules.NotConnectedReason;
+        if (reason is not null)
+        {
+            await FailAsync(request, reason, actorId: null, cancellationToken);
+            return request;
+        }
+        var write = MaconomyJobDataMapping.Map(request, context) with { Container = _options.JobCard.Container };
+        await AttemptAsync(request, connection!, write, actorId: null, cancellationToken);
+        return request;
+    }
+
     public async Task<RemsRequest> SyncNowAsync(Guid remsId, Guid tenantId, Guid actorId, CancellationToken cancellationToken = default)
     {
         var connection = await _connections.GetByTenantAsync(tenantId, cancellationToken);
         if (connection is null || !connection.IsEnabled)
         {
-            throw new MaconomyJobSyncException(MaconomyCustomerSyncRefusal.NotConnected, "Maconomy is not connected for this tenant.");
+            throw new MaconomyJobSyncException(MaconomyCustomerSyncRefusal.NotConnected, MaconomyJobSyncRules.NotConnectedReason);
         }
         if (!connection.JobSyncEnabled)
         {
@@ -87,7 +165,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         var stale = IsStale(request);
         if (MaconomyJobSyncRules.WhyNotEligible(request, context, stale) is { } reason)
         {
-            var refusal = request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && !stale
+            var refusal = request.MaconomyJobSyncStatus is RemsMaconomyJobSyncStatus.Pending or RemsMaconomyJobSyncStatus.Syncing && !stale
                 ? MaconomyCustomerSyncRefusal.Running
                 : MaconomyCustomerSyncRefusal.NotEligible;
             throw new MaconomyJobSyncException(refusal, reason);
@@ -98,7 +176,8 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
     }
 
     public bool IsStale(RemsRequest request)
-        => request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && request.UpdatedOnUtc < StaleBefore();
+        => request.MaconomyJobSyncStatus is RemsMaconomyJobSyncStatus.Pending or RemsMaconomyJobSyncStatus.Syncing
+            && request.UpdatedOnUtc < StaleBefore();
 
     private DateTime StaleBefore() => DateTime.UtcNow.AddMinutes(-Math.Max(1, _options.JobSyncStaleMinutes));
 
@@ -138,10 +217,10 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         => _requests.ListApprovedForJobSyncAsync(cancellationToken);
 
     private async Task AttemptAsync(
-        RemsRequest request, MaconomyConnection connection, MaconomyCardWrite write, Guid actorId, CancellationToken cancellationToken)
+        RemsRequest request, MaconomyConnection connection, MaconomyCardWrite write, Guid? actorId, CancellationToken cancellationToken)
     {
         // Syncing is committed BEFORE the create, so a crash between the create and the record leaves a
-        // trace rather than a second job on the next press.
+        // trace rather than a second job on the next attempt.
         request.MaconomyJobSyncStatus = RemsMaconomyJobSyncStatus.Syncing;
         request.MaconomyJobSyncError = null;
         _requests.Update(request);
@@ -174,7 +253,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         }
     }
 
-    private async Task FailAsync(RemsRequest request, string reason, Guid actorId, CancellationToken cancellationToken)
+    private async Task FailAsync(RemsRequest request, string reason, Guid? actorId, CancellationToken cancellationToken)
     {
         request.MaconomyJobSyncStatus = RemsMaconomyJobSyncStatus.Failed;
         request.MaconomyJobSyncError = reason.Length <= FailureReasonMax ? reason : reason[..FailureReasonMax];
@@ -183,7 +262,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task WriteActivityAsync(RemsRequest request, string eventType, string? detail, Guid actorId, CancellationToken cancellationToken)
+    private async Task WriteActivityAsync(RemsRequest request, string eventType, string? detail, Guid? actorId, CancellationToken cancellationToken)
     {
         if (_tenant.IsResolved && _tenant.TenantId == request.TenantId)
         {

@@ -12,6 +12,7 @@ namespace EmsPortal.Application.Integrations.Maconomy;
 /// </summary>
 public static class MaconomyJobSyncRules
 {
+    public const string NotConnectedReason = "Maconomy is not connected for this tenant.";
     public const string SettingsPlace = "Tenant Settings → Maconomy → Job";
 
     /// <summary>Why the request cannot be posted now, or null when it can. Switched-off is a reason too; the lists hide the action on it.</summary>
@@ -19,7 +20,7 @@ public static class MaconomyJobSyncRules
     {
         if (!context.Connected)
         {
-            return "Maconomy is not connected for this tenant.";
+            return NotConnectedReason;
         }
         if (!context.Enabled)
         {
@@ -29,10 +30,20 @@ public static class MaconomyJobSyncRules
         {
             return $"This engagement is already Maconomy job {request.MaconomyJobNumber}.";
         }
+        if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Pending && !stale)
+        {
+            return "Queued to be posted. Give it a moment, then refresh.";
+        }
         if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && !stale)
         {
             return "An attempt is already under way. Give it a moment, then refresh.";
         }
+        return WhyNotPostable(request, context);
+    }
+
+    /// <summary>What the request itself still lacks, whatever its sync state: the queued attempt's own check before it posts.</summary>
+    public static string? WhyNotPostable(RemsRequest request, MaconomyJobSyncContext context)
+    {
         if (!string.Equals(request.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal))
         {
             return "The request is not approved yet.";

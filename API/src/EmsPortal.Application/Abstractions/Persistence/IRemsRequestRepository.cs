@@ -27,7 +27,7 @@ public interface IRemsRequestRepository
     /// <summary>The caller's tenant's approved requests, newest change first, with the same graph loaded. The Job tab's table.</summary>
     Task<IReadOnlyList<RemsRequest>> ListApprovedForJobSyncAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>How the caller's tenant's approved requests stand with the Maconomy job sync; a Syncing older than the cut-off counts as failed.</summary>
+    /// <summary>How the caller's tenant's approved requests stand with the Maconomy job sync; a Pending or Syncing older than the cut-off counts as failed.</summary>
     Task<RemsMaconomyJobSyncCounts> CountJobSyncAsync(DateTime staleBeforeUtc, CancellationToken cancellationToken = default);
 
     /// <summary>The request an invite code opens, outside the tenant filter, with type, status and client.</summary>

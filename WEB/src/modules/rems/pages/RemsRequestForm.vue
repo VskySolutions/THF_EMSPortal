@@ -1566,6 +1566,8 @@ const maconomyJobSyncNote = computed(() => {
       return `Created in Maconomy${when}${who}.`;
     case "failed":
       return s.failureReason || "The last attempt failed.";
+    case "pending":
+      return "Queued for posting to Maconomy as a job.";
     case "syncing":
       return "Posting the job to Maconomy now.";
     default:

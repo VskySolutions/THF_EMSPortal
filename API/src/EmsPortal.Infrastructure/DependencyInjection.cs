@@ -152,6 +152,9 @@ public static class DependencyInjection
         // The Maconomy customer sync is queued the same way; the job class lives here so Workers can run it.
         services.AddScoped<IMaconomyCustomerSyncQueue, Jobs.MaconomyCustomerSyncQueue>();
         services.AddScoped<Jobs.MaconomyCustomerSyncJob>();
+        // The job sync follows: queued on approval, or once the customer sync has made the client a customer.
+        services.AddScoped<IMaconomyJobSyncQueue, Jobs.MaconomyJobSyncQueue>();
+        services.AddScoped<Jobs.MaconomyJobSyncJob>();
         return services;
     }
 

@@ -66,8 +66,10 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
             .Select(g => new RemsMaconomyJobSyncCounts(
                 g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Synced),
                 g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Failed
-                    || (r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && r.UpdatedOnUtc < staleBeforeUtc)),
-                g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing && r.UpdatedOnUtc >= staleBeforeUtc),
+                    || ((r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Pending || r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing)
+                        && r.UpdatedOnUtc < staleBeforeUtc)),
+                g.Count(r => (r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Pending || r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Syncing)
+                    && r.UpdatedOnUtc >= staleBeforeUtc),
                 g.Count(r => r.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.NotSynced)))
             .FirstOrDefaultAsync(cancellationToken);
         return counts ?? new RemsMaconomyJobSyncCounts(0, 0, 0, 0);

@@ -9,12 +9,12 @@ namespace EmsPortal.Api.Models.Rems;
 /// <summary>
 /// Where posting the request's engagement to Maconomy as a job has got to. On every request the lists
 /// and the page hand out; the status words are the customer sync's (<see cref="RemsMaconomySyncStatuses"/>),
-/// minus pending and linked.
+/// minus linked.
 /// </summary>
 public sealed record RemsMaconomyJobSyncView(
     string Status,
     string? JobNumber,
-    /// <summary>Who pressed the sync that created the job.</summary>
+    /// <summary>Who pressed the sync that created the job; null when it ran by itself.</summary>
     string? SyncedByName,
     DateTime? SyncedOnUtc,
     string? FailureReason,
@@ -80,6 +80,7 @@ public static class RemsMaconomyJobSyncViews
         ? RemsMaconomySyncStatuses.Failed
         : request.MaconomyJobSyncStatus switch
         {
+            RemsMaconomyJobSyncStatus.Pending => RemsMaconomySyncStatuses.Pending,
             RemsMaconomyJobSyncStatus.Syncing => RemsMaconomySyncStatuses.Syncing,
             RemsMaconomyJobSyncStatus.Synced => RemsMaconomySyncStatuses.Synced,
             RemsMaconomyJobSyncStatus.Failed => RemsMaconomySyncStatuses.Failed,

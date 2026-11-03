@@ -259,8 +259,8 @@
     </div>
 
     <!-- ==================== Job ==================== -->
-    <!-- The job sync: an approved engagement posted to Maconomy as a job, by hand, from a list's Sync job
-         now. Nothing posts a job by itself. Always the caller's OWN tenant, like the customer sync. The
+    <!-- The job sync: an approved engagement posted to Maconomy as a job, by itself once its client is in
+         Maconomy, or by hand from a list's Sync job now. Always the caller's OWN tenant, like the customer sync. The
          project manager and the default template job are server configuration; the template job numbers
          sit on the REMS Job Template values under Option Sets — so there is nothing to type here. -->
     <div v-show="tab === 'job'">
@@ -308,7 +308,7 @@
         <div class="col-12 col-md-7">
           <maconomy-mapping-card title="Job card mapping" :mapping="mapping.job" :loading="mappingLoading">
             What an approved engagement is posted as: a job header against a template job, nothing below it.
-            Sync job now is offered on a request only once every value is there.
+            A job is posted only once every value is there.
           </maconomy-mapping-card>
         </div>
       </div>
@@ -323,10 +323,12 @@
         <q-separator />
         <q-card-section>
           <p class="text-body2 text-grey-8 q-mb-xs">
-            When on, Sync job now is offered on approved requests — in the Approvals list, EMS Review and the
-            table below — and creates a job in Maconomy from the template job for the request's Job Template,
-            under the client's customer, with the job number left to Maconomy's series and written back onto
-            the request. Nothing is posted by itself. While off, the action is hidden everywhere.
+            When on, a request is posted to Maconomy as a job by itself once it is fully approved and its client
+            is a Maconomy customer: straight away for a client already there, or as soon as the customer sync has
+            posted a brand-new one. The job is created from the template job for the request's Job Template, under
+            the client's customer, with the job number left to Maconomy's series and written back onto the request.
+            Sync job now — in the Approvals list, EMS Review and the table below — is for a request that failed or
+            was approved while the sync was off. While off, nothing is queued and the action is hidden everywhere.
           </p>
           <div v-if="job.changedOnUtc" class="text-caption text-grey-7 q-mb-md">
             {{ job.enabled ? "Started" : "Stopped" }} {{ fmt.formatDateTime(job.changedOnUtc) }}{{ job.changedByName ? ` by ${job.changedByName}` : "" }}.
@@ -778,8 +780,8 @@ const setJob = async (enabled) => {
   try {
     job.value = await (enabled ? maconomyApi.startJobSync() : maconomyApi.stopJobSync());
     notify.success(enabled
-      ? "Job sync started. Sync job now is offered on approved requests."
-      : "Job sync stopped. Sync job now is hidden everywhere.");
+      ? "Job sync started. Approvals from now on post their job once the client is in Maconomy; anything already approved is synced by hand."
+      : "Job sync stopped. Nothing is queued and Sync job now is hidden everywhere.");
     // Whether a row can be pressed turns on the switch, so the table is re-read.
     await loadJob();
   } catch (err) {

@@ -318,7 +318,7 @@ const columns = computed(() => [
   // person.
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   // Whether the approved client has reached Maconomy; Sync now sits in the Actions column beside it.
-  { name: "maconomySync", label: "Maconomy", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Customer", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
   { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the

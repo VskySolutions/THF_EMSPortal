@@ -310,7 +310,7 @@ const columns = computed(() => [
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
   // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
   { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   ...auditColumns({ dateRanges: true }),

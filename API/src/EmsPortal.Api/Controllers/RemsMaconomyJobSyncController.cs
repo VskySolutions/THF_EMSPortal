@@ -10,8 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Sync job now: posting an approved request's engagement to Maconomy as a job, by hand, inline, so the
-/// caller sees the outcome at once. For the approvers on the request — it is offered on their Approvals
+/// Sync job now: posting an approved request's engagement to Maconomy as a job by hand, inline, so the
+/// caller sees the outcome at once — for a request that failed, or was approved while the job sync was
+/// off; otherwise the job follows the approval by itself. For the approvers on the request — it is offered on their Approvals
 /// list — and for anyone who manages engagements or the Maconomy connection, in the caller's active tenant.
 /// </summary>
 [ApiController]

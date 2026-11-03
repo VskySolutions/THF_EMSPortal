@@ -220,7 +220,8 @@ public sealed class MaconomyController : ControllerBase
     // ---- The job sync ----
     //
     // Also ALWAYS the caller's own tenant, for the same reason as the customer sync above: the rows are
-    // REMS requests. Sync job now is pressed from the lists and from here; nothing posts a job by itself.
+    // REMS requests. An approved request is posted by itself once its client is in Maconomy; Sync job now,
+    // from the lists and from here, is for the ones that failed or were approved while the sync was off.
 
     /// <summary>The Job tab: whether it is on, who last moved it, the settings, the counts and the template map.</summary>
     [HttpGet("job-sync")]
@@ -236,7 +237,7 @@ public sealed class MaconomyController : ControllerBase
         return Ok(ApiResponseFactory.Success(await JobSyncOverviewAsync(tenant, cancellationToken), "Job sync retrieved."));
     }
 
-    /// <summary>Offer Sync job now on approved requests. Posts nothing by itself.</summary>
+    /// <summary>Post approved engagements as jobs from now on. Posts nothing already approved: that is synced by hand.</summary>
     [HttpPost("job-sync/start")]
     [RequirePermission(Permissions.IntegrationsMaconomyManage)]
     [ProducesResponseType<ApiResponse<MaconomyJobSyncOverviewResponse>>(StatusCodes.Status200OK)]
@@ -244,7 +245,7 @@ public sealed class MaconomyController : ControllerBase
     public Task<IActionResult> StartJobSync(CancellationToken cancellationToken)
         => SetJobSyncAsync(enabled: true, cancellationToken);
 
-    /// <summary>Hide Sync job now everywhere. An attempt already under way finishes.</summary>
+    /// <summary>Stop posting and hide Sync job now everywhere. An attempt already under way finishes; a queued one goes back to waiting.</summary>
     [HttpPost("job-sync/stop")]
     [RequirePermission(Permissions.IntegrationsMaconomyManage)]
     [ProducesResponseType<ApiResponse<MaconomyJobSyncOverviewResponse>>(StatusCodes.Status200OK)]

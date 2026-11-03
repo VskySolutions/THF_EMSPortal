@@ -71,11 +71,14 @@ public class MaconomyConnection : AuditableEntity
 
     public Guid? CustomerSyncChangedById { get; set; }
 
-    // ---- The job sync: posting an approved engagement to Maconomy as a job, by hand ----
+    // ---- The job sync: posting an approved engagement to Maconomy as a job, once its client is there ----
     // The project manager and the default template job are platform configuration (Maconomy:JobCard);
     // the template numbers live on the REMS Job Template option items.
 
-    /// <summary>Whether Sync job now is offered at all. Off by default; Start/Stop on the Job tab. While off, the action is hidden.</summary>
+    /// <summary>
+    /// Whether approved engagements are posted as jobs: by themselves once the client is in Maconomy, and by
+    /// Sync job now. Off by default; Start/Stop on the Job tab. While off, nothing is queued and the action is hidden.
+    /// </summary>
     public bool JobSyncEnabled { get; set; }
 
     public DateTime? JobSyncChangedOnUtc { get; set; }

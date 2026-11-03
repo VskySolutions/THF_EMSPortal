@@ -51,10 +51,10 @@ public class RemsRequest : AuditableEntity
     public decimal? PurchaseOrderAmount { get; set; }
     public bool? IsFloridaOnePercentFeeApplicable { get; set; }
 
-    // ---- Maconomy job: the engagement posted to Maconomy as a job, by hand, from a list's Sync job now ----
+    // ---- Maconomy job: the engagement posted to Maconomy as a job, by itself once the client is there, or from a list's Sync job now ----
     public string? MaconomyJobNumber { get; set; }
     public RemsMaconomyJobSyncStatus MaconomyJobSyncStatus { get; set; } = RemsMaconomyJobSyncStatus.NotSynced;
-    /// <summary>Who pressed the sync that created the job, and when.</summary>
+    /// <summary>Who pressed the sync that created the job (null when it ran by itself), and when.</summary>
     public Guid? MaconomyJobSyncedById { get; set; }
     public DateTime? MaconomyJobSyncedOnUtc { get; set; }
     public string? MaconomyJobSyncError { get; set; }

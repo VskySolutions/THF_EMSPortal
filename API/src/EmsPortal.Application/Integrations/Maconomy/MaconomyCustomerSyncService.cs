@@ -25,6 +25,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
     private readonly IMaconomyCustomerSyncQueue _queue;
+    private readonly IMaconomyJobSyncService _jobSync;
     private readonly ITenantContext _tenant;
     private readonly MaconomyOptions _options;
     private readonly ILogger<MaconomyCustomerSyncService> _logger;
@@ -40,6 +41,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
         IMaconomyCustomerSyncQueue queue,
+        IMaconomyJobSyncService jobSync,
         ITenantContext tenant,
         IOptions<MaconomyOptions> options,
         ILogger<MaconomyCustomerSyncService> logger)
@@ -54,6 +56,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         _unitOfWork = unitOfWork;
         _activity = activity;
         _queue = queue;
+        _jobSync = jobSync;
         _tenant = tenant;
         _options = options.Value;
         _logger = logger;
@@ -296,7 +299,16 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
                 ? $"Linked to Maconomy customer {customerNumber}"
                 : $"Created Maconomy customer {customerNumber}",
             actorId, cancellationToken);
+        // The engagement follows as a Maconomy job, now that there is a customer to put it under: recorded
+        // with the customer, queued once both are committed.
+        var pendingJob = remsId is { } subject && await _requests.GetForJobSyncAsync(subject, cancellationToken) is { } request
+            ? await _jobSync.RecordPendingAsync(request, requireApproved: true, cancellationToken)
+            : null;
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (pendingJob is not null)
+        {
+            _jobSync.Enqueue(pendingJob);
+        }
         try
         {
             await _directory.ReadAsync(client.TenantId, customerNumber, cancellationToken);

@@ -321,7 +321,7 @@ const columns = computed(() => [
     ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
   },
   { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
   { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.

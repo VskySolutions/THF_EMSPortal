@@ -51,6 +51,8 @@ const jobTooltip = () => {
       return `Created in Maconomy${when}${who}.`;
     case "failed":
       return v.failureReason || "The last attempt failed.";
+    case "pending":
+      return "Queued for posting to Maconomy.";
     case "syncing":
       return "An attempt is under way.";
     default:

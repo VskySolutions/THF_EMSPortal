@@ -30,7 +30,7 @@ public static class DependencyInjection
         // The customer sync: posting a fully approved brand-new client to Maconomy.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCustomerWriter, Integrations.Maconomy.MaconomyCustomerWriter>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCustomerSyncService, Integrations.Maconomy.MaconomyCustomerSyncService>();
-        // The job sync: posting an approved engagement to Maconomy as a job, by hand from a list.
+        // The job sync: posting an approved engagement to Maconomy as a job, queued on approval or pressed from a list.
         // What is sent lives in Integrations/Maconomy/Mapping; the card writer only carries it.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCardWriter, Integrations.Maconomy.MaconomyCardWriter>();
         // The Maconomy numbers the tenant's option items carry, read once per call and kept a minute.

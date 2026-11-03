@@ -787,6 +787,7 @@ public sealed class RemsApprovalController : ControllerBase
         var round = RoundOf(request, task, threshold);
         var fullyApproved = round.Status == RemsApprovalRoundStatus.Approved;
         Client? pendingSync = null;
+        RemsRequest? pendingJob = null;
         if (fullyApproved)
         {
             await ChangeStatusAsync(request, RemsRequestStatuses.Approved, me, now, cancellationToken);
@@ -801,6 +802,9 @@ public sealed class RemsApprovalController : ControllerBase
             // A brand-new client is posted to Maconomy from here — recorded with the approval, queued once
             // it is committed, and never anything the approval waits on or fails because of.
             pendingSync = await _customerSync.RecordOnApprovalAsync(request, cancellationToken);
+            // The engagement follows as a Maconomy job: queued here when the client is already a customer,
+            // otherwise by the customer sync once it has made them one.
+            pendingJob = await _jobSync.RecordPendingAsync(request, requireApproved: false, cancellationToken);
 
             var involved = new HashSet<Guid>(round.Tasks.Select(t => t.ApproverId));
             if (round.SentByUserId is { } sender)
@@ -831,6 +835,10 @@ public sealed class RemsApprovalController : ControllerBase
         if (pendingSync is not null)
         {
             _customerSync.Enqueue(pendingSync);
+        }
+        if (pendingJob is not null)
+        {
+            _jobSync.Enqueue(pendingJob);
         }
 
         var view = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), me, cancellationToken);

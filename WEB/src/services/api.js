@@ -280,13 +280,14 @@ export const maconomyApi = {
   // is a 200 with status "failed"; only a refusal (sync off, not eligible) is an error.
   runCustomerSync: (remsId) => api.post(`/api/integrations/maconomy/customer-sync/${remsId}/run`).then(unwrap),
 
-  // ---- The job sync: an approved request's engagement posted to Maconomy as a job, by hand ----
-  // Also always the caller's own tenant. Nothing posts a job by itself: Sync job now is pressed on a list.
+  // ---- The job sync: an approved request's engagement posted to Maconomy as a job ----
+  // Also always the caller's own tenant. A request is posted by itself once approved with its client in
+  // Maconomy; Sync job now, pressed on a list, is for one that failed or was approved while the sync was off.
   // → { connected, enabled, changedOnUtc, changedByName, projectManagerNumber, defaultTemplateNumber (both from
   //     the server configuration), synced, failed, syncing, waiting, templates: [{ jobTemplateId, code, label,
   //     templateJobNumber }] } — the template numbers are the REMS Job Template option items' Maconomy numbers.
   jobSync: () => api.get("/api/integrations/maconomy/job-sync").then(unwrap),
-  // Start offers the action on approved requests; Stop hides it everywhere. Both → the overview.
+  // Start posts approvals from now on (nothing already approved); Stop queues nothing and hides the action. Both → the overview.
   startJobSync: () => api.post("/api/integrations/maconomy/job-sync/start").then(unwrap),
   stopJobSync: () => api.post("/api/integrations/maconomy/job-sync/stop").then(unwrap),
   // Every approved request and where its job stands: [{ remsId, remsNumber, clientName, customerNumber,

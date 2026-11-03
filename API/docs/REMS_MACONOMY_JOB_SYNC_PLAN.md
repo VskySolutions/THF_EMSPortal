@@ -1,6 +1,7 @@
 # Posting a REMS engagement to Maconomy as a job — plan
 
-**Status: BUILT on 31 Oct 2026, not yet run against Maconomy.** The user settled the shape (section 0)
+**Status: BUILT on 31 Oct 2026, not yet run against Maconomy. Approval trigger BUILT 3 Nov 2026 (section 11).**
+The user settled the shape (section 0)
 and the code in section 4 exists on branch `feat/rems-data-model-v2` (migration
 `20261031090743_AddRemsMaconomyJobSync`, applied by the API on its next start). The job card's field names
 are still documentation guesses, held as constants in `MaconomyJobDataMapping` (since the mapping
@@ -24,7 +25,8 @@ that customer, **by hand, from the request page**.
    project manager. Nothing else is sent in this phase beyond a job name.
 2. **The project manager is static**: Maconomy employee **82** for every job, as a tenant setting on the
    Job tab (editable, default 82). No user → employee mapping yet.
-3. **Sync is manual, per request.** No approval trigger, no Hangfire job: an eligible request is posted
+3. **Sync is manual, per request** — SUPERSEDED 3 Nov 2026 by section 11: the job is queued on approval.
+   As first decided: no approval trigger, no Hangfire job: an eligible request is posted
    when somebody presses Sync job now, and a failed attempt stays failed until somebody presses it again.
    The button lives in the Actions column of the list pages (the Approvals list and EMS Review) and on the
    Job tab's table — NOT on the request page, which shows the job chip only (user, 31 Oct 2026).
@@ -263,8 +265,7 @@ copy.
 
 - **Link by hand**: type an existing job number onto a request; the portal reads it back to check it
   belongs to the client's customer. Needs `ReadByNumberAsync`, which the writer gets in phase 1.
-- **Approval trigger**: post the job on full approval, queued the way the customer is — only if THF wants
-  it after seeing the manual flow.
+- ~~**Approval trigger**~~ BUILT 3 Nov 2026, section 11.
 - **Project manager from the request** (Engagement Executive → a Maconomy employee number on the user).
 - **Tasks**: one `jobtasks` row per ticked `REMS.TaxForm`, named by THF's task type codes (1040, 1041, …),
   where the template does not already carry them.
@@ -401,3 +402,34 @@ numbering was built for, resolves as before. Migration `20261031115010_MaconomyN
    Sets; a customer search still returns "(Commercial)" style suffixes and the picker still auto-fills.
 
 About three hours.
+
+---
+
+## 11. Approval trigger — BUILT 3 Nov 2026
+
+The user's instruction: "When a request gets approved by all, like the customer, we also need to send the
+request as a job into Maconomy automatically." Section 8's first later phase, built the way the customer
+sync is queued; the user confirmed the order (customer first if new, then the job) the same day.
+
+- **When.** A request is queued to be posted as a job the moment it is fully approved AND its client is a
+  Maconomy customer. For a client already in Maconomy (picked at intake, or linked earlier) that is the
+  final approval itself (`RemsApprovalController.Approve`, next to the customer sync's record-and-enqueue).
+  For a Brand New Client request it is the moment the customer sync lands the customer, Synced or Linked:
+  `MaconomyCustomerSyncService.SucceedAsync` records and enqueues the job for the subject request, whether
+  the customer sync ran from the queue or from a Sync now press.
+- **How.** `IMaconomyJobSyncService.RecordPendingAsync` marks the request `Pending` (a new value of
+  `RemsMaconomyJobSyncStatus`; the column is a string, so no migration) inside the same unit of work;
+  `Enqueue` hands it to Hangfire after the commit (`MaconomyJobSyncJob`, `IMaconomyJobSyncQueue`, one
+  attempt, no Hangfire retry). `RunAsync` loads the request, applies `MaconomyJobSyncRules.WhyNotPostable`
+  and posts through the same `AttemptAsync` as a press, with no actor.
+- **Outcomes.** A post that fails, or a request that lacks something (no Service Line, no template job, no
+  project manager, Maconomy not connected), is recorded `Failed` with the reason, for Sync job now. A
+  request queued while the sync was on but run after it was switched off goes back to `NotSynced`, quietly.
+  A `Pending` older than `Maconomy:JobSyncStaleMinutes` reads as a lost attempt, like a stale `Syncing`,
+  and Sync job now is offered again.
+- **The switch.** The Job tab's Start/Stop now governs the trigger too: off means nothing is queued. The
+  customer sync's switch is unchanged; while it is off a Brand New Client request's job waits (blocked:
+  "The client is not in Maconomy yet") until an admin syncs the customer by hand, which then queues the job.
+- **Sync job now stays**, on the same lists, for a request that failed or was approved while the sync was
+  off. `MaconomyJobSyncedById` is null for a job that ran by itself.
+- Not run against Maconomy, like the rest of the job sync.
