@@ -6,20 +6,18 @@
         <div class="app-field">
           <app-field-label label="Client" required :info="clientInfo" />
 
-          <!-- A new client has no record to find, so the box says so instead of taking a search. -->
-          <q-input
-            v-if="addingNew"
-            model-value="New client" outlined dense hide-bottom-space readonly aria-label="Client"
-          >
-            <template #prepend><q-icon name="o_person_add" color="primary" /></template>
-            <template #append>
-              <q-icon v-if="clientLocked" name="o_lock" size="18px" color="grey-6" />
-              <q-btn
-                v-else-if="!readonly" flat dense no-caps size="sm" color="primary" icon="o_search"
-                label="Search instead" @click="leaveNewClient"
-              />
+          <!-- A new client has no record to find, so the search box gives way to a line saying so, with
+               the way back to searching in it. -->
+          <div v-if="addingNew" class="cif-new-note">
+            <template v-if="readonly || clientLocked">
+              <q-icon name="o_lock" size="18px" color="grey-6" />
+              <span>New client, not yet on file.</span>
             </template>
-          </q-input>
+            <span v-else>
+              To search for a client again,
+              <a href="#" class="cif-link" @click.prevent="leaveNewClient">click here</a>.
+            </span>
+          </div>
 
           <q-input
             v-else
@@ -1295,6 +1293,23 @@ defineExpose({ uploadAttachments, addingNew, emailHolder });
   margin-top: 18px;
   height: 40px;
 }
+
+/* Stands where the search box did, level with it, so the rows under it stay put when the box comes back. */
+.cif-new-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--ink-700);
+}
+.cif-link {
+  color: var(--q-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cif-link:hover { color: var(--teal-800); }
 
 /* A result row's tags: where it comes from, then its entity type. */
 .cif-tags {
