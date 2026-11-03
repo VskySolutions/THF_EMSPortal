@@ -1,5 +1,6 @@
 <template>
   <q-table
+    ref="tableRef"
     v-model:pagination="innerPagination"
     v-model:selected="innerSelected"
     :rows="displayedRows"
@@ -97,7 +98,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, useSlots, toRef } from "vue";
+import { computed, ref, watch, useSlots, toRef, onMounted, onBeforeUnmount } from "vue";
 import { usePreferences } from "composables/usePreferences";
 import useColumnResize from "composables/dataTable/useColumnResize.js";
 import useColumnOrder from "composables/dataTable/useColumnOrder.js";
@@ -277,11 +278,23 @@ const resetColumns = () => {
 // ---- Column resizing (persisted) ----
 const columnsRef = toRef(props, "columns");
 const resizeWidths = ref(prefs?.get("columnWidths", {}) ?? {});
-const { startResize } = useColumnResize({
+const { startResize, isResizeClick } = useColumnResize({
   columns: columnsRef,
   resizeWidths,
   saveResizableWidthState: (widths) => prefs?.set("columnWidths", widths)
 });
+
+// Letting go of a resize handle fires a click on the header cell, which QTh would take as a sort. It is
+// caught on the way down, before QTh's own handler sees it.
+const tableRef = ref(null);
+const swallowResizeClick = (e) => {
+  if (isResizeClick()) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+};
+onMounted(() => tableRef.value?.$el?.addEventListener("click", swallowResizeClick, true));
+onBeforeUnmount(() => tableRef.value?.$el?.removeEventListener("click", swallowResizeClick, true));
 
 const columnStyle = (name) => {
   const w = resizeWidths.value?.[name];

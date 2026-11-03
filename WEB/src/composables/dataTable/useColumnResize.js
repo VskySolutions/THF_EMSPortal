@@ -12,6 +12,10 @@ export default function useColumnResize ({
 
   let resizing = null;
 
+  // The click a browser fires after the mouseup that ends a drag lands on the header cell, where QTh reads
+  // it as a sort. It is flagged for the length of that one dispatch, so the table can swallow it.
+  let clickPending = false;
+
   const ensureWidths = () => {
     if (!resizeWidths.value) {
       resizeWidths.value = {};
@@ -79,7 +83,12 @@ export default function useColumnResize ({
     });
 
     resizing = null;
+
+    clickPending = true;
+    setTimeout(() => { clickPending = false; }, 0);
   };
+
+  const isResizeClick = () => clickPending;
 
   const resetColumnsWidth = () => {
     const widths = {};
@@ -106,6 +115,7 @@ export default function useColumnResize ({
     startResize,
     stopResize,
     resetColumnsWidth,
-    isResizing
+    isResizing,
+    isResizeClick
   };
 }
