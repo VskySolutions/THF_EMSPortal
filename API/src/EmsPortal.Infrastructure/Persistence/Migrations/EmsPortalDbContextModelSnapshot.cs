@@ -2880,6 +2880,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<Guid?>("CopiedFromRemsId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uniqueidentifier");
 
@@ -2908,6 +2911,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("FirstYearFeeEstimate")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly?>("FiscalYearEnd")
+                        .HasColumnType("date");
 
                     b.Property<DateTime?>("FormLastSavedOnUtc")
                         .HasColumnType("datetime2");
@@ -3007,6 +3013,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.HasIndex("ClientId");
 
                     b.HasIndex("ContractId");
+
+                    b.HasIndex("CopiedFromRemsId")
+                        .HasFilter("[CopiedFromRemsId] IS NOT NULL");
 
                     b.HasIndex("DepartmentDirectorId");
 
@@ -4766,6 +4775,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ContractId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EmsPortal.Domain.Entities.RemsRequest", "CopiedFrom")
+                        .WithMany()
+                        .HasForeignKey("CopiedFromRemsId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EmsPortal.Domain.Entities.User", "DepartmentDirector")
                         .WithMany()
                         .HasForeignKey("DepartmentDirectorId")
@@ -4835,6 +4849,8 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Contract");
+
+                    b.Navigation("CopiedFrom");
 
                     b.Navigation("Department");
 

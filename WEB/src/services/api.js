@@ -591,6 +591,11 @@ export const remsApi = {
   // take it. The only way a request loses its reviewing admin.
   handBack: (id) => api.post(`/api/rems/requests/${id}/hand-back`).then(unwrap),
 
+  // Copy: a new draft for the same client with the engagement setup carried over and the tax card blank.
+  copy: (id) => api.post(`/api/rems/requests/${id}/copy`).then(unwrap),
+  // A copy's hand-off to the admins without a form; 409 while the client's intake is not on file.
+  submitForReview: (id) => api.post(`/api/rems/requests/${id}/submit-for-review`).then(unwrap),
+
   remove: (id) => api.delete(`/api/rems/requests/${id}`).then(envelope),
   // Client picker, across every entity type: [{ id, name, email, phone, suffix, firstName, lastName,
   // corporateName, isOrganisation, entityType }]. `excludingRemsId` is the request being edited.
@@ -682,6 +687,9 @@ export const remsApi = {
   // payload: { fiscalYearEnd?, originalDueDate?, firstExtensionDueDate?, taxFormIds:[] }. A due date left
   // null is DERIVED from the fiscal year end rather than cleared — the rule is the default.
   updateTax: (id, payload) => api.put(`/api/rems/engagements/${id}/tax`, payload).then(unwrap),
+  // The forms the client's OTHER requests hold for a year end: [{ taxFormId, remsId, remsNumber, status }].
+  taxTakenForms: (id, fiscalYearEnd) =>
+    api.get(`/api/rems/engagements/${id}/tax/taken-forms`, { params: { fiscalYearEnd } }).then(unwrap),
   // Every approval round on an engagement, oldest first: [{ roundId, roundNumber, status, sentOnUtc,
   // sentBy, completedOnUtc, declineThreshold, declineCount, decisions:[{ taskId, approver, role.
   approvalHistory: (engagementId) => api.get(`/api/rems/engagements/${engagementId}/approval/history`).then(unwrap),

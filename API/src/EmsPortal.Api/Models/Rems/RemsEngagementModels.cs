@@ -41,7 +41,11 @@ public sealed record RemsClientFormRow(
     /// <summary>The Maconomy customer sync status word, where a row has been recorded for the request.</summary>
     string? MaconomySyncStatus = null,
     /// <summary>Where posting the engagement to Maconomy as a job has got to, on an approved request; Sync job now lives on this list.</summary>
-    RemsMaconomyJobSyncView? MaconomyJobSync = null);
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
+    /// <summary>The number of the request this one was copied from, when it was made with Copy.</summary>
+    string? CopiedFromRemsNumber = null,
+    /// <summary>The caller may raise a new request from this one's engagement setup.</summary>
+    bool CanCopy = false);
 
 /// <summary>The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload.</summary>
 public sealed record RemsSubmissionView(
@@ -212,6 +216,9 @@ public sealed record RemsTaxDetailView(
     DateOnly? FirstExtensionDueDate,
     string? CalculatedDueDates,
     IReadOnlyList<Guid> TaxFormIds);
+
+/// <summary>A tax form another request of the same client holds for a fiscal year end, so the picker greys it with that number.</summary>
+public sealed record RemsTakenTaxFormView(Guid TaxFormId, Guid RemsId, string RemsNumber, string Status);
 
 // -------------------- Editing requests --------------------
 

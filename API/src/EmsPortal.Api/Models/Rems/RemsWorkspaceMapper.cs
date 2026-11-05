@@ -96,7 +96,8 @@ internal static class RemsWorkspaceMapper
                 purchaseOrder?.MediaId, purchaseOrder?.Media?.OriginalFileName,
                 PersonnelRates(request))
             : null;
-        var taxView = RemsEngagementCodes.IsTax(department) || request.TaxForms.Any(f => !f.Deleted) || request.TaxDueDates.Any(d => !d.Deleted)
+        var taxView = RemsEngagementCodes.IsTax(department) || request.FiscalYearEnd is not null
+            || request.TaxForms.Any(f => !f.Deleted) || request.TaxDueDates.Any(d => !d.Deleted)
             ? TaxDetail(request)
             : null;
 
@@ -128,7 +129,8 @@ internal static class RemsWorkspaceMapper
     /// </summary>
     public static RemsTaxDetailView TaxDetail(RemsRequest request)
     {
-        var fye = request.Client?.FiscalYearEnd;
+        // The engagement's own year end: a client with a return a year holds several.
+        var fye = request.FiscalYearEnd;
         var original = request.TaxDueDates.FirstOrDefault(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.Original);
         var extension = request.TaxDueDates.FirstOrDefault(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.FirstExtension);
         string? schedule = null;

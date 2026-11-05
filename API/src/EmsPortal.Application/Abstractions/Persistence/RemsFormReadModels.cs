@@ -115,5 +115,7 @@ public sealed record RemsClientFormItem(
     Guid? UpdatedById,
     DateTime UpdatedOnUtc,
     /// <summary>Set when the client is a Maconomy customer, whose name is read from Maconomy rather than the database.</summary>
-    string? MaconomyCustomerNumber = null);
+    string? MaconomyCustomerNumber = null,
+    /// <summary>The number of the request this one was copied from, when it was made with Copy.</summary>
+    string? CopiedFromRemsNumber = null);
 

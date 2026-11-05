@@ -43,6 +43,8 @@ public sealed class RemsRequestsController : ControllerBase
     private const string CodeDuplicateEmail = "REMS_DUPLICATE_CLIENT_EMAIL";
     private const string CodeClientLocked = "REMS_CLIENT_LOCKED";
     private const string CodeMaconomyCustomerNotFound = "REMS_MACONOMY_CUSTOMER_NOT_FOUND";
+    private const string CodeNotSubmittable = "REMS_NOT_SUBMITTABLE";
+    private const string CodeIntakeNotOnFile = "REMS_INTAKE_NOT_ON_FILE";
 
     /// <summary>How many clients one search returns. The picker says so when it is reached.</summary>
     private const int ClientLookupLimit = 20;
@@ -932,6 +934,196 @@ public sealed class RemsRequestsController : ControllerBase
         return Ok(ApiResponseFactory.Success(new { id }, "REMS request deleted."));
     }
 
+    // -------------------- Copy --------------------
+
+    /// <summary>
+    /// A new draft for the same client with this request's engagement setup carried over: the placement,
+    /// the team, the money, the marketing tags, the commission splits, the department detail and the
+    /// files (linked, not uploaded again). Not carried: the tax card, since a copy is another return with
+    /// a year end and a form of its own; the intake; the approvers; the status; the Maconomy job.
+    /// </summary>
+    [HttpPost("{id:guid}/copy")]
+    [RequirePermission(Permissions.RemsRequestsCreate)]
+    [ProducesResponseType<ApiResponse<RemsRequestDetail>>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> Copy(Guid id, CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me || User.GetActiveTenantId() is not { } tenantId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden("No active tenant/user context."));
+        }
+
+        var source = await _rems.GetWorkspaceAsync(id, cancellationToken);
+        if (source is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
+        }
+        var privileged = IsPrivileged();
+        if (!CanView(source, me, privileged))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponseFactory.Forbidden("This draft is only open to the person raising it."));
+        }
+
+        var seat = await RemsActingAs.ResolveAsync(this, _delegations, me, cancellationToken);
+        if (seat is { CanPrepare: false })
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponseFactory.Forbidden("Your delegation does not allow preparing requests."));
+        }
+
+        var copy = new RemsRequest
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            // The client is on file by now, whatever the source said of them when it was raised.
+            TypeId = await _codes.RequireRemsIdAsync(RemsOptionSetKeys.Type, RemsRequestTypes.ExistingClient, cancellationToken),
+            StatusId = await _codes.RequireRemsIdAsync(RemsOptionSetKeys.Status, RemsRequestStatuses.Draft, cancellationToken),
+            ClientId = source.ClientId,
+            CSEId = source.CSEId,
+            OnBehalfOfUserId = seat?.PrincipalUserId,
+            CopiedFromRemsId = source.Id,
+            DepartmentId = source.DepartmentId,
+            ServiceLineId = source.ServiceLineId,
+            JobTemplateId = source.JobTemplateId,
+            BillingPeriodId = source.BillingPeriodId,
+            DepartmentDirectorId = source.DepartmentDirectorId,
+            EngagementExecutiveId = source.EngagementExecutiveId,
+            BillingManagerId = source.BillingManagerId,
+            FirstYearFeeEstimate = source.FirstYearFeeEstimate,
+            EngagementFee = source.EngagementFee,
+            RealizationPercentage = source.RealizationPercentage,
+            BillingProcessDescription = source.BillingProcessDescription,
+            ContractId = source.ContractId,
+            ContractNumber = source.ContractNumber,
+            PurchaseOrderNumber = source.PurchaseOrderNumber,
+            PurchaseOrderAmount = source.PurchaseOrderAmount,
+            IsFloridaOnePercentFeeApplicable = source.IsFloridaOnePercentFeeApplicable,
+        };
+
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            copy.RemsNumber = await _numberGenerator.GenerateAsync(tenantId, ct);
+            await _rems.AddAsync(copy, ct);
+            foreach (var method in source.MarketingMethods.Where(m => !m.Deleted))
+            {
+                await _rems.AddMarketingMethodAsync(new RemsMarketingMethod
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantId, REMSId = copy.Id, MarketingMethodId = method.MarketingMethodId,
+                }, ct);
+            }
+            foreach (var split in source.CommissionSplits.Where(s => !s.Deleted))
+            {
+                await _rems.AddCommissionSplitAsync(new RemsCommissionSplit
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantId, REMSId = copy.Id,
+                    EmployeeId = split.EmployeeId, CommissionPercentage = split.CommissionPercentage,
+                }, ct);
+            }
+            foreach (var rate in source.PersonnelRates.Where(x => !x.Deleted))
+            {
+                await _rems.AddPersonnelRateAsync(new RemsPersonnelRate
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantId, REMSId = copy.Id,
+                    PersonnelLevelId = rate.PersonnelLevelId, BillRatePerHour = rate.BillRatePerHour,
+                }, ct);
+            }
+            foreach (var file in source.Files.Where(f => !f.Deleted))
+            {
+                await _rems.AddFileAsync(new RemsFile
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantId, REMSId = copy.Id, MediaId = file.MediaId, Kind = file.Kind,
+                }, ct);
+            }
+            await _activity.WriteAsync(
+                new CreateActivityEventDto(EntityType.Rems, copy.Id, ActivityEventTypes.RemsCopiedFrom, NewValue: source.RemsNumber), ct);
+            await _activity.WriteAsync(
+                new CreateActivityEventDto(EntityType.Rems, source.Id, ActivityEventTypes.RemsCopiedTo, NewValue: copy.RemsNumber), ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
+
+        var created = await LoadAsync(copy.Id, cancellationToken) ?? copy;
+        var detail = await BuildDetailAsync(created, me, privileged, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, ApiResponseFactory.Success(detail, $"Copied from {source.RemsNumber}."));
+    }
+
+    /// <summary>
+    /// A copy's hand-off to the admins. Its client answered the intake form on the request it was copied
+    /// from, so no form goes out: the copy moves to Admin Review once that answer is on file, and until
+    /// then it waits.
+    /// </summary>
+    [HttpPost("{id:guid}/submit-for-review")]
+    [RequirePermission(Permissions.RemsFormsSend)]
+    [ProducesResponseType<ApiResponse<RemsRequestDetail>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SubmitForReview(Guid id, CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var rems = await _rems.GetWorkspaceAsync(id, cancellationToken);
+        if (rems is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
+        }
+        var privileged = IsPrivileged();
+        if (!CanAct(rems, me, privileged))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden("Not permitted to submit this request."));
+        }
+        if (rems.CopiedFromRemsId is null)
+        {
+            return Refusal(CodeNotSubmittable, "Only a copied request goes for review without a form. Send this one to the client instead.");
+        }
+        if (!IsDraft(rems))
+        {
+            return Refusal(CodeNotSubmittable, "Only a draft can be submitted for review.");
+        }
+        // The same bar as sending the form, less the email the form needs.
+        if (rems.CSEId is null || rems.Client?.EntityTypeId is null)
+        {
+            return Refusal(CodeNotSubmittable, "Name a CSE and an entity type under Client Information first.");
+        }
+        var splits = rems.CommissionSplits.Where(s => !s.Deleted).ToList();
+        var allocated = Math.Round(splits.Sum(s => s.CommissionPercentage), 2, MidpointRounding.AwayFromZero);
+        if (splits.Count > 0 && allocated != 100m)
+        {
+            return Refusal(CodeNotSubmittable,
+                $"Commission totals {allocated:0.##}% — the recipients on the Commission tab must add up to 100% first.");
+        }
+        if (await _rems.LatestFormSubmittedOnAsync(rems.ClientId, cancellationToken) is not { } submittedOn)
+        {
+            var sentWith = rems.CopiedFrom?.RemsNumber is { Length: > 0 } number ? $", sent with {number}" : string.Empty;
+            return Refusal(CodeIntakeNotOnFile, $"The client's intake form has not come in yet{sentWith}. The copy waits until it has.");
+        }
+
+        // The answers are the client's, on their record. The copy records when they arrived, which is what
+        // the review queue and the submitted-form pane go by.
+        rems.FormSubmittedOnUtc = submittedOn;
+        rems.FormLastSavedOnUtc ??= submittedOn;
+        await MoveToAsync(rems, RemsRequestStatuses.AdminReview, me, null, null, cancellationToken);
+        _rems.Update(rems);
+        await _activity.WriteAsync(
+            new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsSubmittedForReview), cancellationToken);
+        // The pool broadcast the client's own submission makes: nobody holds a copy either.
+        var admins = await _users.ListByTenantRolesAsync(rems.TenantId, new[] { Roles.Admin, Roles.SuperAdmin }, cancellationToken);
+        foreach (var admin in admins)
+        {
+            await _notifications.DispatchAsync(new CreateNotificationDto(
+                admin.Id,
+                NotificationType.RemsRequestAssigned,
+                "A REMS request is waiting for pickup",
+                $"{rems.RemsNumber} — {ClientNameOf(rems)}",
+                EntityType.Rems,
+                rems.Id), cancellationToken);
+        }
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var refreshed = await LoadAsync(rems.Id, cancellationToken) ?? rems;
+        var detail = await BuildDetailAsync(refreshed, me, privileged, cancellationToken);
+        return Ok(ApiResponseFactory.Success(detail, "Submitted for review."));
+    }
+
     // -------------------- Pickers --------------------
 
     /// <summary>Search of the clients on file (by name, email, phone) for the client picker.</summary>
@@ -1703,8 +1895,35 @@ public sealed class RemsRequestsController : ControllerBase
             CanPickUp: User.HasPermission(Permissions.RemsRequestsAssign)
                 && !IsDraft(r)
                 && r.AdminAssignedToId is null,
-            CanDelete: canAct && User.HasPermission(Permissions.RemsRequestsDelete) && IsDeletable(r));
+            CanDelete: canAct && User.HasPermission(Permissions.RemsRequestsDelete) && IsDeletable(r),
+            // Copy raises a request from this one's setup: the create permission, on anything the caller may read.
+            CanCopy: User.HasPermission(Permissions.RemsRequestsCreate) && CanView(r, me, privileged));
     }
+
+    private static RemsRequestRef? CopiedFromOf(RemsRequest r)
+        => r.CopiedFromRemsId is { } id ? new RemsRequestRef(id, r.CopiedFrom?.RemsNumber ?? string.Empty) : null;
+
+    /// <summary>
+    /// Whether Submit for review is offered on this request, and why it cannot be pressed yet. It is a
+    /// copy's move: its client answered the intake on the request it was copied from, so nothing goes to
+    /// them; until that answer is in, the copy waits.
+    /// </summary>
+    private async Task<(bool Offered, string? Blocked)> SubmitForReviewStateAsync(RemsRequest r, Guid me, bool privileged, CancellationToken cancellationToken)
+    {
+        if (r.CopiedFromRemsId is null || !IsDraft(r) || !CanAct(r, me, privileged) || !User.HasPermission(Permissions.RemsFormsSend))
+        {
+            return (false, null);
+        }
+        if (await _rems.LatestFormSubmittedOnAsync(r.ClientId, cancellationToken) is not null)
+        {
+            return (true, null);
+        }
+        var sentWith = r.CopiedFrom?.RemsNumber is { Length: > 0 } number ? $", sent with {number}" : string.Empty;
+        return (true, $"Waiting for the client's intake form{sentWith}. The copy can be submitted for review once it is in.");
+    }
+
+    private IActionResult Refusal(string code, string message)
+        => StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(code, message, message));
 
     private RemsRequestRow ToRow(
         RemsRequest r, Guid me, bool privileged,
@@ -1723,7 +1942,8 @@ public sealed class RemsRequestsController : ControllerBase
             ActionsFor(r, me, privileged),
             client?.MaconomyCustomerNumber,
             MaconomySync: SyncViewFor(r, syncEnabled, canSync),
-            MaconomyJobSync: JobSyncViewFor(r, jobContext, canSync, names));
+            MaconomyJobSync: JobSyncViewFor(r, jobContext, canSync, names),
+            CopiedFrom: CopiedFromOf(r));
     }
 
     /// <summary>Whether the caller's tenant posts approved new clients to Maconomy right now.</summary>
@@ -1768,6 +1988,7 @@ public sealed class RemsRequestsController : ControllerBase
             rems, await CustomerSyncEnabledAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage));
         var maconomyJobSync = JobSyncViewFor(
             rems, await JobSyncContextAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage), names);
+        var (canSubmitForReview, submitBlocked) = await SubmitForReviewStateAsync(rems, me, privileged, cancellationToken);
 
         return new RemsRequestDetail(
             rems.Id, rems.RemsNumber,
@@ -1791,7 +2012,10 @@ public sealed class RemsRequestsController : ControllerBase
             client?.MaconomyCustomerNumber,
             MaconomyUnavailable: client is { IsMaconomyClient: true, Maconomy: null },
             MaconomySync: maconomySync,
-            MaconomyJobSync: maconomyJobSync);
+            MaconomyJobSync: maconomyJobSync,
+            CopiedFrom: CopiedFromOf(rems),
+            CanSubmitForReview: canSubmitForReview,
+            SubmitForReviewBlockedReason: submitBlocked);
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>

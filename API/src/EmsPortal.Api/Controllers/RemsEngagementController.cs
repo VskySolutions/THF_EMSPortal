@@ -39,6 +39,7 @@ namespace EmsPortal.Api.Controllers;
 public sealed class RemsEngagementController : ControllerBase
 {
     private const string CodeEngagementLocked = "REMS_ENGAGEMENT_LOCKED";
+    private const string CodeTaxFormTaken = "REMS_TAX_FORM_TAKEN";
     // STATIC-APPROVAL-POLICY
     private const string CodeCommissionReserved = "REMS_COMMISSION_RESERVED";
 
@@ -159,6 +160,8 @@ public sealed class RemsEngagementController : ControllerBase
         // Asked once for the whole page: the permission is the caller's, so only the row's own claimed/
         // unclaimed state varies. Drafts cannot reach this list, so being unclaimed is the whole test.
         var mayAssign = User.HasPermission(Permissions.RemsRequestsAssign);
+        // Copy raises a request, so it takes the create permission; nothing on this list is a draft, so every row is readable.
+        var mayCopy = User.HasPermission(Permissions.RemsRequestsCreate);
         var syncStatuses = await SyncStatusesAsync(items, cancellationToken);
 
         var rows = items.Select(i => new RemsClientFormRow(
@@ -172,7 +175,9 @@ public sealed class RemsEngagementController : ControllerBase
             CanHandBack: mayAssign && i.AdminAssignedToId is { } holder && holder == me,
             NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
             MaconomySyncStatus: syncStatuses.TryGetValue(i.RemsId, out var sync) ? sync.Customer : null,
-            MaconomyJobSync: sync.Job));
+            MaconomyJobSync: sync.Job,
+            CopiedFromRemsNumber: i.CopiedFromRemsNumber,
+            CanCopy: mayCopy));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }
@@ -1050,9 +1055,19 @@ public sealed class RemsEngagementController : ControllerBase
             }
         }
 
+        // The year end is the engagement's: a client with a return a year holds several. The client's own
+        // year end, Assurance's question, is filled from it only while it is still empty.
+        rems.FiscalYearEnd = request.FiscalYearEnd;
         var client = rems.Client!;
-        client.FiscalYearEnd = request.FiscalYearEnd;
-        _clients.Update(client);
+        if (client.FiscalYearEnd is null && request.FiscalYearEnd is not null)
+        {
+            client.FiscalYearEnd = request.FiscalYearEnd;
+            _clients.Update(client);
+        }
+        if (await TaxFormTakenAsync(rems, request.FiscalYearEnd, request.TaxFormIds, cancellationToken) is { } taken)
+        {
+            return taken;
+        }
 
         // Every date is a row: the rule fills in what was left blank and steps aside for what was typed,
         // and a typed date is remembered as an override by whoever typed it.
@@ -1084,6 +1099,59 @@ public sealed class RemsEngagementController : ControllerBase
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
         return Ok(ApiResponseFactory.Success(view!, "Tax engagement detail updated."));
+    }
+
+    /// <summary>
+    /// The forms the client's other requests hold for a fiscal year end, so the picker can grey each with
+    /// the request holding it. Empty without a year end: the rule is per year.
+    /// </summary>
+    [HttpGet("engagements/{id:guid}/tax/taken-forms")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsTakenTaxFormView>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> TakenTaxForms(Guid id, [FromQuery] DateOnly? fiscalYearEnd, CancellationToken cancellationToken)
+    {
+        var rems = await _requests.GetByIdAsync(id, cancellationToken);
+        if (rems is null)
+        {
+            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
+        }
+        if (GuardCanRead(rems) is { } notAllowed)
+        {
+            return notAllowed;
+        }
+
+        IReadOnlyList<RemsTaxFormHolder> holders = fiscalYearEnd is { } fye
+            ? await _requests.ListTaxFormHoldersAsync(rems.ClientId, fye, rems.Id, cancellationToken)
+            : Array.Empty<RemsTaxFormHolder>();
+        var rows = holders.Select(h => new RemsTakenTaxFormView(h.TaxFormId, h.RemsId, h.RemsNumber, h.Status)).ToList();
+        return Ok(ApiResponseFactory.Success(rows, "Taken tax forms retrieved."));
+    }
+
+    /// <summary>
+    /// The refusal for a form another request of the client already holds for the same year end, or null.
+    /// A client holds each form once a year; the two tables that say so cannot be tied by an index.
+    /// </summary>
+    private async Task<IActionResult?> TaxFormTakenAsync(
+        RemsRequest rems, DateOnly? fiscalYearEnd, IReadOnlyCollection<Guid> formIds, CancellationToken cancellationToken)
+    {
+        if (fiscalYearEnd is not { } fye || formIds.Count == 0)
+        {
+            return null;
+        }
+        var holders = await _requests.ListTaxFormHoldersAsync(rems.ClientId, fye, rems.Id, cancellationToken);
+        if (holders.FirstOrDefault(h => formIds.Contains(h.TaxFormId)) is not { } clash)
+        {
+            return null;
+        }
+        var label = await TaxFormLabelAsync(clash.TaxFormId, cancellationToken) ?? "That form";
+        var message = $"{label} is already on {clash.RemsNumber} for the fiscal year ending {fye:d MMM yyyy}. A client holds each form once a year.";
+        return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(CodeTaxFormTaken, message, message));
+    }
+
+    private async Task<string?> TaxFormLabelAsync(Guid formId, CancellationToken cancellationToken)
+    {
+        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), EntityType.Rems, TaxFormSetKey, cancellationToken);
+        return set?.Items.FirstOrDefault(i => i.Id == formId)?.Label;
     }
 
     private async Task WriteTaxDueDatesAsync(RemsRequest rems, UpdateRemsTaxDetailRequest request, Guid? me, CancellationToken cancellationToken)

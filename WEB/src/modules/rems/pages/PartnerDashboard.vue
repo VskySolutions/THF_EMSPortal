@@ -145,6 +145,14 @@
           >
             <q-tooltip>{{ workAction.label }}</q-tooltip>
           </q-btn>
+          <!-- Copy: a new draft for the same client with the setup carried over and the tax card blank. -->
+          <q-btn
+            v-if="cell.row.actions?.canCopy" type="a"
+            flat round dense color="primary" icon="o_file_copy"
+            :loading="copying === cell.row.id" @click.stop="copyRequest(cell.row)"
+          >
+            <q-tooltip>Copy — a new request for the same client with this engagement setup carried over</q-tooltip>
+          </q-btn>
           <!-- What has been emailed to the client about this request, and the way to chase them again. -->
           <q-btn
             v-if="canReadEmailLog && emsFormActivity(cell.row)" type="a"
@@ -204,6 +212,7 @@ import { useRouter } from "vue-router";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useAuthStore } from "stores/auth";
 import { usePermissions, Permissions } from "composables/usePermissions";
+import { useConfirm } from "composables/useConfirm";
 import { useNotify } from "composables/useNotify";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
@@ -237,6 +246,7 @@ const router = useRouter();
 const auth = useAuthStore();
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
+const { confirm } = useConfirm();
 const { has } = usePermissions();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
@@ -440,6 +450,30 @@ watch(rows, (list) => {
 // Straight to the form.
 const viewRoute = (row) => ({ name: "rems_request", params: { id: row.id } });
 const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.id } });
+
+// ---- Copy ----
+// A new draft for the same client with the setup carried over; it opens on the setup tab, where the blank
+// tax card is the first thing to fill.
+const copying = ref(null);
+const copyRequest = async (row) => {
+  const ok = await confirm({
+    title: "Copy this request",
+    message: `A new draft for ${row.clientName} with ${row.remsNumber}'s engagement setup carried over — team, ` +
+      "fees, marketing tags, commission and files. Its fiscal year end, due dates and tax form start blank. Continue?",
+    confirmLabel: "Copy"
+  });
+  if (!ok) return;
+  copying.value = row.id;
+  try {
+    const copy = await remsApi.copy(row.id);
+    notify.success(`${copy.remsNumber} created from ${row.remsNumber}.`);
+    router.push({ name: "rems_request_edit", params: { id: copy.id }, query: { tab: "setup" } });
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    copying.value = null;
+  }
+};
 
 // ---- Create ----
 // The same page as Edit, on its own path.

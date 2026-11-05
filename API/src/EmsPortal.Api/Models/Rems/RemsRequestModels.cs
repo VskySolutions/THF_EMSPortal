@@ -133,13 +133,18 @@ public sealed record RemsSendBackView(
 /// <summary>A user reference (id + display name) for the assigned admin / CSE columns.</summary>
 public sealed record RemsUserRef(Guid Id, string Name);
 
+/// <summary>Another request, by id and number: the one a copy was made from.</summary>
+public sealed record RemsRequestRef(Guid Id, string RemsNumber);
+
 /// <summary>Which row actions the caller may perform on a request (drives the dashboard action menu).</summary>
 public sealed record RemsRowActions(
     bool CanView,
     bool CanEdit,
     /// <summary>The caller may claim this request as its reviewing admin.</summary>
     bool CanPickUp,
-    bool CanDelete);
+    bool CanDelete,
+    /// <summary>The caller may raise a new request from this one's engagement setup.</summary>
+    bool CanCopy = false);
 
 /// <summary>Dashboard list row for a REMS request (WO-111).</summary>
 public sealed record RemsRequestRow(
@@ -174,7 +179,9 @@ public sealed record RemsRequestRow(
     /// <summary>Where posting the client to Maconomy has got to; null on a request whose client is not posted.</summary>
     RemsMaconomySyncView? MaconomySync = null,
     /// <summary>Where posting the engagement to Maconomy as a job has got to.</summary>
-    RemsMaconomyJobSyncView? MaconomyJobSync = null);
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
+    /// <summary>The request this one was copied from, when it was made with Copy.</summary>
+    RemsRequestRef? CopiedFrom = null);
 
 /// <summary>An attached file on a request detail (linked media).</summary>
 public sealed record RemsFileRef(
@@ -230,7 +237,16 @@ public sealed record RemsRequestDetail(
     /// <summary>Where posting the client to Maconomy has got to; null on a request whose client is not posted.</summary>
     RemsMaconomySyncView? MaconomySync = null,
     /// <summary>Where posting the engagement to Maconomy as a job has got to.</summary>
-    RemsMaconomyJobSyncView? MaconomyJobSync = null);
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
+    /// <summary>The request this one was copied from, when it was made with Copy.</summary>
+    RemsRequestRef? CopiedFrom = null,
+    /// <summary>
+    /// Submit for review is offered: a draft copy of the caller's, handed to the admins without a form
+    /// because its client answered the intake on the request it was copied from.
+    /// </summary>
+    bool CanSubmitForReview = false,
+    /// <summary>Why the offered Submit for review is not possible yet: the client's intake is not on file.</summary>
+    string? SubmitForReviewBlockedReason = null);
 
 /// <summary>A client-lookup result (WO-111).</summary>
 public sealed record RemsClientLookupItem(

@@ -59,11 +59,18 @@ public class RemsRequest : AuditableEntity
     public DateTime? MaconomyJobSyncedOnUtc { get; set; }
     public string? MaconomyJobSyncError { get; set; }
 
+    /// <summary>The tax engagement's fiscal year end. The client's own year end stays on the client, for Assurance.</summary>
+    public DateOnly? FiscalYearEnd { get; set; }
+
+    /// <summary>The request this one was made from with Copy, or null.</summary>
+    public Guid? CopiedFromRemsId { get; set; }
+
     // ---- Navigations ----
     public OptionSetItem? Type { get; set; }
     public OptionSetItem? Status { get; set; }
     public Client? Client { get; set; }
     public ClientContract? Contract { get; set; }
+    public RemsRequest? CopiedFrom { get; set; }
     public User? CSE { get; set; }
     public User? AdminAssignedTo { get; set; }
     public User? OnBehalfOfUser { get; set; }

@@ -37,8 +37,8 @@ public static class MaconomyJobDataMapping
             NumberField, "Job number", "Maconomy's number series",
             "Never sent. Written back onto the request once the job is created.", ReadBack: true),
         new MaconomyFieldMapping(
-            NameField, "Job name", "Client name.Service Line",
-            "A person as \"Last First\", an organisation by its legal name, a Maconomy-picked client as Maconomy names it; then a dot and the Service Line label.", ReadBack: false),
+            NameField, "Job name", "Client name.Service Line[.Fiscal year.Tax form]",
+            "A person as \"Last First\", an organisation by its legal name, a Maconomy-picked client as Maconomy names it; then a dot and the Service Line label; an engagement with a tax form adds the fiscal year (yyyy) and the form, so one client's returns are different jobs.", ReadBack: false),
         new MaconomyFieldMapping(
             CustomerField, "Customer number", "The client's Maconomy customer number",
             "From the customer sync, or the Maconomy customer picked on the request. Without one the request is not eligible.", ReadBack: false),
@@ -86,12 +86,22 @@ public static class MaconomyJobDataMapping
         return string.IsNullOrWhiteSpace(context.DefaultTemplateNumber) ? null : context.DefaultTemplateNumber.Trim();
     }
 
-    /// <summary>"{client name}.{Service Line label}", the format the user set on 31 Oct 2026. Needs the service line loaded.</summary>
+    /// <summary>
+    /// "{client name}.{Service Line label}", the format the user set on 31 Oct 2026. An engagement with a tax
+    /// form adds ".{fiscal year yyyy}.{tax form label}" (5 Nov 2026): one form per REMS, so the year and the
+    /// form are what tell a client's returns apart. Needs the service line and the tax forms loaded.
+    /// </summary>
     public static string JobNameOf(RemsRequest request)
     {
         var client = request.Client is { } c ? ClientNameOf(c) : string.Empty;
-        var line = request.ServiceLine?.Label?.Trim();
-        return string.IsNullOrEmpty(line) ? client : $"{client}.{line}";
+        var parts = new List<string?> { request.ServiceLine?.Label?.Trim() };
+        var form = request.TaxForms.FirstOrDefault(f => !f.Deleted)?.TaxForm?.Label?.Trim();
+        if (!string.IsNullOrEmpty(form))
+        {
+            parts.Add(request.FiscalYearEnd?.Year.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            parts.Add(form);
+        }
+        return string.Join(".", new[] { client }.Concat(parts.Where(p => !string.IsNullOrEmpty(p))));
     }
 
     /// <summary>A person as "LastName FirstName", an organisation as its name; a Maconomy-picked client as Maconomy names it.</summary>

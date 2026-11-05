@@ -303,21 +303,27 @@
             />
           </div>
 
-          <div class="section-subhead">Tax Forms <span class="text-negative">*</span></div>
+          <div class="section-subhead">Tax Form <span class="text-negative">*</span></div>
           <!-- Beside the list, not in its place: the list has to stay on screen for the caption to be
-               answerable. -->
-          <div v-if="!taxFormUnavailable && !tax.taxFormIds.length" class="text-caption text-negative q-mb-xs">
-            Select at least one tax form.
+               answerable. One form per REMS: another return is a Copy of this request. -->
+          <div v-if="!taxFormUnavailable && !tax.taxFormId" class="text-caption text-negative q-mb-xs">
+            Select the tax form. A REMS carries one return; copy the request for another.
           </div>
           <div v-if="taxFormUnavailable" class="text-caption text-grey-6">
             The tax-form list could not be loaded for your account.
           </div>
-          <!-- Three across on a desktop, two on a tablet, one on a phone. -->
+          <!-- Three across on a desktop, two on a tablet, one on a phone. A form another request of this
+               client holds for the same year end is greyed, with that request's number beside it. -->
           <div v-else class="row q-col-gutter-x-md">
-            <q-checkbox
-              v-for="opt in taxFormOptions" :key="opt.value" v-model="tax.taxFormIds" :val="opt.value"
-              :label="opt.label" :disable="!editable" class="col-12 col-sm-6 col-md-4"
-            />
+            <q-radio
+              v-for="opt in taxFormChoices" :key="opt.value" v-model="tax.taxFormId" :val="opt.value"
+              :label="opt.holder ? `${opt.label} — ${opt.holder.remsNumber}` : opt.label"
+              :disable="!editable || !!opt.holder" class="col-12 col-sm-6 col-md-4"
+            >
+              <q-tooltip v-if="opt.holder">
+                Already on {{ opt.holder.remsNumber }} for this fiscal year end. A client holds each form once a year.
+              </q-tooltip>
+            </q-radio>
           </div>
         </q-card-section>
       </q-card>
@@ -451,7 +457,8 @@ const buildTax = (t) => {
     fiscalYearEnd,
     originalDueDate: t?.originalDueDate || derived.originalDueDate,
     firstExtensionDueDate: t?.firstExtensionDueDate || derived.firstExtensionDueDate,
-    taxFormIds: [...(t?.taxFormIds || [])]
+    // One form per REMS since 5 Nov 2026; the API still carries a list, of at most one.
+    taxFormId: (t?.taxFormIds || [])[0] || null
   };
 };
 const tax = ref(buildTax(props.engagement.tax));
@@ -588,6 +595,31 @@ const attestCardTitle = computed(() =>
 // none there is nothing to derive from and both boxes are simply blank.
 const dueDateHint = computed(() =>
   (tax.value.fiscalYearEnd ? "From the fiscal year end. Change either date if this return differs." : ""));
+
+// ---- The forms the client already files for this year end ----
+// Held by the client's OTHER requests, re-read whenever the year end moves: the rule is per fiscal year. A
+// held form is greyed with its request's number rather than hidden, so the reader sees why it is not offered.
+const takenForms = ref([]);
+const loadTakenForms = async () => {
+  const id = props.engagement?.id;
+  const fye = tax.value.fiscalYearEnd;
+  if (!id || !fye || !showTax.value) {
+    takenForms.value = [];
+    return;
+  }
+  try {
+    takenForms.value = await remsApi.taxTakenForms(id, fye);
+  } catch {
+    takenForms.value = [];
+  }
+  // A pick the new year end has just made unavailable is let go rather than saved and refused.
+  if (takenForms.value.some((t) => t.taxFormId === tax.value.taxFormId)) tax.value.taxFormId = null;
+};
+const taxFormChoices = computed(() => props.taxFormOptions.map((opt) => ({
+  ...opt,
+  holder: takenForms.value.find((t) => t.taxFormId === opt.value) || null
+})));
+watch(() => [props.engagement?.id, tax.value.fiscalYearEnd, showTax.value], loadTakenForms, { immediate: true });
 
 const departmentChangedUnsaved = computed(() => core.value.department !== props.engagement.department);
 
@@ -876,7 +908,7 @@ const saveSetup = async (engagementId, remsId = null) => {
       fiscalYearEnd: tax.value.fiscalYearEnd || null,
       originalDueDate: tax.value.originalDueDate || null,
       firstExtensionDueDate: tax.value.firstExtensionDueDate || null,
-      taxFormIds: tax.value.taxFormIds
+      taxFormIds: tax.value.taxFormId ? [tax.value.taxFormId] : []
     });
   }
   if (cafFile.value) {

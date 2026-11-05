@@ -94,6 +94,11 @@ public static class ActivityEventTypes
     public const string RemsRejected = "RemsRejected";
     public const string RemsFullyApproved = "RemsFullyApproved";
 
+    // Copy: a request made from another's setup (on both), and the copy's hand-off to the admins without a form.
+    public const string RemsCopiedFrom = "RemsCopiedFrom";
+    public const string RemsCopiedTo = "RemsCopiedTo";
+    public const string RemsSubmittedForReview = "RemsSubmittedForReview";
+
     // The customer sync: what became of posting the request's new client to Maconomy.
     public const string RemsMaconomyCustomerSynced = "RemsMaconomyCustomerSynced";
     public const string RemsMaconomyCustomerSyncFailed = "RemsMaconomyCustomerSyncFailed";

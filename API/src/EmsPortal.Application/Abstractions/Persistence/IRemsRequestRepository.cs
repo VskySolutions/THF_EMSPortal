@@ -43,6 +43,12 @@ public interface IRemsRequestRepository
     /// <summary>Whether another live request names the same client.</summary>
     Task<bool> IsClientSharedAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default);
 
+    /// <summary>When the client last submitted an intake form, on any of their requests; null while their answers are not on file.</summary>
+    Task<DateTime?> LatestFormSubmittedOnAsync(Guid clientId, CancellationToken cancellationToken = default);
+
+    /// <summary>The tax forms the client's OTHER requests hold for a fiscal year end, with the request holding each.</summary>
+    Task<IReadOnlyList<RemsTaxFormHolder>> ListTaxFormHoldersAsync(Guid clientId, DateOnly fiscalYearEnd, Guid excludingRemsId, CancellationToken cancellationToken = default);
+
     /// <summary>A client's requests, newest first, with type and status.</summary>
     Task<IReadOnlyList<RemsRequest>> ListByClientAsync(Guid clientId, CancellationToken cancellationToken = default);
 
@@ -118,3 +124,6 @@ public interface IRemsRequestRepository
 
 /// <summary>Approved requests by Maconomy job sync state: created, failed (lost attempts included), under way, and still to post.</summary>
 public sealed record RemsMaconomyJobSyncCounts(int Synced, int Failed, int Syncing, int Waiting);
+
+/// <summary>A tax form another request of the same client holds for the same fiscal year end.</summary>
+public sealed record RemsTaxFormHolder(Guid TaxFormId, Guid RemsId, string RemsNumber, string Status);

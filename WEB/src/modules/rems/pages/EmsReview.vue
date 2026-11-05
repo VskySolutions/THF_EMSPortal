@@ -60,7 +60,9 @@
             flat dense no-caps color="primary" class="text-weight-medium"
             :label="cell.row.remsNumber" :to="viewRoute(cell.row)"
           >
-            <q-tooltip>Open the request</q-tooltip>
+            <q-tooltip>
+              {{ cell.row.copiedFromRemsNumber ? `Open the request — copied from ${cell.row.copiedFromRemsNumber}` : "Open the request" }}
+            </q-tooltip>
           </q-btn>
         </q-td>
       </template>
@@ -168,6 +170,15 @@
           >
             <q-tooltip>{{ editBlocked(cell.row) || workAction.label }}</q-tooltip>
           </q-btn>
+          <!-- Copy: a new draft for the same client with the setup carried over and the tax card blank. On an
+               approved request too — a return added later starts here. -->
+          <q-btn
+            v-if="cell.row.canCopy" type="a"
+            flat round dense color="primary" icon="o_file_copy"
+            :loading="copying === cell.row.remsId" @click.stop="copyRequest(cell.row)"
+          >
+            <q-tooltip>Copy — a new request for the same client with this engagement setup carried over</q-tooltip>
+          </q-btn>
           <!-- What the client has been emailed about this request and what came back, plus the reminder for
                one who still has not answered. -->
           <q-btn
@@ -217,6 +228,7 @@
 
 <script setup>
 import { ref, computed, watch, toRef, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
@@ -248,6 +260,8 @@ import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySy
 import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
 
 const notify = useNotify();
+// Only for Copy: the new draft opens for editing at once.
+const router = useRouter();
 const { confirm } = useConfirm();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
@@ -457,6 +471,30 @@ const handBack = async (row) => {
 // The review surface IS the form: it opens both the client's answers and the engagement setup.
 const viewRoute = (row) => ({ name: "rems_request", params: { id: row.remsId } });
 const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.remsId } });
+
+// ---- Copy ----
+// A new draft for the same client with the setup carried over. It opens for editing at once, on the setup
+// tab: the tax card on it is blank and is the first thing to fill.
+const copying = ref(null);
+const copyRequest = async (row) => {
+  const ok = await confirm({
+    title: "Copy this request",
+    message: `A new draft for ${row.clientName} with ${row.remsNumber}'s engagement setup carried over — team, ` +
+      "fees, marketing tags, commission and files. Its fiscal year end, due dates and tax form start blank. Continue?",
+    confirmLabel: "Copy"
+  });
+  if (!ok) return;
+  copying.value = row.remsId;
+  try {
+    const copy = await remsApi.copy(row.remsId);
+    notify.success(`${copy.remsNumber} created from ${row.remsNumber}.`);
+    router.push({ name: "rems_request_edit", params: { id: copy.id }, query: { tab: "setup" } });
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    copying.value = null;
+  }
+};
 
 // ---- Conversation ----
 // The REQUEST's thread, the same one every other REMS surface opens — so a message left here reaches the

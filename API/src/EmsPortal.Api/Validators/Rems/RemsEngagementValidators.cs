@@ -125,14 +125,16 @@ public sealed class UpdateRemsGovernmentDetailRequestValidator : AbstractValidat
     }
 }
 
-/// <summary>Validates a tax-detail update (WO-114): no duplicate tax-form ids.</summary>
+/// <summary>Validates a tax-detail update (WO-114): at most one tax form, since 5 Nov 2026 a tax REMS is one return.</summary>
 public sealed class UpdateRemsTaxDetailRequestValidator : AbstractValidator<UpdateRemsTaxDetailRequest>
 {
     public UpdateRemsTaxDetailRequestValidator()
     {
         RuleFor(x => x.TaxFormIds)
             .Must(ids => ids.Distinct().Count() == ids.Count)
-            .WithMessage("taxFormIds must not contain duplicates.");
+            .WithMessage("taxFormIds must not contain duplicates.")
+            .Must(ids => ids.Count <= 1)
+            .WithMessage("taxFormIds holds at most one form: a tax REMS carries one return. Copy the request for another.");
     }
 }
 

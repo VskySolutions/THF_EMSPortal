@@ -331,14 +331,15 @@
                         <div class="rems-value">{{ dateOnly(engagement.tax?.dueDates?.extendedDueDate) }}</div>
                       </div>
                     </div>
-                    <div class="rems-subhead q-mt-md">Tax Forms</div>
+                    <!-- One per REMS since 5 Nov 2026; rows from before may still carry several. -->
+                    <div class="rems-subhead q-mt-md">Tax Form</div>
                     <div v-if="taxForms.length" class="row q-gutter-xs">
                       <q-chip
                         v-for="f in taxForms" :key="f.id" dense square outline color="primary"
                         :label="f.label"
                       />
                     </div>
-                    <div v-else class="rems-value text-grey-6">No tax forms selected.</div>
+                    <div v-else class="rems-value text-grey-6">No tax form selected.</div>
                   </q-card-section>
                 </q-card>
 

@@ -11,6 +11,13 @@
         <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
         <!-- And whether the approved engagement has become a Maconomy job. -->
         <maconomy-sync-chip v-if="request?.maconomyJobSync" kind="job" :sync="request.maconomyJobSync" />
+        <!-- Made with Copy: the request it came from, one click away. -->
+        <q-chip
+          v-if="request?.copiedFrom" clickable dense square outline color="primary" icon="o_file_copy"
+          :label="`Copied from ${request.copiedFrom.remsNumber}`" @click="openCopiedFrom"
+        >
+          <q-tooltip>Open {{ request.copiedFrom.remsNumber }}, the request this one was copied from</q-tooltip>
+        </q-chip>
         <div v-if="autoSaveOn" class="rf-save" :class="`rf-save--${saveChip.tone}`">
           <q-spinner v-if="saveState === 'saving'" size="14px" />
           <q-icon v-else :name="saveChip.icon" size="15px" />
@@ -54,6 +61,15 @@
             >
               <q-tooltip>Copy the client's intake form link</q-tooltip>
             </q-btn>
+            <!-- A new request from this one's setup: a client's next return starts here, not from blank. -->
+            <q-btn
+              v-if="canCopy" outline no-caps color="primary" icon="o_file_copy" label="Copy"
+              :loading="copying" @click="copyRequest"
+            >
+              <q-tooltip max-width="320px">
+                A new draft for the same client with this engagement setup carried over; its tax card starts blank
+              </q-tooltip>
+            </q-btn>
 
             <!-- The moves. Each one hands the request on, and no stage offers more than two of them. -->
             <!-- Claiming the request. -->
@@ -72,6 +88,14 @@
               label="Submit to Client" :disable="!readyToSend" @click="openSend"
             >
               <q-tooltip v-if="!readyToSend">{{ sendBlockedReason }}</q-tooltip>
+            </q-btn>
+            <!-- A copy's hand-off: its client answered the intake on the request it was copied from, so
+               nothing goes to them. Up here on the same terms as Submit to Client. -->
+            <q-btn
+              v-if="canSubmitForReview && !hasFinishTab" unelevated no-caps color="teal-7" icon="o_send"
+              label="Submit for review" :disable="!readyToSubmitForReview" :loading="acting" @click="submitForReview"
+            >
+              <q-tooltip v-if="!readyToSubmitForReview" max-width="320px">{{ submitForReviewBlockedReason }}</q-tooltip>
             </q-btn>
             <q-btn
               v-if="canRemind" unelevated no-caps color="amber-8" icon="o_notifications_active"
@@ -335,10 +359,18 @@
                 <!-- Commission is where the initiator's own work ends: past it the tabs are the client's
                      answers and the approvers' round, neither of which they fill in. -->
                 <q-btn
-                  v-if="atFinishTab" unelevated dense no-caps color="teal-7" icon="o_send"
+                  v-if="atFinishTab && canSendToClient" unelevated dense no-caps color="teal-7" icon="o_send"
                   label="Submit to Client" class="q-px-md" :disable="!readyToSend" @click="openSend"
                 >
                   <q-tooltip v-if="!readyToSend">{{ sendBlockedReason }}</q-tooltip>
+                </q-btn>
+                <!-- On a copy the client is not asked again: the copy goes straight to the admins. -->
+                <q-btn
+                  v-if="atFinishTab && canSubmitForReview" unelevated dense no-caps color="teal-7" icon="o_send"
+                  label="Submit for review" class="q-px-md" :disable="!readyToSubmitForReview" :loading="acting"
+                  @click="submitForReview"
+                >
+                  <q-tooltip v-if="!readyToSubmitForReview" max-width="320px">{{ submitForReviewBlockedReason }}</q-tooltip>
                 </q-btn>
               </div>
             </div>
@@ -726,8 +758,13 @@ const noEngagementNote = computed(() => (workspaceDenied.value
 
 // ---- Actions available now ----
 // None of them apply to a request that does not exist yet: they all act on a saved record.
+// A copy never sends the form: its client answered the intake on the request it was copied from.
+const isCopy = computed(() => !!request.value?.copiedFrom);
 const canSendToClient = computed(() =>
-  !isNew.value && status.value === REMS_STATUS.DRAFT && has(Permissions.RemsFormsSend));
+  !isNew.value && !isCopy.value && status.value === REMS_STATUS.DRAFT && has(Permissions.RemsFormsSend));
+// The server's answer — a draft copy of the caller's — and, separately, whether the client's intake is in yet.
+const canSubmitForReview = computed(() => !!request.value?.canSubmitForReview);
+const canCopy = computed(() => !isNew.value && !!request.value?.actions?.canCopy);
 const canRemind = computed(() =>
   status.value === REMS_STATUS.AWAITING_CUSTOMER && has(Permissions.RemsFormsSend));
 // There is a log to read once something has been emailed; before the intake link goes out it would open
@@ -866,7 +903,25 @@ const canEditSubmission = computed(() => showSubmittedPane.value && isAdmin.valu
 // to the read-only page.
 const canManage = computed(() =>
   canEditAnything.value || canEditSubmission.value || canPickUp.value || canHandBack.value ||
-  canSendBack.value || canReturnToAdmin.value || canSendToClient.value || canRemind.value);
+  canSendBack.value || canReturnToAdmin.value || canSendToClient.value || canSubmitForReview.value ||
+  canRemind.value);
+
+// Submit for review wants what Submit to Client wants, less the email the form needs — and the client's
+// intake on file, which the server alone knows.
+const submitForReviewBlockedReason = computed(() => {
+  if (request.value?.submitForReviewBlockedReason) return request.value.submitForReviewBlockedReason;
+  if (saveBlocked.value) {
+    return `Not submitted while a change is unsaved — ${(saveMessage.value || "see the save status above").replace(/\.$/, "")}.`;
+  }
+  if (!setupForm.cseUserId) return "Choose a CSE first — it is under Client Information.";
+  if (!setupForm.entityType) return "Choose an entity type under Client Information.";
+  if (!setupForm.industry) return "Choose an industry under Client Information.";
+  if (!commissionAllocated.value) {
+    return `Commission totals ${commissionTotal.value}% — the recipients under Commission must add up to 100% first.`;
+  }
+  return "";
+});
+const readyToSubmitForReview = computed(() => !submitForReviewBlockedReason.value);
 
 // The pane's caption.
 const submittedNote = computed(() => (isEditing.value && canEditSubmission.value
@@ -1038,8 +1093,10 @@ const nextTab = computed(() => stepTab(1));
 const FINISH_TAB = "commission";
 const hasFinishTab = computed(() =>
   isEditing.value && tabs.value.some((t) => t.name === FINISH_TAB && !t.disable));
-// Only where there is something to finish WITH — Submit to Client is the whole of finishing here.
-const atFinishTab = computed(() => tab.value === FINISH_TAB && canSendToClient.value);
+// Only where there is something to finish WITH — Submit to Client, or on a copy Submit for review, is the
+// whole of finishing here.
+const atFinishTab = computed(() =>
+  tab.value === FINISH_TAB && (canSendToClient.value || canSubmitForReview.value));
 // Finishing does not REPLACE stepping on.
 const showNext = computed(() => !!nextTab.value);
 
@@ -1161,7 +1218,9 @@ const setupRows = computed(() => {
       ? [
         { label: "Fiscal Year End", value: dateOnly(e.tax?.fiscalYearEnd) },
         { label: "Original Due Date", value: dateOnly(e.tax?.originalDueDate) },
-        { label: "First Extension Due Date", value: dateOnly(e.tax?.firstExtensionDueDate) }
+        { label: "First Extension Due Date", value: dateOnly(e.tax?.firstExtensionDueDate) },
+        // One per REMS; the list the API carries holds at most one.
+        { label: "Tax Form", value: labelOf(taxFormOptions.value, e.tax?.taxFormIds?.[0]) }
       ]
       : []),
     // The remaining conditional blocks say nothing when they do not apply, so they are hidden rather than
@@ -1737,6 +1796,65 @@ const openSend = async () => {
     return;
   }
   sendOpen.value = true;
+};
+
+// A copy's hand-off to the admins. No form goes out: the client answered the intake on the request it was
+// copied from. Confirmed because it is the initiator's last move on the copy.
+const submitForReview = async () => {
+  const said = announcements;
+  await flushSaves();
+  if (savePending.value) {
+    if (announcements === said) sayUnsaved(true);
+    return;
+  }
+  const number = request.value?.remsNumber || "This request";
+  const source = request.value?.copiedFrom?.remsNumber || "the request it was copied from";
+  const ok = await confirm({
+    title: "Submit for review",
+    message: `${number} goes to the admins for review. The client is not emailed: their intake form came in ` +
+      `with ${source}. Continue?`,
+    confirmLabel: "Submit for review"
+  });
+  if (!ok) return;
+  acting.value = true;
+  try {
+    await remsApi.submitForReview(remsId.value);
+    notify.success(`${number} is with the admins for review.`);
+    await load();
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    acting.value = false;
+  }
+};
+
+// A new request from this one's setup. Its tax card starts blank: a copy is another return, with a year end
+// and a form of its own, so it opens on the setup tab where that is filled.
+const copying = ref(false);
+const copyRequest = async () => {
+  await flushSaves();
+  const ok = await confirm({
+    title: "Copy this request",
+    message: `A new draft for ${request.value?.clientName || "the same client"} with this engagement setup ` +
+      "carried over — team, fees, marketing tags, commission and files. Its fiscal year end, due dates and " +
+      "tax form start blank. Continue?",
+    confirmLabel: "Copy"
+  });
+  if (!ok) return;
+  copying.value = true;
+  try {
+    const copy = await remsApi.copy(remsId.value);
+    notify.success(`${copy.remsNumber} created from ${request.value?.remsNumber}.`);
+    router.push({ name: ROUTE_EDIT, params: { id: copy.id }, query: { tab: "setup" } });
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    copying.value = false;
+  }
+};
+
+const openCopiedFrom = () => {
+  if (request.value?.copiedFrom) router.push({ name: ROUTE_VIEW, params: { id: request.value.copiedFrom.id } });
 };
 
 const openReminder = async () => {

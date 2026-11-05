@@ -55,6 +55,8 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.HasOne(r => r.EngagementExecutive).WithMany().HasForeignKey(r => r.EngagementExecutiveId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.BillingManager).WithMany().HasForeignKey(r => r.BillingManagerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<User>().WithMany().HasForeignKey(r => r.MaconomyJobSyncedById).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(r => r.CopiedFrom).WithMany().HasForeignKey(r => r.CopiedFromRemsId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => r.CopiedFromRemsId).HasFilter("[CopiedFromRemsId] IS NOT NULL");
         // Type, status and client are on every row the API hands out; AutoInclude makes forgetting impossible.
         builder.Navigation(r => r.Type).AutoInclude();
         builder.Navigation(r => r.Status).AutoInclude();

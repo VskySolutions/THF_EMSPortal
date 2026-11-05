@@ -17,6 +17,7 @@ internal static class RemsRequestQueries
             .Include(r => r.JobTemplate)
             .Include(r => r.BillingPeriod)
             .Include(r => r.Contract)
+            .Include(r => r.CopiedFrom)
             .Include(r => r.Files.Where(f => !f.Deleted)).ThenInclude(f => f.Media)
             .Include(r => r.PersonnelRates.Where(x => !x.Deleted)).ThenInclude(x => x.PersonnelLevel)
             .Include(r => r.MarketingMethods.Where(x => !x.Deleted)).ThenInclude(x => x.MarketingMethod)

@@ -38,6 +38,7 @@ namespace EmsPortal.Api.Controllers;
 public sealed class RemsApprovalController : ControllerBase
 {
     private const string CodeSetupIncomplete = "REMS_SETUP_INCOMPLETE";
+    private const string CodeTaxFormTaken = "REMS_TAX_FORM_TAKEN";
     private const string CodeMarketingRequired = "REMS_MARKETING_REQUIRED";
     private const string CodeCommissionNotFullyAllocated = "REMS_COMMISSION_NOT_FULLY_ALLOCATED";
     private const string CodeCafRequired = "REMS_CAF_REQUIRED";
@@ -266,6 +267,10 @@ public sealed class RemsApprovalController : ControllerBase
         {
             return prereqError;
         }
+        if (await TaxFormTakenAsync(request, cancellationToken) is { } taken)
+        {
+            return taken;
+        }
 
         var route = await BuildRouteAsync(request, cancellationToken);
         if (route.BlockedReason is { } blocked)
@@ -313,6 +318,10 @@ public sealed class RemsApprovalController : ControllerBase
         if (ValidateApprovalPrerequisites(request) is { } prereqError)
         {
             return prereqError;
+        }
+        if (await TaxFormTakenAsync(request, cancellationToken) is { } taken)
+        {
+            return taken;
         }
 
         var route = await BuildRouteAsync(request, cancellationToken);
@@ -1171,6 +1180,25 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     /// <summary>
+    /// The refusal for a tax form another request of the client holds for the same year end. The tax save
+    /// refuses it first; this catches two drafts saved side by side.
+    /// </summary>
+    private async Task<IActionResult?> TaxFormTakenAsync(RemsRequest request, CancellationToken cancellationToken)
+    {
+        if (!RemsEngagementCodes.IsTax(request.Department?.Value) || request.FiscalYearEnd is not { } fye
+            || request.TaxForms.FirstOrDefault(f => !f.Deleted) is not { } form)
+        {
+            return null;
+        }
+        var holder = (await _requests.ListTaxFormHoldersAsync(request.ClientId, fye, request.Id, cancellationToken))
+            .FirstOrDefault(h => h.TaxFormId == form.TaxFormId);
+        return holder is null
+            ? null
+            : ConflictResult(CodeTaxFormTaken,
+                $"{form.TaxForm?.Label ?? "This tax form"} is already on {holder.RemsNumber} for the fiscal year ending {fye:d MMM yyyy}. A client holds each form once a year.");
+    }
+
+    /// <summary>
     /// Validates the pre-approval requirements: the core setup and whatever the chosen department is
     /// asked; a marketing tag; a commission split that adds up to 100% where there is one at all.
     /// </summary>
@@ -1214,13 +1242,20 @@ public sealed class RemsApprovalController : ControllerBase
         }
 
         // Tax: the whole fiscal-year card — the year end, the two due dates that follow from it (each a row,
-        // computed or typed over), and at least one form on the checklist.
+        // computed or typed over), and exactly one form: a tax REMS is one return.
         if (RemsEngagementCodes.IsTax(department))
         {
-            if (request.Client?.FiscalYearEnd is null) missing.Add("Fiscal Year End");
+            if (request.FiscalYearEnd is null) missing.Add("Fiscal Year End");
             if (!request.TaxDueDates.Any(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.Original)) missing.Add("Original Due Date");
             if (!request.TaxDueDates.Any(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.FirstExtension)) missing.Add("First Extension Due Date");
-            if (!request.TaxForms.Any(f => !f.Deleted)) missing.Add("at least one Tax Form");
+            var forms = request.TaxForms.Count(f => !f.Deleted);
+            if (forms == 0) missing.Add("Tax Form");
+            // Rows from before the one-form rule: nothing splits them by itself.
+            if (forms > 1)
+            {
+                return ConflictResult(CodeSetupIncomplete,
+                    $"A tax REMS carries one tax form and this one holds {forms}. Keep one on it and use Copy for the others.");
+            }
         }
 
         if (missing.Count > 0)
