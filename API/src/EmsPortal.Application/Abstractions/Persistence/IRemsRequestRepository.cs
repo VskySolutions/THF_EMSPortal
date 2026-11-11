@@ -21,7 +21,7 @@ public interface IRemsRequestRepository
     /// </summary>
     Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default);
 
-    /// <summary>The request with what the Maconomy job sync reads: type, status, client with person, service line, job template.</summary>
+    /// <summary>The request with what the Maconomy job sync reads: type, status, client with person, service line, job type.</summary>
     Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>The caller's tenant's approved requests, newest change first, with the same graph loaded. The Job tab's table.</summary>
@@ -43,8 +43,8 @@ public interface IRemsRequestRepository
     /// <summary>Whether another live request names the same client.</summary>
     Task<bool> IsClientSharedAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default);
 
-    /// <summary>When the client last submitted an intake form, on any of their requests; null while their answers are not on file.</summary>
-    Task<DateTime?> LatestFormSubmittedOnAsync(Guid clientId, CancellationToken cancellationToken = default);
+    /// <summary>The client's OTHER request whose intake form is out with them and unanswered, or null. One form per client at a time.</summary>
+    Task<RemsIntakeHolder?> FindOutstandingIntakeAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default);
 
     /// <summary>The tax forms the client's OTHER requests hold for a fiscal year end, with the request holding each.</summary>
     Task<IReadOnlyList<RemsTaxFormHolder>> ListTaxFormHoldersAsync(Guid clientId, DateOnly fiscalYearEnd, Guid excludingRemsId, CancellationToken cancellationToken = default);
@@ -59,7 +59,7 @@ public interface IRemsRequestRepository
     Task<RemsPoolCounts> CountPoolScopesAsync(RemsRequestListOptions options, CancellationToken cancellationToken = default);
     Task<RemsRequestQuickCounts> CountQuickFiltersAsync(RemsRequestListOptions options, CancellationToken cancellationToken = default);
 
-    // ---- EMS Review (client forms) ----
+    // ---- COP Review (client forms) ----
 
     Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(RemsClientFormQuery query, CancellationToken cancellationToken = default);
     Task<RemsClientFormQuickCounts> CountClientFormQuickFiltersAsync(RemsClientFormQuery query, CancellationToken cancellationToken = default);
@@ -127,3 +127,6 @@ public sealed record RemsMaconomyJobSyncCounts(int Synced, int Failed, int Synci
 
 /// <summary>A tax form another request of the same client holds for the same fiscal year end.</summary>
 public sealed record RemsTaxFormHolder(Guid TaxFormId, Guid RemsId, string RemsNumber, string Status);
+
+/// <summary>The request a client's intake form went out with.</summary>
+public sealed record RemsIntakeHolder(Guid RemsId, string RemsNumber);

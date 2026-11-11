@@ -109,7 +109,7 @@ public static class BootstrapSeeder
             (Roles.TenantAdmin, "Manage a tenant's users and configuration.", Permissions.ForTenantAdmin()),
             // REMS operational roles (WO-122). Assigned per (user, tenant), stackable with other roles.
             (Roles.Partner, "REMS Partner: create and manage their own requests.", Permissions.ForPartner()),
-            (Roles.Admin, "REMS Admin: full request lifecycle, EMS Review, forms, engagements, approvals routing and email log, plus deciding approval tasks assigned to them (as CSE or commission recipient).", Permissions.ForAdmin()),
+            (Roles.Admin, "REMS Admin: full request lifecycle, COP Review, forms, engagements, approvals routing and email log, plus deciding approval tasks assigned to them (as CSE or commission recipient).", Permissions.ForAdmin()),
             // The REMS seats.
             (Roles.Cse, "REMS CSE: offerable as the Client Service Executive on an engagement, and as a commission recipient.", Permissions.ForSeatRole()),
             (Roles.EngagementExecutive, "REMS Engagement Executive: offerable as the Engagement Executive on an engagement.", Permissions.ForSeatRole()),

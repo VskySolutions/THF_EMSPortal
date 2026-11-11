@@ -42,13 +42,13 @@
 
         <!-- The number Maconomy files this value under, where the Maconomy sync needs one: the specification 6
              number on an entity type, the specification 1 number on an industry, the template job number on a
-             job template. Blank means Maconomy gets no value for it. -->
+             job type, the location number on a department. Blank means Maconomy gets no value for it. -->
         <app-text-field
           v-model="form.maconomyNumber"
           class="col-12"
           label="Maconomy number"
           maxlength="64"
-          hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Job template: the template job number."
+          hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Job type: the template job number. Department: the location number."
         />
 
         <!-- Cascading lists: tie this value to a parent-list item. -->

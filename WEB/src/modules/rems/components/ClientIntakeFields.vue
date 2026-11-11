@@ -310,7 +310,7 @@
                   class="col-12 col-sm-6 col-md-4"
                   :error="!!entityErr(i, 'fullName')" :error-message="entityErr(i, 'fullName')"
                 />
-                <!-- Required, not "email or phone": each of these becomes its own EMS request, and that
+                <!-- Required, not "email or phone": each of these becomes its own COP request, and that
                      request is opened by emailing an intake form to this address. -->
                 <app-text-field
                   v-model="entity.emailAddress" label="Email Address" type="email" required

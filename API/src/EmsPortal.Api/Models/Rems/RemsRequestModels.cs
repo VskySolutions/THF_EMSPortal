@@ -51,7 +51,7 @@ public sealed class CreateRemsRequestRequest
 
     /// <summary>
     /// The <c>REMSAdditionalEntity</c> row this request was raised from, when the initiator used the
-    /// Create EMS action on another business the client named.
+    /// Create COP action on another business the client named.
     /// </summary>
     public Guid? FromAdditionalEntityId { get; set; }
 }
@@ -181,7 +181,9 @@ public sealed record RemsRequestRow(
     /// <summary>Where posting the engagement to Maconomy as a job has got to.</summary>
     RemsMaconomyJobSyncView? MaconomyJobSync = null,
     /// <summary>The request this one was copied from, when it was made with Copy.</summary>
-    RemsRequestRef? CopiedFrom = null);
+    RemsRequestRef? CopiedFrom = null,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
+    bool IntakeReused = false);
 
 /// <summary>An attached file on a request detail (linked media).</summary>
 public sealed record RemsFileRef(
@@ -241,12 +243,31 @@ public sealed record RemsRequestDetail(
     /// <summary>The request this one was copied from, when it was made with Copy.</summary>
     RemsRequestRef? CopiedFrom = null,
     /// <summary>
-    /// Submit for review is offered: a draft copy of the caller's, handed to the admins without a form
-    /// because its client answered the intake on the request it was copied from.
+    /// Submit for review is offered: a draft the caller may finish, handed to the admins without a form
+    /// because its client's intake is on file (or on its way in on another request).
     /// </summary>
     bool CanSubmitForReview = false,
-    /// <summary>Why the offered Submit for review is not possible yet: the client's intake is not on file.</summary>
-    string? SubmitForReviewBlockedReason = null);
+    /// <summary>Why the offered Submit for review is not possible yet: the client's intake is not in yet.</summary>
+    string? SubmitForReviewBlockedReason = null,
+    /// <summary>Submit to Client is offered: a draft the caller may finish, for a client the form has to go to.</summary>
+    bool CanSendToClient = false,
+    /// <summary>The client's intake on file, from whichever request it came in on; null for a client who has not filled it.</summary>
+    RemsIntakeOnFileView? IntakeOnFile = null,
+    /// <summary>The request reused that intake instead of sending its own form: nothing was emailed, there is nothing to remind.</summary>
+    bool IntakeReused = false,
+    /// <summary>The intake form has been emailed to the client on this request.</summary>
+    bool FormSent = false,
+    /// <summary>The form is out with the client, unanswered, and THIS caller may complete it for them.</summary>
+    bool CanCompleteIntake = false,
+    /// <summary>The user who completed this request's form for the client; null when the client did.</summary>
+    string? IntakeCompletedBy = null);
+
+/// <summary>A client's intake on file: when it was completed, on which request, and by whom if not the client.</summary>
+public sealed record RemsIntakeOnFileView(
+    DateTime SubmittedOnUtc,
+    Guid? RemsId,
+    string? RemsNumber,
+    string? CompletedBy);
 
 /// <summary>A client-lookup result (WO-111).</summary>
 public sealed record RemsClientLookupItem(

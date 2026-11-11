@@ -6,7 +6,7 @@
           <q-icon name="o_apartment" size="18px" class="q-mr-xs" />Other entities
         </div>
         <div class="text-caption text-grey-7">
-          The client named these on their intake. Each one needs its own EMS.
+          The client named these on their intake. Each one needs its own COP.
         </div>
       </div>
       <q-badge v-if="outstanding" color="orange-8">{{ outstanding }} outstanding</q-badge>
@@ -15,7 +15,7 @@
     <q-list separator>
       <q-item v-for="row in rows" :key="row.id">
         <q-item-section>
-          <!-- Truncated rather than allowed to set the row's width: the Create-EMS button beside it is
+          <!-- Truncated rather than allowed to set the row's width: the Create-COP button beside it is
                fixed, so a long business name would otherwise push it off a narrow card. -->
           <q-item-label class="ellipsis">{{ row.fullName }}</q-item-label>
           <q-item-label caption class="ellipsis">
@@ -23,18 +23,18 @@
           </q-item-label>
         </q-item-section>
         <q-item-section side>
-          <!-- Once an EMS exists the row says so and links to it. -->
+          <!-- Once an COP exists the row says so and links to it. -->
           <q-btn
             v-if="row.createdRemsId" flat dense no-caps size="sm" color="positive"
-            icon="o_check_circle" :label="row.createdRemsNumber || 'EMS created'"
+            icon="o_check_circle" :label="row.createdRemsNumber || 'COP created'"
             :to="{ name: 'rems_request', params: { id: row.createdRemsId } }"
           />
           <q-btn
             v-else-if="!readonly" unelevated dense no-caps size="sm" color="primary" icon="o_add"
-            label="Create EMS" @click="$emit('create-ems', row)"
+            label="Create COP" @click="$emit('create-ems', row)"
           />
-          <!-- Read-only: the gap is stated, not offered — Create EMS is on the form. -->
-          <span v-else class="text-caption text-orange-9">No EMS yet</span>
+          <!-- Read-only: the gap is stated, not offered — Create COP is on the form. -->
+          <span v-else class="text-caption text-orange-9">No COP yet</span>
         </q-item-section>
       </q-item>
     </q-list>

@@ -9,12 +9,12 @@ namespace EmsPortal.Application.Abstractions.Integrations.Maconomy;
 /// while the sync was off. The state is five columns on the request (<see cref="RemsRequest.MaconomyJobNumber"/>,
 /// <see cref="RemsRequest.MaconomyJobSyncStatus"/>, <see cref="RemsRequest.MaconomyJobSyncedById"/>,
 /// <see cref="RemsRequest.MaconomyJobSyncedOnUtc"/>, <see cref="RemsRequest.MaconomyJobSyncError"/>).
-/// The project manager and the default template job are platform configuration; the template job
-/// numbers are the REMS Job Template option items' (<see cref="IMaconomyNumberMaps"/>).
+/// The project manager and the default template job are platform configuration; the template job and
+/// location numbers are the REMS Job Type and REMS Department option items' (<see cref="IMaconomyNumberMaps"/>).
 /// </summary>
 public interface IMaconomyJobSyncService
 {
-    /// <summary>What every row needs to answer "may this be posted now": the switch, the configured numbers, the template map.</summary>
+    /// <summary>What every row needs to answer "may this be posted now": the switch, the configured numbers, the template and location maps.</summary>
     Task<MaconomyJobSyncContext> GetContextAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -41,7 +41,7 @@ public interface IMaconomyJobSyncService
     Task<MaconomyConnection> SetEnabledAsync(Guid tenantId, bool enabled, Guid actorId, CancellationToken cancellationToken = default);
     Task<MaconomyJobSyncOverview> GetOverviewAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
-    /// <summary>The caller's tenant's approved requests, newest change first, with the client, service line and template loaded.</summary>
+    /// <summary>The caller's tenant's approved requests, newest change first, with the client, service line, template and department loaded.</summary>
     Task<IReadOnlyList<RemsRequest>> ListApprovedAsync(CancellationToken cancellationToken = default);
 }
 
@@ -57,9 +57,12 @@ public sealed record MaconomyJobSyncContext(
     bool Enabled,
     string? ProjectManagerNumber,
     string? DefaultTemplateNumber,
-    IReadOnlyDictionary<Guid, string> TemplateMap)
+    IReadOnlyDictionary<Guid, string> TemplateMap,
+    /// <summary>REMS Department item id → Maconomy location number, for the departments that carry one.</summary>
+    IReadOnlyDictionary<Guid, string> LocationMap)
 {
-    public static readonly MaconomyJobSyncContext None = new(false, false, null, null, new Dictionary<Guid, string>());
+    public static readonly MaconomyJobSyncContext None = new(
+        false, false, null, null, new Dictionary<Guid, string>(), new Dictionary<Guid, string>());
 }
 
 public sealed record MaconomyJobSyncOverview(

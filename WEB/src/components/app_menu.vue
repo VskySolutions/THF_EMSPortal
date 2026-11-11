@@ -167,7 +167,7 @@ const sections = [
       // Open to everyone, like Approvals: the list shows the requests you raised or are named on, so a
       // user with no REMS work sees an empty list rather than a menu that hides the page from them.
       { label: "My Requests", icon: "o_space_dashboard", to: "/rems/partner", permissions: null },
-      { label: "EMS Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage] },
+      { label: "COP Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage] },
       // Open to everyone too, and for a different reason from the two above: this list is not scoped to the
       // caller's own work at all.
       { label: "Related Entities", icon: "o_account_tree", to: "/rems/related-entities", permissions: null },

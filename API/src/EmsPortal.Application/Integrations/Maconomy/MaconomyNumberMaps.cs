@@ -6,7 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace EmsPortal.Application.Integrations.Maconomy;
 
 /// <summary>
-/// Default <see cref="IMaconomyNumberMaps"/>: the three lists read through the option-set repository
+/// Default <see cref="IMaconomyNumberMaps"/>: the four lists read through the option-set repository
 /// (the tenant's own copy where it has one, the standard list otherwise) and kept for a minute per
 /// tenant. Saving an item under Option Sets forgets the tenant's map, so an edit shows at once.
 /// </summary>
@@ -14,7 +14,8 @@ public sealed class MaconomyNumberMaps : IMaconomyNumberMaps
 {
     public const string EntityTypeSetKey = "REMS.EntityType";
     public const string IndustrySetKey = "REMS.Industry";
-    public const string JobTemplateSetKey = "REMS.JobTemplate";
+    public const string JobTypeSetKey = "REMS.JobType";
+    public const string DepartmentSetKey = "REMS.Department";
 
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(1);
 
@@ -36,7 +37,8 @@ public sealed class MaconomyNumberMaps : IMaconomyNumberMaps
         var map = new MaconomyNumberMap(
             await ListAsync(tenantId, EntityTypeSetKey, cancellationToken),
             await ListAsync(tenantId, IndustrySetKey, cancellationToken),
-            await ListAsync(tenantId, JobTemplateSetKey, cancellationToken));
+            await ListAsync(tenantId, JobTypeSetKey, cancellationToken),
+            await ListAsync(tenantId, DepartmentSetKey, cancellationToken));
         _cache.Set(Key(tenantId), map, Lifetime);
         return map;
     }
@@ -54,7 +56,7 @@ public sealed class MaconomyNumberMaps : IMaconomyNumberMaps
         return (await _sets.ListItemsAsync(set.Id, cancellationToken))
             .OrderBy(i => i.SortOrder)
             .ThenBy(i => i.Label)
-            .Select(i => new MaconomyNumbered(i.Id, i.Value, i.Label, string.IsNullOrWhiteSpace(i.MaconomyNumber) ? null : i.MaconomyNumber.Trim()))
+            .Select(i => new MaconomyNumbered(i.Id, i.Value, i.Label, string.IsNullOrWhiteSpace(i.MaconomyNumber) ? null : i.MaconomyNumber.Trim(), i.IsActive))
             .ToList();
     }
 

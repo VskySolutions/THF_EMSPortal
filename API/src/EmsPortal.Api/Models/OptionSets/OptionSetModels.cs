@@ -34,7 +34,7 @@ public sealed class CreateOptionItemRequest
     public string? Icon { get; set; }
     public string? MetadataJson { get; set; }
 
-    /// <summary>The number Maconomy files this value under (entity type, industry, template job); null for none.</summary>
+    /// <summary>The number Maconomy files this value under (entity type, industry, template job, department); null for none.</summary>
     public string? MaconomyNumber { get; set; }
 }
 
@@ -51,7 +51,7 @@ public sealed class UpdateOptionItemRequest
     public string? Icon { get; set; }
     public string? MetadataJson { get; set; }
 
-    /// <summary>The number Maconomy files this value under (entity type, industry, template job); null for none.</summary>
+    /// <summary>The number Maconomy files this value under (entity type, industry, template job, department); null for none.</summary>
     public string? MaconomyNumber { get; set; }
 }
 

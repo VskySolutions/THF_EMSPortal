@@ -34,7 +34,7 @@ public class RemsRequest : AuditableEntity
     // ---- Engagement setup ----
     public Guid? DepartmentId { get; set; }
     public Guid? ServiceLineId { get; set; }
-    public Guid? JobTemplateId { get; set; }
+    public Guid? JobTypeId { get; set; }
     public Guid? BillingPeriodId { get; set; }
     public Guid? DepartmentDirectorId { get; set; }
     public Guid? EngagementExecutiveId { get; set; }
@@ -43,6 +43,8 @@ public class RemsRequest : AuditableEntity
     public decimal? EngagementFee { get; set; }
     public decimal? RealizationPercentage { get; set; }
     public string? BillingProcessDescription { get; set; }
+    /// <summary>A short plain-text description of the job from the setup form, at most 6 characters.</summary>
+    public string? JobDescription { get; set; }
 
     // ---- Government only: the firm's side of the contract the client declared ----
     public Guid? ContractId { get; set; }
@@ -65,6 +67,12 @@ public class RemsRequest : AuditableEntity
     /// <summary>The request this one was made from with Copy, or null.</summary>
     public Guid? CopiedFromRemsId { get; set; }
 
+    // ---- Intake reuse: a returning client is not sent the form again ----
+    /// <summary>The request the client's intake came in on, when this one reused it instead of sending a form.</summary>
+    public Guid? IntakeOnFileFromRemsId { get; set; }
+    /// <summary>The user who completed the form for the client on this request; null when the client submitted it.</summary>
+    public Guid? IntakeCompletedByUserId { get; set; }
+
     // ---- Navigations ----
     public OptionSetItem? Type { get; set; }
     public OptionSetItem? Status { get; set; }
@@ -77,7 +85,7 @@ public class RemsRequest : AuditableEntity
     public User? InviteSentByUser { get; set; }
     public OptionSetItem? Department { get; set; }
     public OptionSetItem? ServiceLine { get; set; }
-    public OptionSetItem? JobTemplate { get; set; }
+    public OptionSetItem? JobType { get; set; }
     public OptionSetItem? BillingPeriod { get; set; }
     public User? DepartmentDirector { get; set; }
     public User? EngagementExecutive { get; set; }

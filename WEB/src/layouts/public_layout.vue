@@ -1,5 +1,5 @@
 <template>
-  <!-- Minimal PUBLIC layout for the anonymous REMS client EMS form (WO-116). -->
+  <!-- Minimal PUBLIC layout for the anonymous REMS client COP form (WO-116). -->
   <q-layout view="hHh lpR fFf">
     <q-header class="public-header">
       <q-toolbar class="public-toolbar">

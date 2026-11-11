@@ -95,7 +95,8 @@ const ICONS = {
   RemsFullyApproved: "o_task_alt",
   RemsCopiedFrom: "o_file_copy",
   RemsCopiedTo: "o_file_copy",
-  RemsSubmittedForReview: "o_send"
+  RemsSubmittedForReview: "o_send",
+  RemsFormCompletedByUser: "o_assignment_turned_in"
 };
 const iconFor = (type) => ICONS[type] || "o_circle";
 
@@ -133,7 +134,8 @@ const LABELS = {
   // The value beside each names the other request.
   RemsCopiedFrom: "Copied from",
   RemsCopiedTo: "Copied to",
-  RemsSubmittedForReview: "Submitted for review, no form sent"
+  RemsSubmittedForReview: "Submitted for review, no form sent",
+  RemsFormCompletedByUser: "Intake form completed for the client"
 };
 
 // An unmapped type renders as its own name rather than as a blank: a row nobody has worded yet is still

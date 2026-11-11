@@ -69,12 +69,12 @@ public static class Permissions
     /// <summary>Delete REMS requests.</summary>
     public const string RemsRequestsDelete = "rems.requests.delete";
     /// <summary>
-    /// Pick a REMS request up from EMS Review, and hand it back. Nobody assigns anybody — the key means
+    /// Pick a REMS request up from COP Review, and hand it back. Nobody assigns anybody — the key means
     /// "may claim work off the shared queue", so it belongs to the admins who work that queue and to
     /// nobody else. The name is historical; read it as the pick-up right.
     /// </summary>
     public const string RemsRequestsAssign = "rems.requests.assign";
-    // Which requests an admin may SEE is deliberately not a permission of its own: EMS Review is the whole
+    // Which requests an admin may SEE is deliberately not a permission of its own: COP Review is the whole
     // tenant's queue and every admin reads all of it, because a request waiting for pickup has to be
     // visible to the person who might pick it up.
     /// <summary>Create, edit, and configure REMS forms.</summary>

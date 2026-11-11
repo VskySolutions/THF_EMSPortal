@@ -79,7 +79,7 @@ posts nothing by itself. Stop does not interrupt a job already running.
 
 **What users see.** The request page header shows a Maconomy chip beside the status badge: "Maconomy
 10023B", or Not in Maconomy, queued, posting, sync failed. The client section repeats it with the failure
-reason — read-only, no button. The REMS lists (My Requests, EMS Review, Approvals) get a small Maconomy
+reason — read-only, no button. The REMS lists (My Requests, COP Review, Approvals) get a small Maconomy
 status column. Every attempt writes an activity event.
 
 **After success** the portal client becomes a Maconomy client: the generated number is written onto the

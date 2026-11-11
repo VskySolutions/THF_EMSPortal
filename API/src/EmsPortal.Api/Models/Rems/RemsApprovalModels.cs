@@ -156,7 +156,7 @@ public sealed record RemsApprovalEngagementView(
     string Status,
     string? Department,
     string? ServiceLine,
-    string? JobTemplate,
+    string? JobType,
     string? Industry,
     RemsApprovalClientView Client,
     RemsApprovalEntityView Entity,
@@ -174,6 +174,8 @@ public sealed record RemsApprovalEngagementView(
     /// </summary>
     string? BillingPeriod,
     string? BillingProcessDescription,
+    /// <summary>The short plain-text job description from the setup form.</summary>
+    string? JobDescription,
     RemsApprovalAuditDetailView? Audit,
     RemsGovernmentDetailView? Government,
     RemsApprovalTaxDetailView? Tax,

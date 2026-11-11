@@ -35,7 +35,7 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
             .Include(t => t.Request).ThenInclude(r => r!.Status)
             .Include(t => t.Request).ThenInclude(r => r!.Department)
             .Include(t => t.Request).ThenInclude(r => r!.ServiceLine)
-            .Include(t => t.Request).ThenInclude(r => r!.JobTemplate)
+            .Include(t => t.Request).ThenInclude(r => r!.JobType)
             .Include(t => t.Request).ThenInclude(r => r!.BillingPeriod)
             .Include(t => t.Request).ThenInclude(r => r!.Contract)
             .Include(t => t.Request).ThenInclude(r => r!.Files.Where(f => !f.Deleted)).ThenInclude(f => f.Media)

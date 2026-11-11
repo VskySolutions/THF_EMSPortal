@@ -147,7 +147,8 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 i.ClientEmail, i.EntityType, i.RequestStatus,
                 RemsWorkspaceMapper.UserRef(i.AdminAssignedToId, names), i.SubmittedOnUtc,
                 parent, children, i.RelatedCount, CanView(i), CanEdit(i),
-                NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc);
+                NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
+                IntakeReused: i.IntakeReused);
         });
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS related entities retrieved.", page, limit, total));

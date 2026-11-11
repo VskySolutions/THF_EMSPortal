@@ -817,7 +817,7 @@ background-color: inherit;
 // ---- Small screens -----------------------------------------------------------------------------
 // Two rules that only matter on a phone, kept together because they are one decision.
 //
-// The viewport meta no longer carries `user-scalable=no, maximum-scale=1` — a client filling the EMS
+// The viewport meta no longer carries `user-scalable=no, maximum-scale=1` — a client filling the COP
 // onboarding form on a phone must be able to pinch-zoom (WCAG 1.4.4), and that flag forbade it.
 // Suppressing zoom was also the only thing stopping iOS Safari from zooming the page in whenever a
 // field smaller than 16px took focus, and leaving the field zoomed after it. So the fields become 16px

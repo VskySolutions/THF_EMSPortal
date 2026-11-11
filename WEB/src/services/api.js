@@ -60,7 +60,7 @@ const unwrap = (response) => response?.data?.data;
 const envelope = (response) => response?.data;
 
 // ---------------------------------------------------------------------------
-// Resource groups (mapped to the EMS Portal API controllers)
+// Resource groups (mapped to the COP Portal API controllers)
 // ---------------------------------------------------------------------------
 
 export const authApi = {
@@ -284,14 +284,15 @@ export const maconomyApi = {
   // Also always the caller's own tenant. A request is posted by itself once approved with its client in
   // Maconomy; Sync job now, pressed on a list, is for one that failed or was approved while the sync was off.
   // → { connected, enabled, changedOnUtc, changedByName, projectManagerNumber, defaultTemplateNumber (both from
-  //     the server configuration), synced, failed, syncing, waiting, templates: [{ jobTemplateId, code, label,
-  //     templateJobNumber }] } — the template numbers are the REMS Job Template option items' Maconomy numbers.
+  //     the server configuration), synced, failed, syncing, waiting, jobTypes: [{ jobTypeId, code, label,
+  //     templateJobNumber }], departments: [{ departmentId, code, label, locationNumber }] } — the template and
+  //     location numbers are the REMS Job Type and REMS Department option items' Maconomy numbers.
   jobSync: () => api.get("/api/integrations/maconomy/job-sync").then(unwrap),
   // Start posts approvals from now on (nothing already approved); Stop queues nothing and hides the action. Both → the overview.
   startJobSync: () => api.post("/api/integrations/maconomy/job-sync/start").then(unwrap),
   stopJobSync: () => api.post("/api/integrations/maconomy/job-sync/stop").then(unwrap),
   // Every approved request and where its job stands: [{ remsId, remsNumber, clientName, customerNumber,
-  // serviceLine, jobTemplate, updatedOnUtc, sync }].
+  // serviceLine, jobType, department, updatedOnUtc, sync }].
   jobSyncRequests: () => api.get("/api/integrations/maconomy/job-sync/requests").then(unwrap),
   // Sync job now for one request → its job sync view. A failed post is a 200 with status "failed"; only a
   // refusal (sync off, not eligible) is an error.
@@ -308,9 +309,9 @@ export const brandingApi = {
   // → { tenantId, tenantName, tenantIdentifier, isCustomised, theme, assets: { logo, logoDark, logoMark, favicon,
   // loginBackground }, updatedByName, updatedOnUtc }. `theme` is sparse: null means "as shipped".
   get: (tenantId) => api.get("/api/branding", { params: { tenantId } }).then(unwrap),
-  // Anonymous: { theme, assets } for the sign-in screen, by tenant identifier.
+  // Anonymous: { tenantName, theme, assets } for the sign-in screen, by tenant identifier.
   getPublic: (tenant) => anonApi.get("/api/branding/public", { params: { tenant } }).then(unwrap),
-  // Anonymous: { theme, assets } of the firm that sent a client this form link.
+  // Anonymous: { tenantName, theme, assets } of the firm that sent a client this form link.
   getForInvite: (inviteCode) =>
     anonApi.get(`/api/branding/public/forms/${encodeURIComponent(inviteCode)}`).then(unwrap),
   // payload: the WHOLE theme; a value left null goes back to the stock look.
@@ -593,7 +594,7 @@ export const remsApi = {
 
   // Copy: a new draft for the same client with the engagement setup carried over and the tax card blank.
   copy: (id) => api.post(`/api/rems/requests/${id}/copy`).then(unwrap),
-  // A copy's hand-off to the admins without a form; 409 while the client's intake is not on file.
+  // The hand-off to the admins without a form, for a client whose intake is on file; 409 while it is not in yet.
   submitForReview: (id) => api.post(`/api/rems/requests/${id}/submit-for-review`).then(unwrap),
 
   remove: (id) => api.delete(`/api/rems/requests/${id}`).then(envelope),
@@ -617,7 +618,8 @@ export const remsApi = {
   // { status, jobNumber, syncedByName, syncedOnUtc, failureReason, syncEnabled, canSyncNow, blockedReason }.
   maconomyJobSyncNow: (id) => api.post(`/api/rems/requests/${id}/maconomy-job-sync`).then(unwrap),
   // What a press would send, for the confirmation before it → { sync, remsNumber, clientName, customerNumber,
-  // serviceLine, jobTemplate, templateJobNumber, projectManagerNumber, jobName }.
+  // serviceLine, jobType, templateJobNumber, projectManagerNumber, jobName, department, locationNumber,
+  // purchaseOrderNumber }.
   maconomyJobSyncPreview: (id) => api.get(`/api/rems/requests/${id}/maconomy-job-sync`).then(unwrap),
   // One client on file, in the picker's shape.
   client: (id, excludingRemsId) =>
@@ -630,7 +632,7 @@ export const remsApi = {
   // The clients across the requests the caller may see under a scope, for the Client filter: [{ id, name }].
   requestClients: (params) => api.get("/api/rems/requests/clients", { params }).then(unwrap),
 
-  // ---- EMS form build / send (WO-112, WO-116) ----
+  // ---- COP form build / send (WO-112, WO-116) ----
   // payload: { cseUserId, entityType } — both required (AC-REMS-007.7). Returns the build screen.
   saveForm: (remsId, payload) => api.post(`/api/rems/requests/${remsId}/form`, payload).then(unwrap),
   // Pre-send preview: { destinationEmail, formLink } (AC-REMS-008.1).
@@ -646,19 +648,22 @@ export const remsApi = {
   // remindBlockedReason, events: [{ id, eventType, recipientEmail, occurredOnUtc, detail, sentBy.
   emailLog: (remsId) => api.get(`/api/rems/requests/${remsId}/email-log`).then(unwrap),
 
-  // ---- EMS Review + submitted-form review (WO-114, WO-116) ----
+  // ---- COP Review + submitted-form review (WO-114, WO-116) ----
   // The admins' shared queue (paginated envelope), NOT one admin's own list — every request whose
   // initiator has sent it to their client, whoever holds it.
   clientForms: (params) => api.get("/api/rems/client-forms", remsListParams(params)).then(envelope),
-  // The EMS Review quick-filter counts, under the same filters as the list.
+  // The COP Review quick-filter counts, under the same filters as the list.
   clientFormQuickCounts: (params) => api.get("/api/rems/client-forms/quick-counts", remsListParams(params)).then(unwrap),
   // The clients across the queue, for its Client filter: [{ id, name }].
   clientFormClients: () => api.get("/api/rems/client-forms/clients").then(unwrap),
-  // The submitted-form snapshot: { submissionId, remsId, remsNumber, entityType, lockedEmail,
-  // clientNameSuffix, submittedOnUtc, payload, editedBy, editedOnUtc.
+  // The intake form as the request page shows it: { submissionId, remsId, remsNumber, entityType, lockedEmail,
+  // clientNameSuffix, submittedOnUtc, payload, editedBy, editedOnUtc, canEdit, submitted, onFileFrom,
+  // completedBy, lastSavedOnUtc }. `submitted` is false while the form is out with the client, and the
+  // payload is then what they have saved so far; `onFileFrom` names the request a reused intake came in on.
   submission: (remsId) => api.get(`/api/rems/requests/${remsId}/submission`).then(unwrap),
-  // Correct the client's answers in place — Admin only (rems.engagements.manage), and refused once the
-  // engagement is pending approval or approved.
+  // Write the client's answers: an Admin's correction in place, or — while the form is out with the client —
+  // a completion on their behalf by the people on the request, which submits it. Refused once the engagement
+  // is pending approval or approved.
   updateSubmission: (remsId, payload) =>
     api.put(`/api/rems/requests/${remsId}/submission`, payload).then(unwrap),
 
@@ -758,7 +763,7 @@ export const remsApi = {
   rejectTask: (taskId, payload) => api.post(`/api/rems/approval-tasks/${taskId}/reject`, payload).then(unwrap)
 };
 
-// REMS public client EMS form (Phase 15, WO-113/116).
+// REMS public client COP form (Phase 15, WO-113/116).
 export const remsPublicApi = {
   // → { state: "Invalid"|"Unavailable"|"Submitted"|"Editable", clientName?, entityType?,
   //     prefill?:{ clientName, email, mobileNumber }, draftPayload?:RemsFormPayloadV1 }. Always HTTP 200.

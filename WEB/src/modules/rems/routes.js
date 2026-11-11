@@ -18,7 +18,7 @@ export default [
         path: "ems-review",
         name: "rems_ems_review",
         component: () => import("modules/rems/pages/EmsReview.vue"),
-        meta: { requiresAuth: true, permissions: ["rems.engagements.manage"], title: "EMS Review" }
+        meta: { requiresAuth: true, permissions: ["rems.engagements.manage"], title: "COP Review" }
       },
       { path: "client-forms", redirect: { name: "rems_ems_review" } },
       {
@@ -80,7 +80,7 @@ export default [
       }
     ]
   },
-  // PUBLIC client EMS form (WO-113/116) — the anonymous, no-login onboarding form reached from the
+  // PUBLIC client COP form (WO-113/116) — the anonymous, no-login onboarding form reached from the
   // emailed invite link ({App:BaseUrl}/rems/form/{inviteCode}).
   {
     path: "/rems/form/:inviteCode",
@@ -90,7 +90,7 @@ export default [
         path: "",
         name: "rems_public_form",
         component: () => import("modules/rems/pages/PublicEmsForm.vue"),
-        meta: { requiresAuth: false, title: "EMS Form" }
+        meta: { requiresAuth: false, title: "COP Form" }
       }
     ]
   }

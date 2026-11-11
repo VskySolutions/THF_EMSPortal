@@ -97,7 +97,7 @@ public class Person : AuditableEntity
 
     // ---- Provenance ----
     // Persons arrive from several places, not just the Person screen: a REMS engagement's role contacts
-    // and a client's submitted EMS form both mint one to satisfy REMSEntityContact.PersonId. Once mixed
+    // and a client's submitted COP form both mint one to satisfy REMSEntityContact.PersonId. Once mixed
     // into the same list they are indistinguishable, which matters — a contact captured off a public
     // form is not a colleague somebody onboarded, and the client picker offers all of them alike.
     //
@@ -107,7 +107,7 @@ public class Person : AuditableEntity
 
     /// <summary>
     /// What kind of record created this person, e.g. <c>Rems</c> for a contact captured during an
-    /// engagement or from a client's EMS form, <c>Person</c> for one entered on the Person screen.
+    /// engagement or from a client's COP form, <c>Person</c> for one entered on the Person screen.
     /// Null on rows written before provenance was tracked — unknown, not "created by nothing".
     /// <para>
     /// <c>Client</c> is the one value that says what the person IS rather than where they came from: a

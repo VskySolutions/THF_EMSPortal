@@ -1,4 +1,4 @@
-# Running EMS Portal
+# Running COP Portal
 
 How to build, configure, and run the platform locally, and how to verify it end-to-end.
 
@@ -64,7 +64,7 @@ cp src/EmsPortal.Api/.env.example src/EmsPortal.Api/.env   # then fill in the va
 
 "Login with Microsoft" on the sign-in page needs an Entra ID app registration; the API does the whole exchange with Microsoft, so the client secret never reaches the browser.
 
-1. **Entra admin center → App registrations → New registration.** Any name (e.g. *EMS Portal*); supported account types: **this organizational directory only**.
+1. **Entra admin center → App registrations → New registration.** Any name (e.g. *COP Portal*); supported account types: **this organizational directory only**.
 2. **Authentication → Add a platform → Web.** Redirect URI: `https://<api-host>/api/auth/microsoft/callback` (add `http://localhost:5032/api/auth/microsoft/callback` for local development; plain `http` is right, the local API has no https port). It must be under **Web**, not **Single-page application**: an SPA-registered URI makes Microsoft refuse the server-side code exchange (`AADSTS9002325`). No implicit grant needed.
 3. **Certificates & secrets → New client secret.** Copy the secret **Value** (it is shown once).
 4. **Overview.** Copy the **Directory (tenant) ID** and **Application (client) ID**.
@@ -88,7 +88,7 @@ cp src/EmsPortal.Api/.env.example src/EmsPortal.Api/.env   # then fill in the va
 
 6. Make sure `App:BaseUrl` points at the web app (e.g. `http://localhost:9000`): that is where the API sends the browser back.
 
-A Microsoft account can only sign in when its email address (the `email`, `preferred_username` or `upn` claim) matches an **existing, active** EMS Portal user; nobody is created on the fly. Multi-tenant aliases (`common`, `organizations`, `consumers`) are refused for `TenantId`. With the three keys empty the button still shows, and clicking it reports that Microsoft sign-in is not set up.
+A Microsoft account can only sign in when its email address (the `email`, `preferred_username` or `upn` claim) matches an **existing, active** COP Portal user; nobody is created on the fly. Multi-tenant aliases (`common`, `organizations`, `consumers`) are refused for `TenantId`. With the three keys empty the button still shows, and clicking it reports that Microsoft sign-in is not set up.
 
 Two optional keys exist and are normally left out: `RedirectUri`, only for an API behind a proxy that hides its public host (set it to the exact callback URI registered in step 2, never to a Microsoft address), and `Prompt` (`select_account` to always show Microsoft's account picker, `login` to force re-authentication).
 

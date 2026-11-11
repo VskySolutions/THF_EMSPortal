@@ -1,4 +1,4 @@
-# EMS Portal
+# COP Portal
 
 A multi-tenant integration platform that automates the import of financial data from **Concur** into **Maconomy** (expense reports, vendor invoices, vendor payments). It exposes a REST API for triggering and administering integration flows, runs the flows asynchronously on a background worker via Hangfire, and isolates every tenant's data and credentials.
 
@@ -85,6 +85,8 @@ EmsPortal.sln
     ├── EmsPortal.UnitTests        # xUnit/Moq unit tests
     └── EmsPortal.IntegrationTests # WebApplicationFactory + real SQL
 ```
+
+The product was called EMS Portal until November 2026. The `EmsPortal` identifier stays in the .NET namespaces, project and assembly names, the database catalogs and the Data Protection application name (`SetApplicationName` in `Infrastructure/DependencyInjection.cs`): the first three are internal, and changing the last would make every encrypted tenant secret unreadable.
 
 ---
 

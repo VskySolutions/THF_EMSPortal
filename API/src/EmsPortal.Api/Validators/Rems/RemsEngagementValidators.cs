@@ -39,7 +39,7 @@ public sealed class UpdateRemsEngagementRequestValidator : AbstractValidator<Upd
     {
         RuleFor(x => x.Department).MaximumLength(64).When(x => x.Department is not null);
         RuleFor(x => x.ServiceLine).MaximumLength(64).When(x => x.ServiceLine is not null);
-        RuleFor(x => x.JobTemplate).MaximumLength(64).When(x => x.JobTemplate is not null);
+        RuleFor(x => x.JobType).MaximumLength(64).When(x => x.JobType is not null);
         RuleFor(x => x.Industry).MaximumLength(64).When(x => x.Industry is not null);
         RuleFor(x => x.BillingPeriod).MaximumLength(64).When(x => x.BillingPeriod is not null);
         RuleFor(x => x.FirstYearFeeEstimate)
@@ -54,6 +54,10 @@ public sealed class UpdateRemsEngagementRequestValidator : AbstractValidator<Upd
         RuleFor(x => x.BillingProcessDescription)
             .MaximumLength(1000).WithMessage("billingProcessDescription must be 1000 characters or fewer.")
             .When(x => x.BillingProcessDescription is not null);
+        // Plain text; the same limit as the column and the form's box.
+        RuleFor(x => x.JobDescription)
+            .MaximumLength(6).WithMessage("jobDescription must be 6 characters or fewer.")
+            .When(x => x.JobDescription is not null);
     }
 }
 

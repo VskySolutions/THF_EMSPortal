@@ -37,7 +37,8 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
     public Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default)
         => Requests.WorkspaceGraph().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-    // The tax form rides along for the job name: one client's returns are separate jobs.
+    // The tax form rides along for the job name: one client's returns are separate jobs. The department
+    // for the location.
     private IQueryable<RemsRequest> JobSyncGraph()
         => Requests
             .Include(r => r.Type)
@@ -45,7 +46,8 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
             .Include(r => r.Client).ThenInclude(c => c!.Person)
             .Include(r => r.Client).ThenInclude(c => c!.EntityType)
             .Include(r => r.ServiceLine)
-            .Include(r => r.JobTemplate)
+            .Include(r => r.JobType)
+            .Include(r => r.Department)
             .Include(r => r.TaxForms.Where(f => !f.Deleted)).ThenInclude(f => f.TaxForm);
 
     public Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default)
@@ -127,10 +129,12 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
     public Task<bool> IsClientSharedAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default)
         => Requests.AnyAsync(r => r.Id != excludingRemsId && r.ClientId == clientId, cancellationToken);
 
-    public Task<DateTime?> LatestFormSubmittedOnAsync(Guid clientId, CancellationToken cancellationToken = default)
+    public Task<RemsIntakeHolder?> FindOutstandingIntakeAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default)
         => Requests
-            .Where(r => r.ClientId == clientId && r.FormSubmittedOnUtc != null)
-            .MaxAsync(r => r.FormSubmittedOnUtc, cancellationToken);
+            .Where(r => r.ClientId == clientId && r.Id != excludingRemsId && r.InviteSentOnUtc != null && r.FormSubmittedOnUtc == null)
+            .OrderByDescending(r => r.InviteSentOnUtc)
+            .Select(r => new RemsIntakeHolder(r.Id, r.RemsNumber))
+            .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<RemsTaxFormHolder>> ListTaxFormHoldersAsync(
         Guid clientId, DateOnly fiscalYearEnd, Guid excludingRemsId, CancellationToken cancellationToken = default)
@@ -376,13 +380,14 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
         return new RemsRequestQuickCounts(status, ems, ownership);
     }
 
-    // ---- EMS Review ----
+    // ---- COP Review ----
 
     // Requests past draft that have a form, with the review page's filters.
     private IQueryable<RemsRequest> ReviewRequests(RemsClientFormQuery query, bool withAssignment, bool withRequestStatus, bool withFormFilters)
     {
         const string draft = RemsRequestStatuses.Draft;
-        // A copy has no invite: it reaches the queue by its client's intake, stamped on it when it is submitted for review.
+        // A request that reused the client's intake has no invite: it reaches the queue by the intake date stamped
+        // on it when it was submitted for review.
         var rems = Requests.Where(r => r.Status!.Value != draft && (r.InviteCode != null || r.FormSubmittedOnUtc != null));
         if (withAssignment && query.Assignment == RemsClientFormAssignment.Mine)
         {
@@ -468,7 +473,7 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
     public async Task<IReadOnlyList<RemsClientChoice>> ListClientFormClientsAsync(CancellationToken cancellationToken = default)
     {
         const string draft = RemsRequestStatuses.Draft;
-        return await ChoicesOf(Requests.Where(r => r.Status!.Value != draft && r.InviteCode != null), cancellationToken);
+        return await ChoicesOf(Requests.Where(r => r.Status!.Value != draft && (r.InviteCode != null || r.FormSubmittedOnUtc != null)), cancellationToken);
     }
 
     public async Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(RemsClientFormQuery query, CancellationToken cancellationToken = default)
@@ -523,7 +528,8 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
                 r.UpdatedById,
                 r.UpdatedOnUtc,
                 r.Client!.MaconomyCustomerNumber,
-                r.CopiedFrom != null ? r.CopiedFrom.RemsNumber : null))
+                r.CopiedFrom != null ? r.CopiedFrom.RemsNumber : null,
+                r.IntakeOnFileFromRemsId != null))
             .ToListAsync(cancellationToken);
         var items = (order is null ? read : order.Join(read, id => id, i => i.RemsId, (_, i) => i))
             .Select(i => i.MaconomyCustomerNumber is null ? i : i with { ClientName = _maconomy.Name(i.MaconomyCustomerNumber, i.ClientName) })
@@ -606,10 +612,12 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
 
     // ---- Related entities ----
 
-    // Requests whose client has declared related parties, with the page's filters.
+    // Requests whose client has declared related parties, with the page's filters. The parties belong to the
+    // client, so a request that reused their intake stays off the board: they are listed under the request
+    // that asked.
     private IQueryable<RemsRequest> RelatedRequests(RemsRelatedEntityQuery query, bool withEntityType, bool withRelatedStatus)
     {
-        var rems = Requests.Where(r => r.Client!.Relationships.Any());
+        var rems = Requests.Where(r => r.IntakeOnFileFromRemsId == null && r.Client!.Relationships.Any());
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var t = query.Search.Trim();
@@ -762,7 +770,8 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
                 r.CreatedOnUtc,
                 r.UpdatedById,
                 r.UpdatedOnUtc,
-                r.Client!.MaconomyCustomerNumber))
+                r.Client!.MaconomyCustomerNumber,
+                r.IntakeOnFileFromRemsId != null))
             .ToListAsync(cancellationToken);
         var items = (order is null ? read : order.Join(read, id => id, i => i.RemsId, (_, i) => i))
             .Select(i => i.MaconomyCustomerNumber is null

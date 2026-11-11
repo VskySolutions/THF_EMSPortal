@@ -39,6 +39,7 @@ namespace EmsPortal.Api.Controllers;
 public sealed class RemsEngagementController : ControllerBase
 {
     private const string CodeEngagementLocked = "REMS_ENGAGEMENT_LOCKED";
+    private const string CodeIntakeReadOnly = "REMS_INTAKE_READ_ONLY";
     private const string CodeTaxFormTaken = "REMS_TAX_FORM_TAKEN";
     // STATIC-APPROVAL-POLICY
     private const string CodeCommissionReserved = "REMS_COMMISSION_RESERVED";
@@ -66,6 +67,7 @@ public sealed class RemsEngagementController : ControllerBase
     private readonly IMaconomyJobSyncService _jobSync;
     private readonly IMaconomyClientDirectory _directory;
     private readonly RemsClientIntake _intake;
+    private readonly RemsIntakeSubmission _submission;
 
     public RemsEngagementController(
         IRemsRequestRepository requests,
@@ -84,13 +86,15 @@ public sealed class RemsEngagementController : ControllerBase
         IMaconomyCustomerSyncService customerSync,
         IMaconomyJobSyncService jobSync,
         IMaconomyClientDirectory directory,
-        RemsClientIntake intake)
+        RemsClientIntake intake,
+        RemsIntakeSubmission submission)
     {
         _policy = policy;
         _customerSync = customerSync;
         _jobSync = jobSync;
         _directory = directory;
         _intake = intake;
+        _submission = submission;
         _requests = requests;
         _delegations = delegations;
         _clients = clients;
@@ -108,7 +112,7 @@ public sealed class RemsEngagementController : ControllerBase
     // -------------------- Part A: submitted-form view + workspace read --------------------
 
     /// <summary>
-    /// EMS Review (AC-REMS-013.1): every submitted request that has an EMS form, indicating
+    /// COP Review (AC-REMS-013.1): every submitted request that has an COP form, indicating
     /// submitted/not-submitted, client name.
     /// </summary>
     [HttpGet("client-forms")]
@@ -177,7 +181,8 @@ public sealed class RemsEngagementController : ControllerBase
             MaconomySyncStatus: syncStatuses.TryGetValue(i.RemsId, out var sync) ? sync.Customer : null,
             MaconomyJobSync: sync.Job,
             CopiedFromRemsNumber: i.CopiedFromRemsNumber,
-            CanCopy: mayCopy));
+            CanCopy: mayCopy,
+            IntakeReused: i.IntakeReused));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }
@@ -189,10 +194,10 @@ public sealed class RemsEngagementController : ControllerBase
     public async Task<IActionResult> ClientFormClients(CancellationToken cancellationToken)
     {
         var clients = await _requests.ListClientFormClientsAsync(cancellationToken);
-        return Ok(ApiResponseFactory.Success(clients, "EMS Review clients retrieved."));
+        return Ok(ApiResponseFactory.Success(clients, "COP Review clients retrieved."));
     }
 
-    /// <summary>The quick-filter counts for the EMS Review list, under the same filters.</summary>
+    /// <summary>The quick-filter counts for the COP Review list, under the same filters.</summary>
     [HttpGet("client-forms/quick-counts")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
     [ProducesResponseType<ApiResponse<RemsClientFormQuickCounts>>(StatusCodes.Status200OK)]
@@ -227,12 +232,13 @@ public sealed class RemsEngagementController : ControllerBase
                 assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
                 createdFrom, createdTo, updatedFrom, updatedTo),
             cancellationToken);
-        return Ok(ApiResponseFactory.Success(counts, "EMS Review quick-filter counts retrieved."));
+        return Ok(ApiResponseFactory.Success(counts, "COP Review quick-filter counts retrieved."));
     }
 
     /// <summary>
-    /// The submitted-form view (AC-REMS-013.2/3): the client's answers as plain fields, rebuilt from the
-    /// client's rows — distinct from the editable workspace data.
+    /// The intake form as the request page shows it (AC-REMS-013.2/3): the client's answers as plain
+    /// fields, rebuilt from the client's rows — a completed intake, this request's own or the one on file
+    /// from an earlier request, or what the client has saved so far while the form is out with them.
     /// </summary>
     [HttpGet("requests/{remsId:guid}/submission")]
     // Open to every signed-in user: the read-only request page is the firm's. GuardCanRead keeps a draft to
@@ -252,9 +258,9 @@ public sealed class RemsEngagementController : ControllerBase
             return notAllowed;
         }
 
-        if (rems.FormSubmittedOnUtc is null || rems.Client is null)
+        if (rems.Client is null || !HasIntakeToShow(rems))
         {
-            return NotFound(ApiResponseFactory.NotFound("This request has no submitted form."));
+            return NotFound(ApiResponseFactory.NotFound("This request has no intake form to show."));
         }
 
         await HydrateAsync(rems, cancellationToken);
@@ -263,13 +269,21 @@ public sealed class RemsEngagementController : ControllerBase
             "REMS submitted form retrieved."));
     }
 
-    /// <summary>Correct the client's submitted answers, in place (Admin only).</summary>
+    /// <summary>
+    /// Write the client's answers: an Admin correcting a completed intake in place, or one of the people on
+    /// the request completing a form that is out with the client, which submits it on their behalf.
+    /// </summary>
     [HttpPut("requests/{remsId:guid}/submission")]
-    [RequirePermission(Permissions.RemsEngagementsManage)]
+    [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsSubmissionView>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateSubmission(
         Guid remsId, [FromBody] RemsFormPayloadV1? payload, CancellationToken cancellationToken)
     {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
         var rems = await _requests.GetWorkspaceAsync(remsId, cancellationToken);
         if (rems is null)
         {
@@ -291,9 +305,33 @@ public sealed class RemsEngagementController : ControllerBase
                 "The client's submitted form cannot be corrected while the engagement is pending approval or approved."));
         }
 
-        if (rems.FormSubmittedOnUtc is null || rems.Client is null)
+        if (rems.Client is null)
         {
-            return NotFound(ApiResponseFactory.NotFound("This request has no submitted form."));
+            return NotFound(ApiResponseFactory.NotFound("This request has no intake form to show."));
+        }
+
+        // Nothing submitted on this request yet: the form is out with the client and a user is completing it
+        // for them — or it is a returning client's intake on a draft, which nobody corrects before sending.
+        var completing = rems.FormSubmittedOnUtc is null;
+        if (completing)
+        {
+            if (!RemsDerived.IsFormOut(rems))
+            {
+                return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
+                    CodeIntakeReadOnly,
+                    "The client's intake is read-only here.",
+                    "The form has not been sent to the client on this request, and an intake on file is read-only until the request is submitted for review."));
+            }
+            if (!RemsSetupAccess.CanCompleteIntake(User, rems, me))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden(
+                    "Only the people on this request, or a REMS Admin, can complete the client's form for them."));
+            }
+        }
+        else if (!User.HasPermission(Permissions.RemsEngagementsManage))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden(
+                "Only a REMS Admin can correct a submitted form."));
         }
 
         if (payload is null)
@@ -305,7 +343,7 @@ public sealed class RemsEngagementController : ControllerBase
         await HydrateAsync(rems, cancellationToken);
         var entityType = rems.Client.EntityType?.Value ?? string.Empty;
 
-        // Not the Admin's to change: the email is the address the invite went to, and the version pins the
+        // Not the writer's to change: the email is the address the invite went to, and the version pins the
         // shape the payload is read in.
         payload.Email = rems.Client.ClientEmail;
         payload.Version = 1;
@@ -316,39 +354,76 @@ public sealed class RemsEngagementController : ControllerBase
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        // The rows are the record: the correction is written straight onto the client.
-        await _intake.ApplyAsync(rems, payload, entityType, cancellationToken);
-        await _activity.WriteAsync(
-            new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsFormCorrected),
-            cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (completing)
+        {
+            // Submitted exactly as the client's own submission would be, with the user's name on it.
+            await _submission.SubmitAsync(rems, payload, entityType, me, cancellationToken);
+            await _submission.NotifyAsync(rems, null, me, cancellationToken);
+        }
+        else
+        {
+            // The rows are the record: the correction is written straight onto the client.
+            await _intake.ApplyAsync(rems, payload, entityType, cancellationToken);
+            await _activity.WriteAsync(
+                new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsFormCorrected),
+                cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         var refreshed = await _requests.GetWorkspaceAsync(remsId, cancellationToken) ?? rems;
         await HydrateAsync(refreshed, cancellationToken);
         return Ok(ApiResponseFactory.Success(
             await BuildSubmissionViewAsync(refreshed, cancellationToken),
-            "REMS submitted form updated."));
+            completing ? "Submitted on the client's behalf." : "REMS submitted form updated."));
     }
 
     /// <summary>
-    /// The submitted-form view, with the correction trail resolved and this caller's own right to
-    /// correct it. A correction is a staff write to the client row after the client's own submission.
+    /// There is something to show: a completed intake (this request's own, or the client's on file), or the
+    /// form out with the client and whatever they have saved so far.
+    /// </summary>
+    private static bool HasIntakeToShow(RemsRequest rems)
+        => rems.FormSubmittedOnUtc is not null || rems.InviteSentOnUtc is not null || rems.Client is { IsIntakeOnFile: true };
+
+    /// <summary>
+    /// The intake view: whose completed answers these are (this request's, or the client's on file from
+    /// another), the correction trail, and this caller's own right to write them.
     /// </summary>
     private async Task<RemsSubmissionView> BuildSubmissionViewAsync(RemsRequest rems, CancellationToken cancellationToken)
     {
         var client = rems.Client!;
         var entityType = client.EntityType?.Value ?? string.Empty;
         var payload = RemsClientIntake.ToPayload(rems, entityType, client.ClientEmail ?? string.Empty);
-        var submittedOn = rems.FormSubmittedOnUtc!.Value;
 
+        var own = rems.FormSubmittedOnUtc is not null && !RemsDerived.IsIntakeReused(rems);
+        var onFile = !own && client.IsIntakeOnFile;
+        var submittedOn = own ? rems.FormSubmittedOnUtc : onFile ? client.IntakeSubmittedOnUtc : null;
+        var completedById = own ? rems.IntakeCompletedByUserId : onFile ? client.IntakeSubmittedByUserId : null;
+        RemsRequestRef? onFileFrom = null;
+        if (onFile && client.IntakeSubmittedRemsId is { } sourceId && sourceId != rems.Id)
+        {
+            var numbers = await _requests.GetNumbersAsync(new[] { sourceId }, cancellationToken);
+            onFileFrom = new RemsRequestRef(sourceId, numbers.GetValueOrDefault(sourceId) ?? string.Empty);
+        }
+
+        var names = await _users.GetFullNamesAsync(
+            new[] { completedById, client.UpdatedById }.Where(id => id.HasValue).Select(id => id!.Value), cancellationToken);
         string? editedBy = null;
         DateTime? editedOn = null;
-        if (client.UpdatedOnUtc > submittedOn && client.UpdatedById is { } editorId)
+        // A few seconds' grace: the submission itself stamps the client row a moment after the intake date.
+        if (submittedOn is { } since && client.UpdatedOnUtc > since.AddSeconds(5) && client.UpdatedById is { } editorId)
         {
-            var names = await _users.GetFullNamesAsync(new[] { editorId }, cancellationToken);
             editedBy = names.TryGetValue(editorId, out var name) ? name : "an admin";
             editedOn = client.UpdatedOnUtc;
         }
+
+        // Correcting a completed intake is the admins'; completing a form that is out is for the people on the request.
+        var canEdit = !IsFrozenForApproval(rems.Status!.Value)
+            && (rems.FormSubmittedOnUtc is not null
+                ? User.HasPermission(Permissions.RemsEngagementsManage)
+                : RemsDerived.IsFormOut(rems)
+                    && User.GetUserId() is { } me
+                    && RemsSetupAccess.CanCompleteIntake(User, rems, me)
+                    && (User.HasPermission(Permissions.RemsEngagementsManage) || User.HasPermission(Permissions.RemsRequestsUpdate)));
 
         return new RemsSubmissionView(
             rems.Id, rems.Id, rems.RemsNumber, entityType, client.ClientEmail,
@@ -356,7 +431,11 @@ public sealed class RemsEngagementController : ControllerBase
             submittedOn, payload,
             editedBy,
             editedOn,
-            CanEdit: User.HasPermission(Permissions.RemsEngagementsManage) && !IsFrozenForApproval(rems.Status!.Value));
+            CanEdit: canEdit,
+            Submitted: submittedOn is not null,
+            OnFileFrom: onFileFrom,
+            CompletedBy: completedById is { } completer && names.TryGetValue(completer, out var completerName) ? completerName : null,
+            LastSavedOnUtc: submittedOn is null ? rems.FormLastSavedOnUtc : null);
     }
 
     /// <summary>Once a round is open — and once it has succeeded — nothing about the request may move.</summary>
@@ -734,10 +813,10 @@ public sealed class RemsEngagementController : ControllerBase
             rems.ServiceLineId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.ServiceLine, Normalize(request.ServiceLine), cancellationToken);
         }
-        if (request.JobTemplate is not null)
+        if (request.JobType is not null)
         {
-            rems.JobTemplateId = await _codes.RemsIdAsync(
-                RemsOptionSetKeys.JobTemplate, Normalize(request.JobTemplate), cancellationToken);
+            rems.JobTypeId = await _codes.RemsIdAsync(
+                RemsOptionSetKeys.JobType, Normalize(request.JobType), cancellationToken);
         }
         // The industry is the client's trade, so it lives on the client.
         if (request.Industry is not null && rems.Client is { } client)
@@ -777,6 +856,10 @@ public sealed class RemsEngagementController : ControllerBase
         if (request.BillingProcessDescription is not null)
         {
             rems.BillingProcessDescription = Normalize(request.BillingProcessDescription);
+        }
+        if (request.JobDescription is not null)
+        {
+            rems.JobDescription = Normalize(request.JobDescription);
         }
 
         _requests.Update(rems);

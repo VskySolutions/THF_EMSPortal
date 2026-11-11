@@ -14,7 +14,7 @@ internal static class RemsRequestQueries
             .Include(r => r.Status)
             .Include(r => r.Department)
             .Include(r => r.ServiceLine)
-            .Include(r => r.JobTemplate)
+            .Include(r => r.JobType)
             .Include(r => r.BillingPeriod)
             .Include(r => r.Contract)
             .Include(r => r.CopiedFrom)

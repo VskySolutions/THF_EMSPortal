@@ -38,7 +38,9 @@ public sealed record RemsRelatedEntityRow(
     string? CreatedBy,
     DateTime CreatedOnUtc,
     string? UpdatedBy,
-    DateTime UpdatedOnUtc);
+    DateTime UpdatedOnUtc,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
+    bool IntakeReused = false);
 
 /// <summary>The head of the nested table: the client the request is FOR, plus anyone filed as the same client.</summary>
 public sealed record RemsRelatedParentView(

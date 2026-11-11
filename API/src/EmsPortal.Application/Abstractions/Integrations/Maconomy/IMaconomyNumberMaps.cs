@@ -3,8 +3,9 @@ namespace EmsPortal.Application.Abstractions.Integrations.Maconomy;
 /// <summary>
 /// The Maconomy numbers a tenant's option items carry (<c>OptionSetItem.MaconomyNumber</c>), read once
 /// per call and kept briefly: the specification 6 number on each REMS Entity Type, the specification 1
-/// number on each REMS Industry, the template job number on each REMS Job Template. Every translation
-/// between a portal code and a Maconomy number goes through the map; nothing holds a table of its own.
+/// number on each REMS Industry, the template job number on each REMS Job Type, the location number
+/// on each REMS Department. Every translation between a portal code and a Maconomy number goes through
+/// the map; nothing holds a table of its own.
 /// </summary>
 public interface IMaconomyNumberMaps
 {
@@ -14,32 +15,46 @@ public interface IMaconomyNumberMaps
     void Forget(Guid tenantId);
 }
 
-/// <summary>One option item as the map sees it: the item, its code (the option value), its label and its Maconomy number, null while unset.</summary>
-public sealed record MaconomyNumbered(Guid ItemId, string Code, string Label, string? Number);
+/// <summary>
+/// One option item as the map sees it: the item, its code (the option value), its label, its Maconomy
+/// number (null while unset) and whether the value is still offered.
+/// </summary>
+public sealed record MaconomyNumbered(Guid ItemId, string Code, string Label, string? Number, bool IsActive = true);
 
 public sealed class MaconomyNumberMap
 {
     public static readonly MaconomyNumberMap Empty = new(
-        Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>());
+        Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>());
 
     public MaconomyNumberMap(
-        IReadOnlyList<MaconomyNumbered> entityTypes, IReadOnlyList<MaconomyNumbered> industries, IReadOnlyList<MaconomyNumbered> jobTemplates)
+        IReadOnlyList<MaconomyNumbered> entityTypes,
+        IReadOnlyList<MaconomyNumbered> industries,
+        IReadOnlyList<MaconomyNumbered> jobTypes,
+        IReadOnlyList<MaconomyNumbered> departments)
     {
         EntityTypes = entityTypes;
         Industries = industries;
-        JobTemplates = jobTemplates;
-        TemplateMap = jobTemplates
-            .Where(t => !string.IsNullOrWhiteSpace(t.Number))
-            .GroupBy(t => t.ItemId)
-            .ToDictionary(g => g.Key, g => g.First().Number!.Trim());
+        JobTypes = jobTypes;
+        Departments = departments;
+        TemplateMap = ByItem(jobTypes);
+        LocationMap = ByItem(departments);
     }
 
     public IReadOnlyList<MaconomyNumbered> EntityTypes { get; }
     public IReadOnlyList<MaconomyNumbered> Industries { get; }
-    public IReadOnlyList<MaconomyNumbered> JobTemplates { get; }
+    public IReadOnlyList<MaconomyNumbered> JobTypes { get; }
+    public IReadOnlyList<MaconomyNumbered> Departments { get; }
 
-    /// <summary>REMS Job Template item id → template job number, for the items that carry one.</summary>
+    /// <summary>REMS Job Type item id → template job number, for the items that carry one.</summary>
     public IReadOnlyDictionary<Guid, string> TemplateMap { get; }
+
+    /// <summary>REMS Department item id → Maconomy location number, for the items that carry one.</summary>
+    public IReadOnlyDictionary<Guid, string> LocationMap { get; }
+
+    private static Dictionary<Guid, string> ByItem(IReadOnlyList<MaconomyNumbered> items) => items
+        .Where(i => !string.IsNullOrWhiteSpace(i.Number))
+        .GroupBy(i => i.ItemId)
+        .ToDictionary(g => g.Key, g => g.First().Number!.Trim());
 
     /// <summary>The specification 6 number a REMS entity type code is filed under, or null for a code without one.</summary>
     public string? EntityTypeNumberOf(string? code) => NumberOf(EntityTypes, code);

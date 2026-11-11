@@ -14,7 +14,7 @@ internal static class RemsWorkspaceMapper
         => id is { } uid ? new RemsUserRef(uid, names.TryGetValue(uid, out var n) ? n : string.Empty) : null;
 
     /// <summary>
-    /// The request's EMS-form state as the UI reads it: the form's own status, and whether the client
+    /// The request's COP-form state as the UI reads it: the form's own status, and whether the client
     /// has submitted / is still being waited on.
     /// </summary>
     public static (string EmsFormState, string? ClientSubmissionState) FormState(RemsFormStateInfo? form)
@@ -105,7 +105,7 @@ internal static class RemsWorkspaceMapper
             request.Id,
             department,
             request.ServiceLine?.Value,
-            request.JobTemplate?.Value,
+            request.JobType?.Value,
             client?.Industry?.Value,
             UserRef(request.DepartmentDirectorId, names),
             UserRef(request.EngagementExecutiveId, names),
@@ -115,6 +115,7 @@ internal static class RemsWorkspaceMapper
             request.RealizationPercentage,
             request.BillingPeriod?.Value,
             request.BillingProcessDescription,
+            request.JobDescription,
             RemsDerived.EngagementStatusOf(request).ToString(),
             marketing,
             commission,

@@ -28,7 +28,7 @@ that customer, **by hand, from the request page**.
 3. **Sync is manual, per request** — SUPERSEDED 3 Nov 2026 by section 11: the job is queued on approval.
    As first decided: no approval trigger, no Hangfire job: an eligible request is posted
    when somebody presses Sync job now, and a failed attempt stays failed until somebody presses it again.
-   The button lives in the Actions column of the list pages (the Approvals list and EMS Review) and on the
+   The button lives in the Actions column of the list pages (the Approvals list and COP Review) and on the
    Job tab's table — NOT on the request page, which shows the job chip only (user, 31 Oct 2026).
    A Start/Stop switch on the Job tab, like the customer sync's: while stopped, the action is hidden
    everywhere, not disabled.
@@ -86,8 +86,8 @@ always the caller's own tenant (the 22 Oct rule for the sync cards).
 
 **What users see.** The request page header gets a job chip beside the customer chip — "Job 10234" with
 the synced-by and synced-on in the tooltip, or "No Maconomy job" / "Posting job…" / "Job sync failed"
-with the reason; the engagement section repeats it read-only with a sentence. The lists (Approvals, EMS
-Review, My Requests) get a "Maconomy job" column beside the customer one; the Approvals list and EMS
+with the reason; the engagement section repeats it read-only with a sentence. The lists (Approvals, COP
+Review, My Requests) get a "Maconomy job" column beside the customer one; the Approvals list and COP
 Review carry the Sync job now action in their Actions column, shown only while the job sync is on and the
 row is eligible. Every attempt writes `RemsMaconomyJobSynced` or `RemsMaconomyJobSyncFailed` to the
 activity log.
@@ -107,10 +107,12 @@ place that says what is sent.
 | `projectmanagernumber` | the Job tab's project manager number | required; 82 by default |
 | `jobname` | "{client name}.{Service Line label}" — a person as "LastName FirstName", an organisation as its name (user, 31 Oct 2026) | refused when the request names no Service Line |
 | `jobnumber` | — | sent empty; read back from the reply |
+| `locationname` | the request's Department → its Maconomy number (Option Sets → REMS Department; section 12) | optional; left out when the department carries none, so the template job's location stands |
+| `text3` | `RemsRequest.PurchaseOrderNumber` (section 12) | optional; left out when blank |
 
-Not sent in this phase: company, location, job group (the template job fixes them — the probe's dry run
-shows what it derives), dates, fees, billing, personnel rates, tasks, the REMS number (7.3). Each is a
-later phase (section 8), none blocks the first job.
+Not sent in this phase: company, job group (the template job fixes them — the probe's dry run shows what
+it derives), dates, fees, billing, personnel rates, tasks, the REMS number (7.3). Each is a later phase
+(section 8), none blocks the first job. The location was on this list until 7 Nov 2026 (section 12).
 
 ---
 
@@ -198,7 +200,7 @@ connection" while none has been issued, without locking them.
   engagement section. `MaconomySyncChip.vue` takes a `kind` (customer | job) and `maconomySync.js` gains
   the job looks, so the two chips read alike.
 - `services/api.js`: the calls above.
-- Optional, cheap: a "Maconomy job" column on EMS Review and the Approvals list beside the customer
+- Optional, cheap: a "Maconomy job" column on COP Review and the Approvals list beside the customer
   column. Not in the first cut unless asked.
 
 **Not touched:** the approval route, the customer sync, the REMS statuses, Hangfire.
@@ -257,7 +259,7 @@ copy.
    now action is hidden, not disabled.
 6. **Project manager is a plain number field** (default 82), not a picker from Maconomy's employees.
 7. ~~Where Sync now lives~~ DECIDED 31 Oct 2026: only in the Actions column of the list pages (Approvals
-   list, EMS Review) and on the Job tab's table. The request page shows the chip only.
+   list, COP Review) and on the Job tab's table. The request page shows the chip only.
 
 ---
 
@@ -433,3 +435,36 @@ sync is queued; the user confirmed the order (customer first if new, then the jo
 - **Sync job now stays**, on the same lists, for a request that failed or was approved while the sync was
   off. `MaconomyJobSyncedById` is null for a job that ran by itself.
 - Not run against Maconomy, like the rest of the job sync.
+
+---
+
+## 12. Location and purchase order on the job card — BUILT 7 Nov 2026
+
+The user's instruction: "Add New Job mapping, 1. Department -> location (maconomy) [Assurance-1, Tax-2,
+Admin-3, GCS-4, CAS-5, Consulting-6]. 2. Purchase Order -> text3."
+
+- **`locationname`** is the request's Department's Maconomy number, read the way the template job's is:
+  `OptionSetItem.MaconomyNumber` on each `REMS.Department` item, through `MaconomyNumberMap.LocationMap`
+  (department item id → number) on `MaconomyJobSyncContext`. `MaconomyJobDataMapping.ResolveLocation`
+  resolves it; a department without a number leaves the field out, so the template job's location stands.
+  The location is not an eligibility condition, so `MaconomyJobSyncRules` does not change.
+- **The numbers.** Seeded in `DefaultOptionSets` for a new tenant and backfilled by migration
+  `DepartmentMaconomyLocationNumbers` onto the standard list and every tenant copy, matched by set key and
+  value, only where blank: Assurance 1, Tax 2, Admin 3, GCS 4, CAS 5. Audit, retired, gets none. **Consulting
+  (6) is not a department**: it is a Service Line, offered under Tax, Assurance, GCS and CAS, so nothing
+  carries 6. A department added under Option Sets with Maconomy number 6 would map to it without a code
+  change.
+- **`text3`** is `RemsRequest.PurchaseOrderNumber`, as entered on the Engagement Setup (the GCS block);
+  blank is left out.
+- **What follows.** The job's field list names both; the preview (`RemsMaconomyJobSyncPreview`:
+  `department`, `locationNumber`, `purchaseOrderNumber`) and the confirmation dialog show them; the Job tab's
+  table gains a Department column and its Job defaults card a "n of m departments carry a Maconomy location
+  number" line (offered departments only); the mapping card reads them from `Describe`. `JobSyncGraph` loads
+  the department.
+- Field names as unconfirmed as the rest of the card (section 5): `locationname` is the popup's `…name` form,
+  `text3` the free-text column.
+- Not run against Maconomy, like the rest of the job sync.
+
+## 13. Job Type in place of Job Template — BUILT 11 Nov 2026
+
+The Job Template is gone from the Engagement Setup: a 46-value **Job Type** (`REMS.JobType`, independent of the department and service line) names the template job instead, through the same `MaconomyNumber` on its option item, the same `TemplateMap` and the same `ResolveTemplate`; the eligibility messages, the Job tab line and the mapping card say Job Type. The probe in section 5 step 2 is answered: the flag is `template = true` (not `templatejob`), THF has 38 template jobs numbered "ZZ" + the job's name, and 44 job types were seeded with theirs (the thirteen tax types all on ZZTax Compliance; Estate Planning and Internal IT empty by decision). Plan, decisions and what was built: `REMS_JOB_TYPE_PLAN.md`.

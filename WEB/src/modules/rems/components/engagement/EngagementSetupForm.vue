@@ -5,7 +5,7 @@
       <div class="row q-col-gutter-md">
         <!-- ── Where the work sits, who heads that, and what the firm does ──────────────────────── -->
         <!-- In this order because each narrows the next: the department decides which service lines are
-             offered, and the department and line together which job templates. -->
+             offered, and the department and line together which job types. -->
         <app-select
           :model-value="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-6"
           :readonly="!editable" :rules="[requiredRule('a Department')]"
@@ -25,11 +25,16 @@
           info="From the REMS Service Line option list (Administration → Option Sets), narrowed to the lines the selected Department offers. What the firm is actually engaged to do."
           @update:model-value="onServiceLinePicked"
         />
+        <!-- Independent of the Department and Service Line above it: every value is offered. -->
         <app-select
-          :model-value="core.jobTemplate" :options="offeredJobTemplates" label="Job Template" class="col-12 col-sm-6"
-          :readonly="!editable" :hint="jobTemplateHint"
-          info="From the REMS Job Template option list (Administration → Option Sets), narrowed to the templates the selected Department and Service Line are set up from. Finer than the service line."
-          @update:model-value="onJobTemplatePicked"
+          v-model="core.jobType" :options="jobTypeOptions" label="Job Type" class="col-12 col-sm-6"
+          :readonly="!editable"
+          info="From the REMS Job Type option list (Administration → Option Sets). The kind of job the engagement is set up as; the value's Maconomy number is the template job the Maconomy job is created from."
+        />
+        <!-- A short plain-text tag for the job, under its job type. Optional. -->
+        <app-text-field
+          v-model="core.jobDescription" label="Job Description" class="col-12" :readonly="!editable"
+          :maxlength="JOB_DESCRIPTION_MAX" :hint="`Up to ${JOB_DESCRIPTION_MAX} characters`"
         />
 
         <!-- ── The two people who run it ────────────────────────────────────────────────────────── -->
@@ -343,7 +348,7 @@ import { MAX_UPLOAD_MB } from "composables/useFileDrop";
 import {
   useRemsMeta, isTaxDepartment, isGovernmentAudit, isCasDepartment, isAssuranceDepartment,
   isGcsDepartment, requiresClientAcceptanceForm,
-  remsServiceLineOptions, remsServiceLineFitsDepartment, remsJobTemplateOptions, remsJobTemplateFitsServiceLine
+  remsServiceLineOptions, remsServiceLineFitsDepartment
 } from "modules/rems/useRemsMeta";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -357,7 +362,7 @@ const props = defineProps({
   deptOptions: { type: Array, default: () => [] },
   // Rendered as "Service Line"; still named for the data behind it. See the note at the top of useRemsMeta.
   serviceLineOptions: { type: Array, default: () => [] },
-  jobTemplateOptions: { type: Array, default: () => [] },
+  jobTypeOptions: { type: Array, default: () => [] },
   taxFormOptions: { type: Array, default: () => [] },
   taxFormUnavailable: { type: Boolean, default: false },
   billingPeriodOptions: { type: Array, default: () => [] },
@@ -413,7 +418,8 @@ const buildCore = (e) => ({
   department: e.department || null,
   // No `industry`: the industry is asked on the Client Information tab and written by the page.
   serviceLine: e.serviceLine || null,
-  jobTemplate: e.jobTemplate || null,
+  jobType: e.jobType || null,
+  jobDescription: e.jobDescription ?? "",
   engagementExecutiveId: e.engagementExecutive?.id || null,
   billingManagerId: e.billingManager?.id || null,
   firstYearFeeEstimate: e.firstYearFeeEstimate ?? "",
@@ -463,11 +469,10 @@ const buildTax = (t) => {
 };
 const tax = ref(buildTax(props.engagement.tax));
 
-// What just happened to a stored Service Line or Job Template the new choice above it does not offer. A
-// field that empties itself with no explanation reads as data lost rather than as an answer that stopped
-// applying. Set and read further down, beside the pickers they belong to.
+// What just happened to a stored Service Line the department chosen above it does not offer. A field that
+// empties itself with no explanation reads as data lost rather than as an answer that stopped applying.
+// Set and read further down, beside the picker it belongs to.
 const serviceLineCleared = ref("");
-const jobTemplateCleared = ref("");
 
 // Re-sync every local form when the parent adopts a fresh engagement view.
 watch(() => props.engagement, (e) => {
@@ -479,7 +484,6 @@ watch(() => props.engagement, (e) => {
   cafOverride.value = undefined;
   govOverride.value = undefined;
   serviceLineCleared.value = "";
-  jobTemplateCleared.value = "";
   nextTick(() => { syncing = false; });
 });
 
@@ -492,50 +496,26 @@ watch(() => tax.value.fiscalYearEnd, (fye, previous) => {
   tax.value.firstExtensionDueDate = derived.firstExtensionDueDate;
 });
 
-// ---- Service Line and Job Template, narrowed by what sits above them ----
-// The department decides which lines are offered, and the department and line together which templates
-// (REMS_SERVICE_LINES_BY_DEPARTMENT / REMS_JOB_TEMPLATES_BY_SERVICE_LINE). The labels are for the notes below.
-const { departmentLabel, serviceLineLabel, jobTemplateLabel } = useRemsMeta();
+// ---- Service Line, narrowed by the department above it ----
+// The department decides which lines are offered (REMS_SERVICE_LINES_BY_DEPARTMENT). The labels are for
+// the note below. The Job Type is independent of both and is never narrowed or cleared.
+const { departmentLabel, serviceLineLabel } = useRemsMeta();
 const offeredServiceLines = computed(() =>
   remsServiceLineOptions(props.serviceLineOptions, core.value.department, core.value.serviceLine));
-const offeredJobTemplates = computed(() =>
-  remsJobTemplateOptions(props.jobTemplateOptions, core.value.department, core.value.serviceLine, core.value.jobTemplate));
 
 // The cleared note when there is one, otherwise the reason an empty picker is empty.
 const serviceLineHint = computed(() =>
   serviceLineCleared.value ||
   (core.value.department ? "" : "Choose a Department first — it decides which service lines are offered."));
-const jobTemplateHint = computed(() => {
-  if (jobTemplateCleared.value) return jobTemplateCleared.value;
-  if (!core.value.serviceLine) return "Choose a Service Line first — it decides which job templates are offered.";
-  if (!offeredJobTemplates.value.length) return `No job template applies to ${serviceLineLabel(core.value.serviceLine)}.`;
-  return "";
-});
-
-// Drops a job template the department and service line no longer offer, and says so — unless there is no
-// service line at all, when the hint under the box already says what to choose first.
-const reconcileJobTemplate = () => {
-  const template = core.value.jobTemplate;
-  const line = core.value.serviceLine;
-  if (!template) return;
-  if (line && remsJobTemplateFitsServiceLine(core.value.department, line, template)) return;
-  core.value.jobTemplate = null;
-  if (!line) return;
-  jobTemplateCleared.value =
-    `Job Template cleared — ${jobTemplateLabel(template)} is not offered for ${serviceLineLabel(line)} ` +
-    `in ${departmentLabel(core.value.department)}.`;
-};
 
 const onDepartmentPicked = (value) => {
   core.value.department = value;
   serviceLineCleared.value = "";
-  jobTemplateCleared.value = "";
   const line = core.value.serviceLine;
   if (!value) {
-    // Removing the department empties the chain beneath it, quietly: the hints under the two boxes say
-    // what to choose first, and neither box is at fault.
+    // Removing the department empties the service line beneath it, quietly: the hint under the box says
+    // what to choose first, and the box is not at fault.
     core.value.serviceLine = null;
-    core.value.jobTemplate = null;
     return;
   }
   if (line && !remsServiceLineFitsDepartment(value, line)) {
@@ -544,21 +524,12 @@ const onDepartmentPicked = (value) => {
       `Service Line cleared — ${serviceLineLabel(line)} is not offered under ${departmentLabel(value)}.`;
     core.value.serviceLine = null;
   }
-  reconcileJobTemplate();
 };
 
-// A note has done its job the moment a value is chosen beneath it; removing the service line takes the job
-// template with it.
+// A note has done its job the moment a value is chosen beneath it.
 const onServiceLinePicked = (value) => {
   core.value.serviceLine = value;
   serviceLineCleared.value = "";
-  jobTemplateCleared.value = "";
-  reconcileJobTemplate();
-};
-
-const onJobTemplatePicked = (value) => {
-  core.value.jobTemplate = value;
-  jobTemplateCleared.value = "";
 };
 
 // ---- Conditional visibility keys off the LOCALLY selected department (immediate) ----
@@ -828,6 +799,8 @@ const setupProblem = () => {
 // A description of how the client is billed, not a treatise. Mirrors the column and the API validator.
 // Owed, because the box is only shown on CAS, where it is.
 const BILLING_DESCRIPTION_MAX = 1000;
+// The box stops typing here. Mirrors the column and the API validator.
+const JOB_DESCRIPTION_MAX = 6;
 const billingDescriptionRules = [
   requiredValue("how the client is billed"),
   (v) => (v ?? "").length <= BILLING_DESCRIPTION_MAX ||
@@ -860,11 +833,12 @@ const saveSetup = async (engagementId, remsId = null) => {
   }
 
   let view = (await remsApi.updateEngagement(engagementId, {
-    // Empty string rather than null for the three clearable ones: the endpoint reads null as "leave this
+    // Empty string rather than null for the four clearable ones: the endpoint reads null as "leave this
     // field alone" and only an empty value clears.
     department: core.value.department ?? "",
     serviceLine: core.value.serviceLine ?? "",
-    jobTemplate: core.value.jobTemplate ?? "",
+    jobType: core.value.jobType ?? "",
+    jobDescription: core.value.jobDescription ?? "",
     engagementExecutiveId: core.value.engagementExecutiveId,
     billingManagerId: core.value.billingManagerId,
     // One fee question per engagement, and only the one that was asked is written. Omitted — not blanked —

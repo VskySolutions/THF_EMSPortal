@@ -277,7 +277,7 @@ public sealed class MaconomyController : ControllerBase
             var syncedBy = r.MaconomyJobSyncedById is { } by && names.TryGetValue(by, out var n) ? n : null;
             rows.Add(new MaconomyJobSyncRow(
                 r.Id, r.RemsNumber, r.Client?.ClientName ?? string.Empty, r.Client?.MaconomyCustomerNumber,
-                r.ServiceLine?.Label, r.JobTemplate?.Label, r.UpdatedOnUtc,
+                r.ServiceLine?.Label, r.JobType?.Label, r.Department?.Label, r.UpdatedOnUtc,
                 RemsMaconomyJobSyncViews.For(r, context, _jobSync.IsStale(r), canManage: true, syncedBy)));
         }
         return Ok(ApiResponseFactory.Success<IReadOnlyList<MaconomyJobSyncRow>>(rows, $"{rows.Count} approved request(s)."));
@@ -351,17 +351,22 @@ public sealed class MaconomyController : ControllerBase
             names.TryGetValue(changedById, out changedBy);
         }
 
-        // Every value of the tenant's REMS Job Template list with the Maconomy number it carries, so the
-        // tab can say how many still lack one. The numbers are edited under Option Sets.
+        // Every value of the tenant's REMS Job Type list, and every offered value of its REMS Department
+        // list, with the Maconomy number it carries, so the tab can say how many still lack one. The
+        // numbers are edited under Option Sets.
         var numbers = await _numbers.GetAsync(tenant, cancellationToken);
-        var templates = numbers.JobTemplates
-            .Select(t => new MaconomyJobTemplateRow(t.ItemId, t.Code, t.Label, t.Number))
+        var jobTypes = numbers.JobTypes
+            .Select(t => new MaconomyJobTypeRow(t.ItemId, t.Code, t.Label, t.Number))
+            .ToList();
+        var departments = numbers.Departments
+            .Where(d => d.IsActive)
+            .Select(d => new MaconomyDepartmentRow(d.ItemId, d.Code, d.Label, d.Number))
             .ToList();
 
         return new MaconomyJobSyncOverviewResponse(
             overview.Connected, overview.Enabled, overview.ChangedOnUtc, changedBy,
             overview.ProjectManagerNumber, overview.DefaultTemplateNumber,
-            overview.Synced, overview.Failed, overview.Syncing, overview.Waiting, templates);
+            overview.Synced, overview.Failed, overview.Syncing, overview.Waiting, jobTypes, departments);
     }
 
     // ---- The mapping ----

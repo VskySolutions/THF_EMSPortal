@@ -1,8 +1,8 @@
 # One intake per client — plan
 
-**Status: PLANNED on 2 Nov 2026, approved by the user the same day, NOT built — waiting for THF to
-confirm the rule before anything is coded.** The user settled the rules (section 0); section 7 lists the
-points decided by me rather than the user. Nothing in this document exists in code yet.
+**Status: BUILT on 7 Nov 2026** (planned and approved on 2 Nov 2026, held until the user asked for it).
+The user settled the rules (section 0); section 7 lists the points decided by me rather than the user, and
+section 8 what was built, where it departs from the plan, and how it was checked.
 
 The intake form already lives on the client, not on the request: `RemsClientIntake` builds the form from
 the client's rows and writes the client's rows back, and a request carries only when its form was sent,
@@ -23,7 +23,7 @@ their new answers silently replace the old ones under every earlier request.
 - **After sending, the only email the request offers is the reminder.** No re-send, no "ask the client to
   update their details".
 - **Existing clients are backfilled:** anyone with a request the client ever submitted counts as done.
-- The admin's correction of a completed intake from the Submitted EMS Form pane stays as it is.
+- The admin's correction of a completed intake from the Submitted COP Form pane stays as it is.
 
 ## 1. How it works
 
@@ -31,7 +31,7 @@ their new answers silently replace the old ones under every earlier request.
 save the page knows the intake is on file: the left pane shows the on-file answers read-only with the
 caption *"Intake on file — submitted on 14 Oct 2026 via REMS-0031. It is not sent again."* The finishing
 button on the Commission tab reads **Submit for review** instead of Submit to Client. Pressing it asks
-*"&lt;client&gt;'s intake is on file since &lt;date&gt; (REMS-0031). This request goes to EMS Review for an
+*"&lt;client&gt;'s intake is on file since &lt;date&gt; (REMS-0031). This request goes to COP Review for an
 admin to pick up; no form is sent. Continue?"* and the request moves straight to Admin Review, waiting for
 pickup. No invite code is minted, no email is sent, no email event is written, and the request never
 offers Email log, Client link or Send reminder. Everything from pickup onwards is unchanged: the admin
@@ -73,7 +73,7 @@ others.
   checks minus the email address. Effects, in one transaction: `IntakeOnFileFromRemsId =
   client.IntakeSubmittedRemsId`, `FormSubmittedOnUtc = now`, status → `customer_submitted` with the status
   history row, the activity event, and the admin-pool notification the public submit sends. Stamping
-  `FormSubmittedOnUtc` is what keeps every downstream surface unchanged — EMS Review, Related Entities,
+  `FormSubmittedOnUtc` is what keeps every downstream surface unchanged — COP Review, Related Entities,
   the pane, the approval packet all key on it.
 - **`POST form/send`** refuses a client with an intake on file: *"This client's intake is on file; submit
   the request for review instead."* The page never offers it, but the server says so too.
@@ -95,7 +95,7 @@ others.
 ## 4. Web
 
 - **Request page, Draft, returning client**: the pane appears (read-only, no Edit Form) with the on-file
-  caption; the finishing button is Submit for review with a `useConfirm` instead of the Send EMS dialog;
+  caption; the finishing button is Submit for review with a `useConfirm` instead of the Send COP dialog;
   `readyToSend` keeps every data check (CSE, entity type, industry, commission) but words the email check
   as a required field rather than "to send the form to". `canSendToClient` splits into itself (no intake
   on file) and `canSubmitForReview`.
@@ -105,7 +105,7 @@ others.
   submission the pane and the dialog behave as today.
 - **Hidden on a reused intake**: Email log (page and lists), Client link, Send reminder, the "sent"
   banners. `emsFormActivity(row)` returns false when `intakeReused`.
-- **Lists**: EMS State stays "Submitted" (section 7); Email log follows `intakeReused`.
+- **Lists**: COP State stays "Submitted" (section 7); Email log follows `intakeReused`.
 - **Public form, approval task page**: unchanged.
 
 ## 5. Build order
@@ -120,13 +120,13 @@ others.
 ## 6. Checks before it is called done
 
 - New client: send, reminder, client submit — unchanged, no email-event or status regressions.
-- Returning client: pane read-only in Draft; Submit for review lands in EMS Review waiting for pickup; no
+- Returning client: pane read-only in Draft; Submit for review lands in COP Review waiting for pickup; no
   `RemsEmailEvents` row; Email log / Client link / reminder absent on the page and on every list.
 - User completion: form out → Edit Form → save → Admin Review; the public link then reports Submitted;
   the pane names who completed it.
 - Backfill: clients with `IntakeSubmittedOnUtc` = clients with at least one request submitted by the
   client, and the date is the earliest.
-- Create EMS on a related business still sends the form (a new client has no intake).
+- Create COP on a related business still sends the form (a new client has no intake).
 - The View page shows the pane and the on-file caption to everyone, with no actions.
 
 ## 7. Assumptions to confirm or change
@@ -134,9 +134,50 @@ others.
 1. **Who may complete a form that is out with the client**: the initiator, the CSE named on the request,
    the REMS Admins and the elevated roles. After completion, corrections stay the admins' (today's rule).
 2. **A user's completion sends the client no email**; their link simply reports the form as submitted.
-3. **EMS State stays "Submitted"** for a reused intake; the request page says it was carried over. A
+3. **COP State stays "Submitted"** for a reused intake; the request page says it was carried over. A
    dedicated "Intake on file" value would mean an option item inserted into every tenant's copy of the
    set (option sets are per-tenant copies).
+
+## 8. Built, 7 Nov 2026
+
+Migration `20261107133731_AddRemsIntakeOnce` adds the five columns of section 2 and backfills them. The
+client's intake is on file from their earliest request whose own form came back (`InviteCode` set); a copy
+submitted for review on it is marked as reusing it. The API applies it on its next start; for a scripted
+deploy use `dotnet ef migrations script <previous> --idempotent` (the backfill is wrapped in `EXEC`).
+
+Where the build departs from, or narrows, the plan above — my positions, not the user's:
+
+- **A client with the form out on another request is not sent a second one.** A draft for them offers
+  Submit for review, blocked with *"Waiting for the client's intake form, sent with REMS-n"* until that form
+  comes in; `form/send` refuses it (`REMS_INTAKE_OUTSTANDING`). This is the "once" rule applied before the
+  intake is on file; the plan only covered the on-file case.
+- **A copy never sends the form** (the 5 Nov rule, kept): it waits for the request it was copied from, and
+  the server now refuses the send too (`REMS_FORM_NOT_SENDABLE`), not only the page.
+- **Who may finish a draft** (Submit to Client or Submit for review) is `RemsSetupAccess.CanWork`, the rule
+  the send already applied: the initiator, the CSE on it, a REMS Admin, the elevated roles. The copy's
+  narrower "creator or privileged" rule was widened to match.
+- **Submit for review stamps `FormSubmittedOnUtc` with the time of the hand-off** (section 3), so COP Review
+  lists it as received then; the pane and the View page show the intake's own date and request, read off
+  the client. `IntakeOnFileFromRemsId` is what marks the request as having reused it.
+- **Completing a form that is out** (`PUT requests/{id}/submission` while `awaiting_customer`) is open to
+  `RemsSetupAccess.CanCompleteIntake` (assumption 1) with `rems.requests.update` or
+  `rems.engagements.manage`. It runs through the same code as the client's own submission
+  (`RemsIntakeSubmission`, shared with the public form): status, history, the people on the request told
+  in-app and by the staff email, the admin pool told when nobody holds it — the completer is left out — and
+  a `RemsFormCompletedByUser` activity row. The client is not emailed (assumption 2).
+- **A reused-intake request stays off the Related Entities board** (assumption 7): the parties are listed
+  under the request that asked for them.
+- The "Corrected by" banner allows five seconds between the intake date and the client row's own stamp, so a
+  submission or completion is not reported as a correction of itself.
+- The COP Review client filter now admits requests that reached the queue without an invite.
+
+Checked on 7 Nov 2026 with the in-process harness over a scratch copy of the dev catalog (section 6):
+the copy of an unsent draft waits; a returning client's draft shows the on-file intake read-only, refuses
+the send and a correction, submits for review with no email event and lands in COP Review flagged as
+reused and off the Related Entities board; a draft for a client whose form is out waits, then submits once
+a user completes that form (status, completer, the client's link reporting Submitted); the client's own
+submission through the link stamps their intake with no user. The backfill marked 33 clients, the earliest
+request each. Not walked in a browser; the dev catalog itself was not migrated.
 4. **Submit for review uses the send permission** (`rems.forms.send`): it is the same finishing move.
 5. **An on-file intake is reused whatever became of the earlier request** — declined, approved, or still
    in review.

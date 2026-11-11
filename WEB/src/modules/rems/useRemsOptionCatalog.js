@@ -19,7 +19,7 @@ const SET_KEYS = {
   entityType: "REMS.EntityType",
   department: "REMS.Department",
   serviceLine: "REMS.ServiceLine",
-  jobTemplate: "REMS.JobTemplate",
+  jobType: "REMS.JobType",
   industry: "REMS.Industry",
   billingPeriod: "REMS.BillingPeriod",
   personnelLevel: "REMS.PersonnelLevel",

@@ -1,8 +1,8 @@
 {
-  "name": "ems-portal",
+  "name": "cop-portal",
   "version": "0.0.1",
-  "description": "EMS Portal",
-  "productName": "EMS Portal",
+  "description": "COP Portal",
+  "productName": "COP Portal",
   "author": "Mohit Tambe <mohit.tambe@vskysolutions.com>",
   "private": true,
   "type": "module",

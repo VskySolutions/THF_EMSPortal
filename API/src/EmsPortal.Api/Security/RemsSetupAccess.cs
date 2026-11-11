@@ -36,6 +36,13 @@ internal static class RemsSetupAccess
     public static bool IsParticipant(RemsRequest rems, Guid me)
         => IsInitiator(rems, me) || rems.CSEId == me || rems.AdminAssignedToId == me;
 
+    /// <summary>
+    /// May complete the intake form for a client who has it and has not answered: the initiator, the CSE
+    /// on the request, the REMS Admins and the elevated roles. Corrections after that are the admins'.
+    /// </summary>
+    public static bool CanCompleteIntake(ClaimsPrincipal user, RemsRequest rems, Guid me)
+        => IsElevated(user) || IsRemsAdmin(user) || IsInitiator(rems, me) || rems.CSEId == me;
+
     /// <summary>May READ the setup.</summary>
     public static bool CanRead(ClaimsPrincipal user, RemsRequest rems, Guid me)
         => IsElevated(user)
@@ -107,6 +114,6 @@ internal static class RemsSetupAccess
             : RemsRequestStatuses.IsWithInitiator(rems.Status!.Value)
             ? "This request is with the person who raised it; only they (or the CSE named on it), or a REMS Admin, can work its engagement setup."
             : rems.AdminAssignedToId is null
-                ? "This request is waiting for pickup. Pick it up from EMS Review to work its engagement setup."
+                ? "This request is waiting for pickup. Pick it up from COP Review to work its engagement setup."
                 : "This request is being reviewed by another admin; only they can work its engagement setup.";
 }

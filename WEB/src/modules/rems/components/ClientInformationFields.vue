@@ -399,7 +399,7 @@ const props = defineProps({
   saved: { type: Object, default: null },
 
   // ---- The two classifications, which are NOT part of `model` ----
-  // Entity Type belongs to the request's EMS form record and Industry to its engagement, so both are
+  // Entity Type belongs to the request's COP form record and Industry to its engagement, so both are
   // written by endpoints of their own; the page owns the values and v-models them through here.
   setupReadonly: { type: Boolean, default: false },
   entityType: { type: String, default: null },
@@ -411,7 +411,7 @@ const props = defineProps({
   industryOptions: { type: Array, default: () => [] },
 
   // ---- The CSE, which is not part of `model` either ----
-  // It belongs to the request's EMS form record — what the client's invite is minted from — and is
+  // It belongs to the request's COP form record — what the client's invite is minted from — and is
   // saved by the same endpoint as the entity type above, which requires the pair.
   cseUserId: { type: String, default: null },
   cseOptions: { type: Array, default: () => [] },

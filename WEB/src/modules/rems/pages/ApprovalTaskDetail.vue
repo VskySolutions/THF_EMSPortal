@@ -606,7 +606,7 @@ const fmt = useDateFormat();
 const {
   typeLabel, typeHint, requestStatusOption, referralSourceLabel,
   entityTypeLabel, formStatusOption, submissionStateOption,
-  departmentLabel, serviceLineLabel, jobTemplateLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
+  departmentLabel, serviceLineLabel, jobTypeLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
   approverRoleLabel, approverRoleOption, approvalStatusOption,
   engagementStatusOption, roundStatusOption
 } = useRemsMeta();
@@ -713,7 +713,7 @@ const requestRows = computed(() => {
     // Read off the option, so the wording and the explanation are the tenant's own — the same two rows
     // the request lists render as badges.
     {
-      label: "EMS Form State",
+      label: "COP Form State",
       value: formStatusOption(r.emsFormState).label,
       hint: formStatusOption(r.emsFormState).description
     },
@@ -753,7 +753,9 @@ const setupRows = computed(() => {
     { label: "Department", value: departmentLabel(e.department) },
     { label: "Department Director", value: text(e.departmentDirector?.name) },
     { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
-    { label: "Job Template", value: jobTemplateLabel(e.jobTemplate) },
+    { label: "Job Type", value: jobTypeLabel(e.jobType) },
+    // Optional, so only where one was written.
+    ...(e.jobDescription ? [{ label: "Job Description", value: e.jobDescription }] : []),
     { label: "Engagement Executive", value: text(e.engagementExecutive?.name) },
     { label: "Billing Manager", value: text(e.billingManager?.name) }
   ];

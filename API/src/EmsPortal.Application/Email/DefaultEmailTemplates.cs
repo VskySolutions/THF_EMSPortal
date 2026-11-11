@@ -124,7 +124,7 @@ public static class DefaultEmailTemplates
         new Definition(
             EmailTemplateKey.RemsFormLink,
             "REMS Form Link",
-            "Sent to a client with the secure link to complete an EMS form for a REMS request.",
+            "Sent to a client with the secure link to complete an COP form for a REMS request.",
             "Action required: complete your form for REMS {{RemsNumber}}",
             """
             <p>Hello {{ClientName}},</p>
@@ -140,7 +140,7 @@ public static class DefaultEmailTemplates
         new Definition(
             EmailTemplateKey.RemsFormReminder,
             "REMS Form Reminder",
-            "Sent to a client who has been emailed their EMS form link but has not submitted it yet.",
+            "Sent to a client who has been emailed their COP form link but has not submitted it yet.",
             "Reminder: your form for REMS {{RemsNumber}} is still outstanding",
             """
             <p>Hello {{ClientName}},</p>
@@ -156,7 +156,7 @@ public static class DefaultEmailTemplates
         new Definition(
             EmailTemplateKey.RemsFormSubmitted,
             "REMS Form Submitted",
-            "Sent to the assigned Admin and CSE when a client submits their EMS form for a REMS request.",
+            "Sent to the assigned Admin and CSE when a client submits their COP form for a REMS request.",
             "Form submitted for REMS {{RemsNumber}}",
             """
             <p>{{ClientName}} has submitted their form for REMS request <strong>{{RemsNumber}}</strong>.</p>

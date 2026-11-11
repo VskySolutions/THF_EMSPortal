@@ -30,7 +30,7 @@ public enum EntityType
     // UF rows written while saved views existed, and handing it to a new entity type would re-point them.
     StickyNote = 15,
     // A client of the firm, held as a Person. Used as a Person's SourceEntityType to say what that
-    // person IS, rather than which screen created them: a client, a role contact captured off an EMS
+    // person IS, rather than which screen created them: a client, a role contact captured off an COP
     // form (Rems) and a colleague somebody onboarded (Person) all land in the same table, and only the
     // first belongs in the client picker.
     Client = 16,

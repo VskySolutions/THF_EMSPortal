@@ -1,6 +1,6 @@
-# EMS Portal — Development Guidelines
+# COP Portal — Development Guidelines
 
-This document defines how the EMS Portal codebase is organized and how to extend it consistently. Read it before adding features. It complements the [README](../README.md).
+This document defines how the COP Portal codebase is organized and how to extend it consistently. Read it before adding features. It complements the [README](../README.md).
 
 ---
 

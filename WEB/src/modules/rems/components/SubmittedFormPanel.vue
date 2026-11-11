@@ -1,5 +1,5 @@
 <template>
-  <!-- The client's submitted EMS form, read-only, rendered from the immutable submission. -->
+  <!-- The client's submitted COP form, read-only, rendered from the immutable submission. -->
   <div class="sfp">
     <div v-if="loading" class="row flex-center q-pa-xl"><q-spinner color="primary" size="32px" /></div>
 
@@ -20,7 +20,7 @@
           </span>
           <span class="text-grey-6"> · {{ view.remsNumber }}</span>
         </div>
-        <div class="col-auto text-caption text-grey-7">Submitted {{ fmt.formatDateTime(view.submittedOnUtc) }}</div>
+        <div class="col-auto text-caption text-grey-7">{{ receivedNote }}</div>
       </div>
 
       <!-- Said before the answers, not after them: a reader checking an EIN against the setup needs to know
@@ -160,6 +160,21 @@ const clientName = computed(() => {
 
 // Calendar dates read MM/DD/YYYY and are never timezone-shifted — see formatDateOnly.
 const dateOnly = formatDateOnly;
+
+// When the answers came in and whose intake they are: this request's own, on file from an earlier request,
+// or not in yet while the form is out with the client.
+const receivedNote = computed(() => {
+  const v = view.value;
+  if (!v) return "";
+  if (!v.submitted) {
+    return v.lastSavedOnUtc
+      ? `Not submitted yet · last saved ${fmt.formatDateTime(v.lastSavedOnUtc)}`
+      : "Not submitted yet";
+  }
+  const via = v.onFileFrom?.remsNumber ? ` via ${v.onFileFrom.remsNumber}` : "";
+  const by = v.completedBy ? ` by ${v.completedBy}` : "";
+  return `Submitted ${v.submittedOnUtc ? fmt.formatDateTime(v.submittedOnUtc) : ""}${via}${by}`;
+});
 
 const groups = computed(() => {
   const p = payload.value;

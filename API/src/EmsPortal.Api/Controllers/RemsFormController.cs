@@ -22,14 +22,14 @@ using EmsPortal.Api.RateLimiting;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// REMS EMS-form build/send + email-log backend (WO-112). There is no form row any more: the form is the
+/// REMS COP-form build/send + email-log backend (WO-112). There is no form row any more: the form is the
 /// request's invite columns, its entity type is the client's, and its status is derived from both.
 /// </summary>
 [ApiController]
 [LoadMaconomyClients]
 [Route("api/rems/requests")]
 [Produces("application/json")]
-[Tags("REMS EMS Form")]
+[Tags("REMS COP Form")]
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
 [ProducesResponseType(StatusCodes.Status401Unauthorized)]
 [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -49,6 +49,8 @@ public sealed class RemsFormController : ControllerBase
     private const string CodeFormAlreadySubmitted = "REMS_FORM_ALREADY_SUBMITTED";
     private const string CodeClientEmailUnconfirmed = "REMS_CLIENT_EMAIL_UNCONFIRMED";
     private const string CodeClientEmailInvalid = "REMS_CLIENT_EMAIL_INVALID";
+    private const string CodeIntakeOnFile = "REMS_INTAKE_ON_FILE";
+    private const string CodeIntakeOutstanding = "REMS_INTAKE_OUTSTANDING";
 
     private readonly IRemsRequestRepository _requests;
     private readonly IClientRepository _clients;
@@ -101,7 +103,7 @@ public sealed class RemsFormController : ControllerBase
 
     // -------------------- Build screen --------------------
 
-    /// <summary>The EMS form build-screen model: the request context plus the current form (AC-REMS-007.1).</summary>
+    /// <summary>The COP form build-screen model: the request context plus the current form (AC-REMS-007.1).</summary>
     [HttpGet("{remsId:guid}/form")]
     [RequireAnyPermission(Permissions.RemsFormsManage, Permissions.RemsRequestsUpdate)]
     [ProducesResponseType<ApiResponse<RemsFormBuildScreen>>(StatusCodes.Status200OK)]
@@ -271,6 +273,22 @@ public sealed class RemsFormController : ControllerBase
         }
 
         var client = rems.Client!;
+        // A client fills the intake once. One on file, or on its way in on another request, is not asked for
+        // again — said before anything about this request's own form, which is beside the point for them.
+        if (client.IsIntakeOnFile)
+        {
+            return FormConflict(CodeIntakeOnFile, "This client's intake is on file; submit the request for review instead.");
+        }
+        if (await _requests.FindOutstandingIntakeAsync(client.Id, rems.Id, cancellationToken) is { } outstanding)
+        {
+            return FormConflict(CodeIntakeOutstanding,
+                $"The intake form is already out with this client on {outstanding.RemsNumber}. Submit this request for review once it comes in.");
+        }
+        if (rems.CopiedFromRemsId is not null)
+        {
+            return FormConflict(CodeFormNotSendable,
+                "A copy is not sent to the client: its intake comes with the request it was copied from. Submit it for review once that is in.");
+        }
         if (rems.InviteCode is null)
         {
             return FormConflict(CodeFormNotBuilt, "The form has not been built yet.");
@@ -665,10 +683,10 @@ public sealed class RemsFormController : ControllerBase
         return Ok(ApiResponseFactory.Success(log, "REMS form email log retrieved."));
     }
 
-    // -------------------- EMS Inbox --------------------
+    // -------------------- COP Inbox --------------------
 
     /// <summary>
-    /// The EMS Inbox: every request that has a form, paginated and newest-modified first, with request
+    /// The COP Inbox: every request that has a form, paginated and newest-modified first, with request
     /// context, form state, creator, and latest send/delivery/open info (AC-REMS-009).
     /// </summary>
     [HttpGet("/api/rems/inbox")]
@@ -704,7 +722,7 @@ public sealed class RemsFormController : ControllerBase
             RemsWorkspaceMapper.UserRef(i.AdminAssignedToId, names),
             NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc));
 
-        return Ok(ApiResponseFactory.Paginated(rows, "REMS EMS inbox retrieved.", page, limit, total));
+        return Ok(ApiResponseFactory.Paginated(rows, "REMS COP inbox retrieved.", page, limit, total));
     }
 
     // -------------------- Helpers --------------------
@@ -778,7 +796,7 @@ public sealed class RemsFormController : ControllerBase
     }
 
     /// <summary>
-    /// The public EMS-form URL (the route WO-113/116 serve), built from <c>App:BaseUrl</c> as the
+    /// The public COP-form URL (the route WO-113/116 serve), built from <c>App:BaseUrl</c> as the
     /// email pipeline does.
     /// </summary>
     private string BuildFormLink(string inviteCode)

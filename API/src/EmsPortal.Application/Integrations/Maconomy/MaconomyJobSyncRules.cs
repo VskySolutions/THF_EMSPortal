@@ -58,9 +58,9 @@ public static class MaconomyJobSyncRules
         }
         if (MaconomyJobDataMapping.ResolveTemplate(request, context) is null)
         {
-            return request.JobTemplateId is null
-                ? $"The request names no Job Template and no default template job is set under {SettingsPlace}."
-                : $"The request's Job Template is not mapped to a Maconomy template job, and no default template job is set under {SettingsPlace}.";
+            return request.JobTypeId is null
+                ? $"The request names no Job Type and no default template job is set under {SettingsPlace}."
+                : $"The request's Job Type is not mapped to a Maconomy template job, and no default template job is set under {SettingsPlace}.";
         }
         if (string.IsNullOrWhiteSpace(context.ProjectManagerNumber))
         {

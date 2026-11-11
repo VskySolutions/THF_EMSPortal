@@ -82,7 +82,7 @@ public sealed class MaconomyJobCardOptions
     /// <summary>The Maconomy employee number every job names as project manager (THF: 82). Null refuses every sync, naming this key.</summary>
     public string? ProjectManagerNumber { get; set; }
 
-    /// <summary>The template job used when a request's Job Template carries no Maconomy number, or the request names none. Null refuses such a request.</summary>
+    /// <summary>The template job used when a request's Job Type carries no Maconomy number, or the request names none. Null refuses such a request.</summary>
     public string? DefaultTemplateJobNumber { get; set; }
 }
 

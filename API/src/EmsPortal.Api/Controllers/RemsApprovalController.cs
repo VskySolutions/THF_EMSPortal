@@ -1525,7 +1525,7 @@ public sealed class RemsApprovalController : ControllerBase
             setup.Status,
             setup.Department,
             setup.ServiceLine,
-            setup.JobTemplate,
+            setup.JobType,
             setup.Industry,
             clientView,
             entityView,
@@ -1540,6 +1540,7 @@ public sealed class RemsApprovalController : ControllerBase
             // of the arrangement, not the fee.
             setup.BillingPeriod,
             setup.BillingProcessDescription,
+            setup.JobDescription,
             auditView,
             governmentView,
             taxView,

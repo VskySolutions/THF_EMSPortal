@@ -24,7 +24,12 @@ export function useMaconomyJobSync ({ run = (remsId) => remsApi.maconomyJobSyncN
     ["Customer", p.customerNumber],
     ["Template job", p.templateJobNumber],
     ["Project manager", p.projectManagerNumber],
-    ["Job name", p.jobName]
+    ["Job name", p.jobName],
+    // The department's Maconomy number; without one the template job's location stands.
+    ["Location", p.locationNumber
+      ? `${p.locationNumber} (${p.department})`
+      : (p.department ? `none for ${p.department} — the template job's stands` : null)],
+    ["Purchase order", p.purchaseOrderNumber]
   ].map(([label, value]) => `<b>${label}:</b> ${escapeHtml(value || "—")}`).join("<br>");
 
   const syncJobNow = async (row) => {

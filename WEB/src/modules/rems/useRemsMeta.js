@@ -64,9 +64,9 @@ export const REMS_INDUSTRIES_BY_ENTITY_TYPE = Object.freeze({
   // The legacy `business` is deliberately absent: it has no stated list, so it is offered every trade.
 });
 
-// ---- Which service lines belong to which department, and which job templates to each pair ----
-// THF's table again. A job template goes with the PAIR rather than with the service line alone: Assurance
-// Services means audits and reviews under Assurance and Governmental Consulting Services under GCS.
+// ---- Which service lines belong to which department ----
+// THF's table again. The Job Type beneath the pair is NOT narrowed: every value is offered whatever the
+// department and service line (the user's call, 11 Nov 2026).
 export const REMS_SERVICE_LINES_BY_DEPARTMENT = Object.freeze({
   tax: Object.freeze([
     "tax_compliance", "consulting", "mergers_acquisitions", "plan_administration", "employee_benefits",
@@ -84,47 +84,11 @@ export const REMS_SERVICE_LINES_BY_DEPARTMENT = Object.freeze({
   // The retired `audit` is deliberately absent, so an engagement still filed under it is offered every line.
 });
 
-export const REMS_JOB_TEMPLATES_BY_SERVICE_LINE = Object.freeze({
-  tax: Object.freeze({
-    tax_compliance: Object.freeze(["tax_compliance"]),
-    consulting: Object.freeze(["consulting_engagement", "business_valuation"]),
-    mergers_acquisitions: Object.freeze(["mergers_acquisitions"]),
-    plan_administration: Object.freeze(["pension_administration_tax_compliance"]),
-    employee_benefits: Object.freeze(["pension_administration_tax_compliance"]),
-    estate_planning: Object.freeze(["tax_compliance"])
-  }),
-  assurance: Object.freeze({
-    attest_services: Object.freeze([
-      "agreed_upon_procedures", "audit", "examination", "compilation", "review", "peer_review"
-    ]),
-    consulting: Object.freeze(["consulting_engagement"]),
-    it_services: Object.freeze(["information_technology_services"]),
-    soc: Object.freeze(["soc"]),
-    employee_benefits: Object.freeze(["pension_administration_tax_compliance"]),
-    litigation_support: Object.freeze(["litigation"]),
-    forensic_accounting: Object.freeze(["forensic_accounting"])
-  }),
-  gcs: Object.freeze({
-    attest_services: Object.freeze(["governmental_consulting_services"]),
-    consulting: Object.freeze(["governmental_consulting_services"]),
-    it_services: Object.freeze(["information_technology_services"])
-  }),
-  cas: Object.freeze({
-    client_accounting_services: Object.freeze(["client_accounting_services"]),
-    mergers_acquisitions: Object.freeze(["mergers_acquisitions"]),
-    consulting: Object.freeze(["consulting_engagement"])
-  }),
-  // No template applies to the firm's own work, and the picker says so rather than offering all seventeen.
-  admin: Object.freeze({ non_chargeable_internal: Object.freeze([]) })
-});
-
 // Every code each map places somewhere. Anything outside it is a tenant's own addition and is offered
 // under every parent — a firm adding a value should not have to say which parents may see it.
 const claimed = (lists) => new Set(lists.flat());
 const CLAIMED_INDUSTRY_CODES = claimed(Object.values(REMS_INDUSTRIES_BY_ENTITY_TYPE));
 const CLAIMED_SERVICE_LINE_CODES = claimed(Object.values(REMS_SERVICE_LINES_BY_DEPARTMENT));
-const CLAIMED_JOB_TEMPLATE_CODES = claimed(
-  Object.values(REMS_JOB_TEMPLATES_BY_SERVICE_LINE).flatMap((byLine) => Object.values(byLine)));
 
 // The options a parent value offers, out of the tenant's resolved list: the ones its list names, every
 // tenant addition, and whatever is currently stored — always kept, so a record never loses its answer. A
@@ -157,19 +121,6 @@ export function remsServiceLineOptions (options, department, selected = null) {
 
 export const remsServiceLineFitsDepartment = (department, serviceLine) =>
   fitsUnder(REMS_SERVICE_LINES_BY_DEPARTMENT[department], CLAIMED_SERVICE_LINE_CODES, serviceLine);
-
-// The pair's list, or nothing where either half is the tenant's own — which then offers every template.
-const jobTemplatesFor = (department, serviceLine) =>
-  REMS_JOB_TEMPLATES_BY_SERVICE_LINE[department]?.[serviceLine];
-
-/** The Job Template options to offer for a department and service line together. */
-export function remsJobTemplateOptions (options, department, serviceLine, selected = null) {
-  if (!serviceLine) return options.filter((o) => o.value === selected);
-  return narrowTo(options, jobTemplatesFor(department, serviceLine), CLAIMED_JOB_TEMPLATE_CODES, selected);
-}
-
-export const remsJobTemplateFitsServiceLine = (department, serviceLine, jobTemplate) =>
-  fitsUnder(jobTemplatesFor(department, serviceLine), CLAIMED_JOB_TEMPLATE_CODES, jobTemplate);
 
 // ---------------------------------------------------------------------------------------------------
 // THERE ARE NO LABEL, COLOUR OR DESCRIPTION MAPS IN THIS FILE. Every word, colour and icon a REMS value is
@@ -227,7 +178,7 @@ export function useRemsMeta () {
   const entityTypeLabel = (v) => labelFrom(options.entityType, v);
   const departmentLabel = (v) => labelFrom(options.department, v);
   const serviceLineLabel = (v) => labelFrom(options.serviceLine, v);
-  const jobTemplateLabel = (v) => labelFrom(options.jobTemplate, v);
+  const jobTypeLabel = (v) => labelFrom(options.jobType, v);
   const industryLabel = (v) => labelFrom(options.industry, v);
   // GCS staffing level. Resolved here because the approver's packet carries the CODE — that screen's
   // option labels are resolved server-side only for the sets keyed by item id (marketing, tax forms).
@@ -272,7 +223,7 @@ export function useRemsMeta () {
     optionFrom(options.status, awaitingPickUp(row) ? REMS_STATUS_WAITING_FOR_PICKUP : row?.status);
   const requestStatusLabel = (row) => requestStatusOption(row).label;
 
-  // The EMS engagement/detail action becomes available only once the customer has submitted their
+  // The COP engagement/detail action becomes available only once the customer has submitted their
   // form (AC-REMS-002.5 / 005.6); until then it stays disabled.
   const emsDetailAvailable = (row) => row?.clientSubmissionState === "Submitted";
 
@@ -293,9 +244,10 @@ export function useRemsMeta () {
   const workAction = computed(() => (auth.hasPermission(Permissions.RemsEngagementsManage)
     ? { label: "Manage", icon: "o_edit_note" }
     : { label: "Edit", icon: "o_edit" }));
-  // The email-log / EMS-inbox action is meaningful once a form has been sent to the customer.
+  // The email-log / COP-inbox action is meaningful once a form has been sent to the customer — never on a
+  // request that reused the client's intake on file, which emailed nothing.
   const emsFormActivity = (row) =>
-    !!row?.clientSubmissionState || ["Sent", "Submitted"].includes(row?.emsFormState);
+    !row?.intakeReused && (!!row?.clientSubmissionState || ["Sent", "Submitted"].includes(row?.emsFormState));
 
   // Live option lists for pickers and column filters.
   const typeOptions = computed(() => options.type);
@@ -304,7 +256,7 @@ export function useRemsMeta () {
   const entityTypeOptions = computed(() => options.entityType);
   const departmentOptions = computed(() => options.department);
   const serviceLineOptions = computed(() => options.serviceLine);
-  const jobTemplateOptions = computed(() => options.jobTemplate);
+  const jobTypeOptions = computed(() => options.jobType);
   const industryOptions = computed(() => options.industry);
   // "Waiting For Pickup" is a filter value of its own now. It is not a stored status, but the server reads
   // it the way the column does — with the admins, and nobody holding it — and reads the two admin stages
@@ -321,7 +273,7 @@ export function useRemsMeta () {
   // filter in the drawer, so a firm that adds a fifth position can both set it and filter by it.
   const relatedEntityStatusOptions = computed(() => options.relatedEntityStatus);
 
-  // The EMS State column's values: the form-status list minus Draft and Saved, which the list reports as
+  // The COP State column's values: the form-status list minus Draft and Saved, which the list reports as
   // Not started (RemsWorkspaceMapper.FormState) — offering them would match nothing.
   const formStateFilterOptions = computed(() =>
     options.formStatus.filter((o) => !["Draft", "Saved"].includes(o.value)));
@@ -338,7 +290,7 @@ export function useRemsMeta () {
     statusHint,
     departmentLabel,
     serviceLineLabel,
-    jobTemplateLabel,
+    jobTypeLabel,
     industryLabel,
     personnelLevelLabel,
     billingPeriodLabel,
@@ -349,7 +301,7 @@ export function useRemsMeta () {
     entityTypeOptions,
     departmentOptions,
     serviceLineOptions,
-    jobTemplateOptions,
+    jobTypeOptions,
     industryOptions,
     statusFilterOptions,
     approvalStatusFilterOptions,
@@ -499,7 +451,7 @@ export function useRemsEngagementOptionSets () {
     // Service Line and Industry — still keyed serviceLine / industry in the data, per the note at
     // the top of this file. Code-valued, so they come from the shared catalogue too.
     serviceLineOptions: computed(() => catalog.serviceLine),
-    jobTemplateOptions: computed(() => catalog.jobTemplate),
+    jobTypeOptions: computed(() => catalog.jobType),
     industryOptions: computed(() => catalog.industry),
     // How often the client is billed (REMS.BillingPeriod). Code-valued like Department and Service Line,
     // so it comes from the shared catalogue rather than being resolved by id.
@@ -514,7 +466,7 @@ export function useRemsEngagementOptionSets () {
   };
 }
 
-// The Build-EMS entity-type picker (AC-REMS-007.3), from the shared catalogue.
+// The Build-COP entity-type picker (AC-REMS-007.3), from the shared catalogue.
 export function useRemsEntityTypes () {
   const catalog = useRemsOptionCatalog();
   return {

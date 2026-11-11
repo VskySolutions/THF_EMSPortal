@@ -452,6 +452,15 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("IndustryId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("IntakeSubmittedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("IntakeSubmittedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("IntakeSubmittedRemsId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("LegalName")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -509,6 +518,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.HasIndex("EntityTypeId");
 
                     b.HasIndex("IndustryId");
+
+                    b.HasIndex("IntakeSubmittedByUserId");
+
+                    b.HasIndex("IntakeSubmittedRemsId");
 
                     b.HasIndex("PersonId");
 
@@ -2921,6 +2934,12 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FormSubmittedOnUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("IntakeCompletedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("IntakeOnFileFromRemsId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("InviteCode")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
@@ -2938,7 +2957,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("IsFloridaOnePercentFeeApplicable")
                         .HasColumnType("bit");
 
-                    b.Property<Guid?>("JobTemplateId")
+                    b.Property<string>("JobDescription")
+                        .HasMaxLength(6)
+                        .HasColumnType("nvarchar(6)");
+
+                    b.Property<Guid?>("JobTypeId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("MaconomyJobNumber")
@@ -3023,9 +3046,14 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EngagementExecutiveId");
 
+                    b.HasIndex("IntakeCompletedByUserId");
+
+                    b.HasIndex("IntakeOnFileFromRemsId")
+                        .HasFilter("[IntakeOnFileFromRemsId] IS NOT NULL");
+
                     b.HasIndex("InviteSentByUserId");
 
-                    b.HasIndex("JobTemplateId");
+                    b.HasIndex("JobTypeId");
 
                     b.HasIndex("MaconomyJobSyncedById");
 
@@ -4196,6 +4224,16 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("IndustryId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EmsPortal.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("IntakeSubmittedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.RemsRequest", null)
+                        .WithMany()
+                        .HasForeignKey("IntakeSubmittedRemsId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EmsPortal.Domain.Entities.Person", "Person")
                         .WithMany()
                         .HasForeignKey("PersonId")
@@ -4795,14 +4833,24 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("EngagementExecutiveId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EmsPortal.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("IntakeCompletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.RemsRequest", null)
+                        .WithMany()
+                        .HasForeignKey("IntakeOnFileFromRemsId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EmsPortal.Domain.Entities.User", "InviteSentByUser")
                         .WithMany()
                         .HasForeignKey("InviteSentByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "JobTemplate")
+                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "JobType")
                         .WithMany()
-                        .HasForeignKey("JobTemplateId")
+                        .HasForeignKey("JobTypeId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("EmsPortal.Domain.Entities.User", null)
@@ -4860,7 +4908,7 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.Navigation("InviteSentByUser");
 
-                    b.Navigation("JobTemplate");
+                    b.Navigation("JobType");
 
                     b.Navigation("OnBehalfOfUser");
 

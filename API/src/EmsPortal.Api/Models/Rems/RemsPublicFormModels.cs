@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace EmsPortal.Api.Models.Rems;
 
 // ---------------------------------------------------------------------------------------------------
-// WO-113 — REMS public client EMS form.
+// WO-113 — REMS public client COP form.
 
 /// <summary>Versioned REMS onboarding form payload (V1).</summary>
 public sealed class RemsFormPayloadV1

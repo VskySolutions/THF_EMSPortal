@@ -29,6 +29,7 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.Property(r => r.EngagementFee).HasPrecision(18, 2);
         builder.Property(r => r.RealizationPercentage).HasPrecision(5, 2);
         builder.Property(r => r.BillingProcessDescription).HasMaxLength(1000);
+        builder.Property(r => r.JobDescription).HasMaxLength(6);
         builder.Property(r => r.ContractNumber).HasMaxLength(64);
         builder.Property(r => r.PurchaseOrderNumber).HasMaxLength(64);
         builder.Property(r => r.PurchaseOrderAmount).HasPrecision(18, 2);
@@ -49,7 +50,7 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.HasOne(r => r.InviteSentByUser).WithMany().HasForeignKey(r => r.InviteSentByUserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.Department).WithMany().HasForeignKey(r => r.DepartmentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.ServiceLine).WithMany().HasForeignKey(r => r.ServiceLineId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(r => r.JobTemplate).WithMany().HasForeignKey(r => r.JobTemplateId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(r => r.JobType).WithMany().HasForeignKey(r => r.JobTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.BillingPeriod).WithMany().HasForeignKey(r => r.BillingPeriodId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.DepartmentDirector).WithMany().HasForeignKey(r => r.DepartmentDirectorId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.EngagementExecutive).WithMany().HasForeignKey(r => r.EngagementExecutiveId).OnDelete(DeleteBehavior.Restrict);
@@ -57,6 +58,9 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         builder.HasOne<User>().WithMany().HasForeignKey(r => r.MaconomyJobSyncedById).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(r => r.CopiedFrom).WithMany().HasForeignKey(r => r.CopiedFromRemsId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(r => r.CopiedFromRemsId).HasFilter("[CopiedFromRemsId] IS NOT NULL");
+        builder.HasOne<RemsRequest>().WithMany().HasForeignKey(r => r.IntakeOnFileFromRemsId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => r.IntakeOnFileFromRemsId).HasFilter("[IntakeOnFileFromRemsId] IS NOT NULL");
+        builder.HasOne<User>().WithMany().HasForeignKey(r => r.IntakeCompletedByUserId).OnDelete(DeleteBehavior.Restrict);
         // Type, status and client are on every row the API hands out; AutoInclude makes forgetting impossible.
         builder.Navigation(r => r.Type).AutoInclude();
         builder.Navigation(r => r.Status).AutoInclude();

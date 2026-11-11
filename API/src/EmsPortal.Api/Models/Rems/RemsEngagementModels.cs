@@ -6,7 +6,7 @@ namespace EmsPortal.Api.Models.Rems;
 // WO-114 — REMS engagement workspace (Part A) + copy/marketing/commission (Part B).
 
 /// <summary>
-/// One row of the client-forms list (AC-REMS-013.1): a request that has (or once had) an EMS form,
+/// One row of the client-forms list (AC-REMS-013.1): a request that has (or once had) an COP form,
 /// with its submitted/not-submitted state, client name, submission date, and assigned Admin/CSE.
 /// </summary>
 public sealed record RemsClientFormRow(
@@ -45,9 +45,15 @@ public sealed record RemsClientFormRow(
     /// <summary>The number of the request this one was copied from, when it was made with Copy.</summary>
     string? CopiedFromRemsNumber = null,
     /// <summary>The caller may raise a new request from this one's engagement setup.</summary>
-    bool CanCopy = false);
+    bool CanCopy = false,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
+    bool IntakeReused = false);
 
-/// <summary>The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload.</summary>
+/// <summary>
+/// The intake form as the request page shows it: the client's answers, rebuilt from their rows. A completed
+/// intake (this request's own, or the one on file from an earlier request), or what the client has saved so
+/// far while the form is out with them.
+/// </summary>
 public sealed record RemsSubmissionView(
     Guid SubmissionId,
     Guid RemsId,
@@ -56,14 +62,26 @@ public sealed record RemsSubmissionView(
     string? LockedEmail,
     /// <summary>The request's generational suffix on the client's name.</summary>
     string? ClientNameSuffix,
-    DateTime SubmittedOnUtc,
+    /// <summary>When the intake was completed, on this request or the one it is on file from. Null while the form is out and unanswered.</summary>
+    DateTime? SubmittedOnUtc,
     RemsFormPayloadV1 Payload,
     /// <summary>The staff member who last corrected these answers; null while they are the client's own.</summary>
     string? EditedBy = null,
     /// <summary>When they were last corrected; null while they are the client's own.</summary>
     DateTime? EditedOnUtc = null,
-    /// <summary>Whether THIS caller may correct them — an Admin, on a request no approval round has frozen.</summary>
-    bool CanEdit = false);
+    /// <summary>
+    /// Whether THIS caller may write them: an Admin correcting a completed intake on a request no round has
+    /// frozen, or one of the people on the request completing a form that is out with the client.
+    /// </summary>
+    bool CanEdit = false,
+    /// <summary>The answers are a completed intake. False while the form is out with the client.</summary>
+    bool Submitted = true,
+    /// <summary>The request the intake came in on, when it was not this one.</summary>
+    RemsRequestRef? OnFileFrom = null,
+    /// <summary>The user who completed the form for the client; null when the client did.</summary>
+    string? CompletedBy = null,
+    /// <summary>When the client last saved the unanswered form; null while they have not opened it.</summary>
+    DateTime? LastSavedOnUtc = null);
 
 // -------------------- Workspace read model --------------------
 
@@ -148,7 +166,7 @@ public sealed record RemsEngagementView(
     Guid Id,
     string? Department,
     string? ServiceLine,
-    string? JobTemplate,
+    string? JobType,
     string? Industry,
     RemsUserRef? DepartmentDirector,
     RemsUserRef? EngagementExecutive,
@@ -158,6 +176,8 @@ public sealed record RemsEngagementView(
     decimal? RealizationPercentage,
     string? BillingPeriod,
     string? BillingProcessDescription,
+    /// <summary>The short plain-text job description from the setup form.</summary>
+    string? JobDescription,
     string Status,
     IReadOnlyList<Guid> MarketingMethodIds,
     IReadOnlyList<RemsCommissionSplitView> CommissionSplits,
@@ -287,8 +307,8 @@ public sealed class UpdateRemsEngagementRequest
     /// </summary>
     public string? ServiceLine { get; set; }
 
-    /// <summary>The job template the engagement is set up from (option-set <c>REMS.JobTemplate</c> code).</summary>
-    public string? JobTemplate { get; set; }
+    /// <summary>The job type the engagement is set up from (option-set <c>REMS.JobType</c> code).</summary>
+    public string? JobType { get; set; }
 
     /// <summary>
     /// The client's trade — the INDUSTRY as the setup form labels it (option-set
@@ -311,6 +331,9 @@ public sealed class UpdateRemsEngagementRequest
 
     /// <summary>How the client is actually billed, in prose.</summary>
     public string? BillingProcessDescription { get; set; }
+
+    /// <summary>Short plain-text job description, at most 6 characters. Null leaves it alone; empty clears it.</summary>
+    public string? JobDescription { get; set; }
 }
 
 /// <summary>

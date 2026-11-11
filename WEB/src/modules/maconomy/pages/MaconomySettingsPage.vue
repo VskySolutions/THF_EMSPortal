@@ -262,7 +262,7 @@
     <!-- The job sync: an approved engagement posted to Maconomy as a job, by itself once its client is in
          Maconomy, or by hand from a list's Sync job now. Always the caller's OWN tenant, like the customer sync. The
          project manager and the default template job are server configuration; the template job numbers
-         sit on the REMS Job Template values under Option Sets — so there is nothing to type here. -->
+         sit on the REMS Job Type values under Option Sets — so there is nothing to type here. -->
     <div v-show="tab === 'job'">
       <q-banner v-if="exists && !token.present" dense class="bg-amber-1 text-grey-9 rounded-borders q-mb-md">
         <template #avatar><q-icon name="o_info" color="amber-8" /></template>
@@ -288,15 +288,23 @@
                 </div>
                 <div v-if="job.defaultTemplateNumber">
                   <q-icon name="o_description" size="16px" class="q-mr-xs" />
-                  Default template job: <b>{{ job.defaultTemplateNumber }}</b>, used when a request's Job Template carries
+                  Default template job: <b>{{ job.defaultTemplateNumber }}</b>, used when a request's Job Type carries
                   no Maconomy number <span class="text-caption text-grey-7">(server configuration)</span>
                 </div>
                 <div>
                   <q-icon name="o_account_tree" size="16px" class="q-mr-xs" />
-                  {{ numberedTemplates }} of {{ job.templates.length }} job templates carry a Maconomy number
-                  <template v-if="numberedTemplates < job.templates.length">
+                  {{ numberedJobTypes }} of {{ job.jobTypes.length }} job types carry a Maconomy template job number
+                  <template v-if="numberedJobTypes < job.jobTypes.length">
                     — set the rest under
-                    <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Job Template</router-link>
+                    <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Job Type</router-link>
+                  </template>
+                </div>
+                <div>
+                  <q-icon name="o_place" size="16px" class="q-mr-xs" />
+                  {{ numberedDepartments }} of {{ job.departments.length }} departments carry a Maconomy location number
+                  <template v-if="numberedDepartments < job.departments.length">
+                    — set the rest under
+                    <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Department</router-link>
                   </template>
                 </div>
               </div>
@@ -325,9 +333,9 @@
           <p class="text-body2 text-grey-8 q-mb-xs">
             When on, a request is posted to Maconomy as a job by itself once it is fully approved and its client
             is a Maconomy customer: straight away for a client already there, or as soon as the customer sync has
-            posted a brand-new one. The job is created from the template job for the request's Job Template, under
+            posted a brand-new one. The job is created from the template job for the request's Job Type, under
             the client's customer, with the job number left to Maconomy's series and written back onto the request.
-            Sync job now — in the Approvals list, EMS Review and the table below — is for a request that failed or
+            Sync job now — in the Approvals list, COP Review and the table below — is for a request that failed or
             was approved while the sync was off. While off, nothing is queued and the action is hidden everywhere.
           </p>
           <div v-if="job.changedOnUtc" class="text-caption text-grey-7 q-mb-md">
@@ -726,15 +734,18 @@ const blankJob = () => ({
   failed: 0,
   syncing: 0,
   waiting: 0,
-  templates: []
+  jobTypes: [],
+  departments: []
 });
 const job = ref(blankJob());
 const jobRows = ref([]);
 const jobLoading = ref(false);
 const jobToggling = ref(false);
 
-// How many REMS Job Template values carry a Maconomy number: the rest cannot be posted without the default.
-const numberedTemplates = computed(() => (job.value.templates || []).filter((t) => t.templateJobNumber).length);
+// How many REMS Job Type values carry a Maconomy template job number: the rest cannot be posted without the default.
+const numberedJobTypes = computed(() => (job.value.jobTypes || []).filter((t) => t.templateJobNumber).length);
+// How many offered departments carry a Maconomy location number: a job under the rest keeps the template's location.
+const numberedDepartments = computed(() => (job.value.departments || []).filter((d) => d.locationNumber).length);
 
 const jobTiles = computed(() => [
   { label: "Jobs created", value: job.value.synced },
@@ -748,7 +759,8 @@ const jobColumns = [
   { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true },
   { name: "customerNumber", label: "Customer", field: "customerNumber", align: "left", sortable: true, default: true },
   { name: "serviceLine", label: "Service line", field: (r) => r.serviceLine || "—", align: "left", sortable: true, default: true },
-  { name: "jobTemplate", label: "Job Template", field: (r) => r.jobTemplate || "—", align: "left", sortable: true, default: true },
+  { name: "jobType", label: "Job Type", field: (r) => r.jobType || "—", align: "left", sortable: true, default: true },
+  { name: "department", label: "Department", field: (r) => r.department || "—", align: "left", sortable: true, default: true },
   { name: "sync", label: "Job", field: (r) => r.sync?.jobNumber || r.sync?.status, align: "left", sortable: true, default: true },
   { name: "syncedOn", label: "Synced", field: (r) => r.sync?.syncedOnUtc, align: "left", sortable: true, default: true },
   { name: "reason", label: "Reason", field: (r) => r.sync?.failureReason || r.sync?.blockedReason, align: "left", sortable: false, default: true },

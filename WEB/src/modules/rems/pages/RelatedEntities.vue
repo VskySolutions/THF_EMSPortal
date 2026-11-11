@@ -141,9 +141,10 @@
             <q-tooltip>{{ workAction.label }}</q-tooltip>
           </q-btn>
           <!-- Every row here has a submitted form, so there is always a log to read — unlike My Requests,
-               where the action waits until something has actually been sent. -->
+               where the action waits until something has actually been sent. Except a request that reused
+               the client's intake on file, which emailed nothing. -->
           <q-btn
-            v-if="canReadEmailLog" type="a"
+            v-if="canReadEmailLog && !cell.row.intakeReused" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
           >
             <q-tooltip>Email log</q-tooltip>

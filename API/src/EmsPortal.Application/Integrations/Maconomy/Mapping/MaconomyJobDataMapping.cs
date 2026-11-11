@@ -19,13 +19,18 @@ public static class MaconomyJobDataMapping
     public const string CustomerField = "customernumber";
     public const string TemplateField = "templatejobnumber";
     public const string ProjectManagerField = "projectmanagernumber";
+    public const string LocationField = "locationname";
+    public const string PurchaseOrderField = "text3";
 
     // Whether the template job goes on the init step, so Maconomy derives the template's defaults into
     // the record it hands back, or on the create with everything else. The probe decides.
     private const bool TemplateOnInit = false;
 
     /// <summary>The card fields the write names. The number is read back, never sent: Maconomy's series assigns it.</summary>
-    public static readonly string[] Fields = { NumberField, NameField, CustomerField, TemplateField, ProjectManagerField };
+    public static readonly string[] Fields =
+    {
+        NumberField, NameField, CustomerField, TemplateField, ProjectManagerField, LocationField, PurchaseOrderField,
+    };
 
     /// <summary>
     /// The mapping in words, for the Job tab. Kept beside <see cref="Map"/> so a change to what is sent
@@ -43,17 +48,24 @@ public static class MaconomyJobDataMapping
             CustomerField, "Customer number", "The client's Maconomy customer number",
             "From the customer sync, or the Maconomy customer picked on the request. Without one the request is not eligible.", ReadBack: false),
         new MaconomyFieldMapping(
-            TemplateField, "Template job", "The Job Template's Maconomy number, else the default template job",
-            "Set per value under Option Sets → REMS Job Template; the default is server configuration (Maconomy:JobCard).", ReadBack: false),
+            TemplateField, "Template job", "The Job Type's Maconomy number, else the default template job",
+            "Set per value under Option Sets → REMS Job Type; the default is server configuration (Maconomy:JobCard).", ReadBack: false),
         new MaconomyFieldMapping(
             ProjectManagerField, "Project manager", "The configured employee number",
             "Server configuration (Maconomy:JobCard); every job names the same one.", ReadBack: false),
+        new MaconomyFieldMapping(
+            LocationField, "Location", "The Department's Maconomy number",
+            "Set per value under Option Sets → REMS Department. A department without one is left out, so the template job's location stands.", ReadBack: false),
+        new MaconomyFieldMapping(
+            PurchaseOrderField, "Text 3", "The engagement's Purchase Order number",
+            "As entered on the Engagement Setup. Blank is left out.", ReadBack: false),
     });
 
     /// <summary>
     /// What the portal posts as a new job: a header against a template job, nothing below it. Total: it
     /// maps whatever is there, blanks included, so the confirmation can show a request that is not yet
     /// eligible; eligibility is <see cref="MaconomyJobSyncRules"/>' business, checked before the writer is called.
+    /// The location and the purchase order are optional: left out when blank, so the template job's stand.
     /// </summary>
     public static MaconomyCardWrite Map(RemsRequest request, MaconomyJobSyncContext context)
     {
@@ -63,6 +75,8 @@ public static class MaconomyJobDataMapping
             [ProjectManagerField] = context.ProjectManagerNumber?.Trim(),
             [NameField] = JobNameOf(request),
         };
+        Put(values, LocationField, ResolveLocation(request, context));
+        Put(values, PurchaseOrderField, request.PurchaseOrderNumber);
         var template = ResolveTemplate(request, context);
         Dictionary<string, string?>? init = null;
         if (TemplateOnInit)
@@ -76,14 +90,28 @@ public static class MaconomyJobDataMapping
         return new MaconomyCardWrite(DefaultContainer, Fields, values, init, KeyField: NumberField);
     }
 
-    /// <summary>The template job for the request: the map's row for its Job Template, else the tenant's default.</summary>
+    /// <summary>The template job for the request: the map's row for its Job Type, else the tenant's default.</summary>
     public static string? ResolveTemplate(RemsRequest request, MaconomyJobSyncContext context)
     {
-        if (request.JobTemplateId is { } template && context.TemplateMap.TryGetValue(template, out var mapped) && !string.IsNullOrWhiteSpace(mapped))
+        if (request.JobTypeId is { } template && context.TemplateMap.TryGetValue(template, out var mapped) && !string.IsNullOrWhiteSpace(mapped))
         {
             return mapped.Trim();
         }
         return string.IsNullOrWhiteSpace(context.DefaultTemplateNumber) ? null : context.DefaultTemplateNumber.Trim();
+    }
+
+    /// <summary>The Maconomy location for the request: the map's row for its Department, or null while the department carries no number.</summary>
+    public static string? ResolveLocation(RemsRequest request, MaconomyJobSyncContext context)
+        => request.DepartmentId is { } department && context.LocationMap.TryGetValue(department, out var number) && !string.IsNullOrWhiteSpace(number)
+            ? number.Trim()
+            : null;
+
+    private static void Put(IDictionary<string, string?> values, string field, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[field] = value.Trim();
+        }
     }
 
     /// <summary>

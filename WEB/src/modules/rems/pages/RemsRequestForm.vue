@@ -5,7 +5,7 @@
            in Maconomy, and what the page is doing with what has been typed. -->
       <template #status>
         <!-- The row helper rather than the bare code, so a request nobody has picked up says so here
-             exactly as it does in EMS Review instead of reading as though an admin is already on it. -->
+             exactly as it does in COP Review instead of reading as though an admin is already on it. -->
         <app-option-badge v-if="request" :option="requestStatusOption(request)" />
         <!-- Whether the approved client has reached Maconomy: a separate fact from the status beside it. -->
         <maconomy-sync-chip v-if="request?.maconomySync" :sync="request.maconomySync" />
@@ -30,8 +30,8 @@
              rectangle with its icon: outlined for the reads and the secondary moves, filled for the one move
              the stage is about. Back, beside them, is that shape on every page. -->
         <div class="rf-head">
-          <!-- The read-only page offers Conversation and Back and nothing else: every move on the request is
-               made from the form, which the lists open as Edit or Manage. -->
+          <!-- The read-only page offers Conversation, Copy and Back and nothing else: every move on the request
+               is made from the form, which the lists open as Edit or Manage. -->
           <q-btn
             v-if="request" outline no-caps color="primary" icon="o_forum" label="Conversation"
             @click="conversationOpen = true"
@@ -61,16 +61,18 @@
             >
               <q-tooltip>Copy the client's intake form link</q-tooltip>
             </q-btn>
-            <!-- A new request from this one's setup: a client's next return starts here, not from blank. -->
-            <q-btn
-              v-if="canCopy" outline no-caps color="primary" icon="o_file_copy" label="Copy"
-              :loading="copying" @click="copyRequest"
-            >
-              <q-tooltip max-width="320px">
-                A new draft for the same client with this engagement setup carried over; its tax card starts blank
-              </q-tooltip>
-            </q-btn>
-
+          </template>
+          <!-- A new request from this one's setup: a client's next return starts here, not from blank. On the
+               read-only page too — it changes nothing on the request being read. -->
+          <q-btn
+            v-if="canCopy" outline no-caps color="primary" icon="o_file_copy" label="Copy"
+            :loading="copying" @click="copyRequest"
+          >
+            <q-tooltip max-width="320px">
+              A new draft for the same client with this engagement setup carried over; its tax card starts blank
+            </q-tooltip>
+          </q-btn>
+          <template v-if="isEditing">
             <!-- The moves. Each one hands the request on, and no stage offers more than two of them. -->
             <!-- Claiming the request. -->
             <q-btn
@@ -89,7 +91,7 @@
             >
               <q-tooltip v-if="!readyToSend">{{ sendBlockedReason }}</q-tooltip>
             </q-btn>
-            <!-- A copy's hand-off: its client answered the intake on the request it was copied from, so
+            <!-- The hand-off for a client whose intake is already on file, or on its way in on another request:
                nothing goes to them. Up here on the same terms as Submit to Client. -->
             <q-btn
               v-if="canSubmitForReview && !hasFinishTab" unelevated no-caps color="teal-7" icon="o_send"
@@ -129,7 +131,7 @@
               label="Hand back" :loading="acting" @click="handBack"
             >
               <q-tooltip max-width="300px">
-                Give this request up — it goes back to EMS Review for any admin to pick up, and stops being
+                Give this request up — it goes back to COP Review for any admin to pick up, and stops being
                 yours
               </q-tooltip>
             </q-btn>
@@ -184,18 +186,16 @@
               <div class="rf-submitted__head">
                 <q-icon name="o_description" size="18px" color="primary" class="q-mr-xs" />
                 <div class="col">
-                  <div class="text-subtitle2 text-weight-medium">Submitted EMS Form</div>
+                  <div class="text-subtitle2 text-weight-medium">{{ paneTitle }}</div>
                   <div class="text-caption text-grey-7">{{ submittedNote }}</div>
                 </div>
-                <!-- Correcting the client's answers, in the corner of the pane that holds them. -->
+                <!-- Writing the client's answers, in the corner of the pane that holds them: correcting a
+                     completed intake, or completing a form that is out with the client. -->
                 <q-btn
                   v-if="isEditing && canEditSubmission" flat dense no-caps size="sm" color="primary" icon="o_edit"
-                  label="Edit Form" @click="editFormOpen = true"
+                  :label="completingIntake ? 'Complete Form' : 'Edit Form'" @click="editFormOpen = true"
                 >
-                  <q-tooltip max-width="280px">
-                    Correct what the client submitted. The change is recorded against your name; the
-                    client is not asked again.
-                  </q-tooltip>
+                  <q-tooltip max-width="280px">{{ editFormHint }}</q-tooltip>
                 </q-btn>
               </div>
               <q-separator />
@@ -364,7 +364,7 @@
                 >
                   <q-tooltip v-if="!readyToSend">{{ sendBlockedReason }}</q-tooltip>
                 </q-btn>
-                <!-- On a copy the client is not asked again: the copy goes straight to the admins. -->
+                <!-- A returning client is not asked again: the request goes straight to the admins. -->
                 <q-btn
                   v-if="atFinishTab && canSubmitForReview" unelevated dense no-caps color="teal-7" icon="o_send"
                   label="Submit for review" class="q-px-md" :disable="!readyToSubmitForReview" :loading="acting"
@@ -380,7 +380,7 @@
               <!-- ---------- Client Information ---------- -->
               <q-tab-panel name="client">
                 <!-- Entity Type, Industry and the CSE are the page's to save — the entity type and the
-                     CSE belong to the request's EMS form record and the industry to its engagement. -->
+                     CSE belong to the request's COP form record and the industry to its engagement. -->
                 <client-information-fields
                   ref="clientFieldsRef"
                   v-model="clientForm"
@@ -422,7 +422,7 @@
                   :entity-type="setupForm.entityType"
                   :dept-options="departmentOptions"
                   :service-line-options="serviceLineOptions"
-                  :job-template-options="jobTemplateOptions"
+                  :job-type-options="jobTypeOptions"
                   :tax-form-options="taxFormOptions"
                   :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
@@ -497,7 +497,8 @@
       <activity-dialog v-model="activityOpen" :rems-id="remsId" :subtitle="subtitle" />
       <edit-submitted-form-dialog
         v-if="isEditing && canEditSubmission" v-model="editFormOpen" :rems-id="remsId" :subtitle="subtitle"
-        @saved="onSubmissionCorrected"
+        :mode="completingIntake ? 'complete' : 'correct'"
+        @saved="onSubmissionSaved"
       />
     </template>
   </q-page>
@@ -505,8 +506,8 @@
 
 <script setup>
 // THE REMS form: one component behind two pages — the read-only request, in sections, and the tabbed
-// form it is created and edited on. The read-only page is everybody's and offers Conversation and Back
-// alone; every move on the request is made from the form, which the lists open as Edit or Manage.
+// form it is created and edited on. The read-only page is everybody's and offers Conversation, Copy and
+// Back alone; every move on the request is made from the form, which the lists open as Edit or Manage.
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
@@ -554,7 +555,7 @@ const { emsFormActivity, requestStatusOption, approverRoleLabel } = useRemsMeta(
 const { typeOptions, load: loadTypes } = useRemsOptionSets();
 const { entityTypeOptions, load: loadEntityTypes } = useRemsEntityTypes();
 const {
-  departmentOptions, serviceLineOptions, jobTemplateOptions, industryOptions,
+  departmentOptions, serviceLineOptions, jobTypeOptions, industryOptions,
   marketingGroups, marketingUnavailable,
   taxFormOptions, taxFormUnavailable, billingPeriodOptions, personnelLevelOptions,
   load: loadEngagementOptions
@@ -648,7 +649,8 @@ const newEngagement = Object.freeze({
   id: null,
   department: null,
   serviceLine: null,
-  jobTemplate: null,
+  jobType: null,
+  jobDescription: "",
   departmentDirector: null,
   engagementExecutive: null,
   billingManager: null,
@@ -674,7 +676,7 @@ const subtitle = computed(() =>
 
 const breadcrumbs = computed(() => [
   { label: "Home", icon: "o_home", to: "/" },
-  { label: cameFromReview.value ? "EMS Review" : "My Requests", to: backTo.value },
+  { label: cameFromReview.value ? "COP Review" : "My Requests", to: backTo.value },
   { label: isNew.value ? "New Request" : request.value?.remsNumber || "Request" }
 ]);
 // Which list to go back to: whichever one the user can actually work this request from.
@@ -758,12 +760,14 @@ const noEngagementNote = computed(() => (workspaceDenied.value
 
 // ---- Actions available now ----
 // None of them apply to a request that does not exist yet: they all act on a saved record.
-// A copy never sends the form: its client answered the intake on the request it was copied from.
-const isCopy = computed(() => !!request.value?.copiedFrom);
-const canSendToClient = computed(() =>
-  !isNew.value && !isCopy.value && status.value === REMS_STATUS.DRAFT && has(Permissions.RemsFormsSend));
-// The server's answer — a draft copy of the caller's — and, separately, whether the client's intake is in yet.
+// A client fills the intake form once. The server says which finishing move a draft gets: Submit to Client
+// for a client with nothing on file, Submit for review for one whose intake is on file or on its way in on
+// another request (then blocked, with the reason, until it is).
+const canSendToClient = computed(() => !!request.value?.canSendToClient);
 const canSubmitForReview = computed(() => !!request.value?.canSubmitForReview);
+// The client's intake on file, whichever request it came in on; and whether THIS request reused it.
+const intakeOnFile = computed(() => request.value?.intakeOnFile || null);
+const intakeReused = computed(() => !!request.value?.intakeReused);
 const canCopy = computed(() => !isNew.value && !!request.value?.actions?.canCopy);
 const canRemind = computed(() =>
   status.value === REMS_STATUS.AWAITING_CUSTOMER && has(Permissions.RemsFormsSend));
@@ -782,7 +786,7 @@ const copyClientFormLink = async () => {
     notify.success("Client form link copied.");
   } catch {
     // Denied clipboard permission, or an insecure origin. Saying so beats a button that looks like it
-    // worked — the Send EMS dialog shows the same link on screen for copying by hand.
+    // worked — the Send COP dialog shows the same link on screen for copying by hand.
     notify.warning("Could not copy the link. Your browser blocked clipboard access.");
   }
 };
@@ -828,7 +832,7 @@ const pickUp = async () => {
 const handBack = async () => {
   const ok = await confirm({
     title: "Hand back to the queue",
-    message: "This puts the request back in EMS Review as waiting for pickup, and its engagement setup " +
+    message: "This puts the request back in COP Review as waiting for pickup, and its engagement setup " +
       "goes read-only to you. Any admin can take it from there — including you. Continue?",
     confirmLabel: "Hand back"
   });
@@ -889,14 +893,25 @@ const sendBlockedReason = computed(() => {
 // Whether the client has answered — what puts their form in the left pane. The workspace's client is no
 // signal: a request has one from its first save; the submission state is set only once the form is in.
 const hasSubmission = computed(() => request.value?.clientSubmissionState === "Submitted");
+// The form is out with the client, unanswered.
+const formOut = computed(() => !isNew.value && !!request.value?.formSent && !hasSubmission.value);
 
-// ---- The submitted-form pane ----
-// Shown whenever there is a submission to show, in BOTH modes: reading a request and correcting one are
-// each done against what the client actually said.
-const showSubmittedPane = computed(() => !isNew.value && hasSubmission.value);
+// ---- The intake pane ----
+// Shown whenever there is an intake to show, in BOTH modes: a submission (this request's own, or the
+// client's on file, carried over); the client's on-file answers on a returning client's draft, read-only;
+// or, while the form is out with them, whatever they have saved so far.
+const showSubmittedPane = computed(() =>
+  !isNew.value && (hasSubmission.value || formOut.value ||
+    (!!intakeOnFile.value && status.value === REMS_STATUS.DRAFT)));
 
-// Whether the client's answers are this caller's to correct.
-const canEditSubmission = computed(() => showSubmittedPane.value && isAdmin.value && !frozen.value);
+// The form is out and THIS caller may complete it for the client — the server's answer: the initiator, the
+// CSE, the REMS Admins and the elevated roles.
+const completingIntake = computed(() => formOut.value && !!request.value?.canCompleteIntake);
+
+// Whether the client's answers are this caller's to write: an admin corrects a submission; the people on
+// the request complete a form that is out. Nobody touches a returning client's on-file answers on a draft.
+const canEditSubmission = computed(() =>
+  showSubmittedPane.value && !frozen.value && (hasSubmission.value ? isAdmin.value : completingIntake.value));
 
 // Whether the form has anything for this user at all: a section to edit, or a move to make. The lists
 // offer Edit / Manage on the server's twin of this answer; this is what sends a reader with neither back
@@ -923,13 +938,51 @@ const submitForReviewBlockedReason = computed(() => {
 });
 const readyToSubmitForReview = computed(() => !submitForReviewBlockedReason.value);
 
-// The pane's caption.
-const submittedNote = computed(() => (isEditing.value && canEditSubmission.value
-  ? "What the client submitted. Corrections are recorded against the admin who makes them."
-  : "Read-only snapshot of exactly what the client submitted."));
+// The pane's title and caption: whose answers these are, and where they stand.
+const paneTitle = computed(() => (hasSubmission.value
+  ? "Submitted COP Form"
+  : formOut.value ? "COP Form — with the client" : "Intake on file"));
 
-// A correction replaces the stored snapshot, so the pane behind the dialog has to re-read it.
-const onSubmissionCorrected = () => { submittedPanelRef.value?.reload(); };
+const onFileWhere = (onFile) =>
+  `${onFile.remsNumber ? ` via ${onFile.remsNumber}` : ""}${onFile.completedBy ? ` by ${onFile.completedBy}` : ""}`;
+
+const submittedNote = computed(() => {
+  const onFile = intakeOnFile.value;
+  if (formOut.value) {
+    return completingIntake.value
+      ? "The client has not answered yet. Complete the form for them, or wait."
+      : "The client has not answered yet.";
+  }
+  if (!hasSubmission.value && onFile) {
+    return `Intake on file — submitted on ${dateFmt.formatDateTime(onFile.submittedOnUtc)}${onFileWhere(onFile)}. ` +
+      "It is not sent again.";
+  }
+  const corrections = isEditing.value && canEditSubmission.value
+    ? " Corrections are recorded against the admin who makes them."
+    : "";
+  if (intakeReused.value && onFile) {
+    return `The client's intake on file, carried over${onFile.remsNumber ? ` from ${onFile.remsNumber}` : ""}; ` +
+      `no form was sent.${corrections}`;
+  }
+  return corrections
+    ? `What the client submitted.${corrections}`
+    : "Read-only snapshot of exactly what the client submitted.";
+});
+
+const editFormHint = computed(() => (completingIntake.value
+  ? "Fill in the client's answers for them. Saving submits the form on their behalf and moves the request " +
+    "to COP Review."
+  : "Correct what the client submitted. The change is recorded against your name; the client is not asked again."));
+
+// A correction replaces the stored snapshot, so the pane behind the dialog re-reads it; a completion moves
+// the request on, so the whole page does.
+const onSubmissionSaved = async () => {
+  if (completingIntake.value) {
+    await load();
+    return;
+  }
+  submittedPanelRef.value?.reload();
+};
 
 // 40 / 60 — the left pane is a record to consult, the right one is the work.
 const DEFAULT_SPLIT = 40;
@@ -1172,7 +1225,9 @@ const setupRows = computed(() => {
     { label: "Department", value: labelOf(departmentOptions.value, e.department) },
     { label: "Department Director", value: e.departmentDirector?.name },
     { label: "Service Line", value: labelOf(serviceLineOptions.value, e.serviceLine) },
-    { label: "Job Template", value: labelOf(jobTemplateOptions.value, e.jobTemplate) },
+    { label: "Job Type", value: labelOf(jobTypeOptions.value, e.jobType) },
+    // Optional, so shown only where somebody wrote one.
+    { label: "Job Description", value: e.jobDescription, hideWhenEmpty: true },
     { label: "Engagement Executive", value: e.engagementExecutive?.name },
     { label: "Billing Manager", value: e.billingManager?.name },
     // Every row from here down is asked of some departments and not others, so the summary asks the same
@@ -1462,7 +1517,7 @@ const {
   },
   form: async () => {
     if (!canEditSetup.value) return "";
-    // CSE and Entity Type live on the EMS form record, which is what the client's link is minted from
+    // CSE and Entity Type live on the COP form record, which is what the client's link is minted from
     // (`entityType` on the wire).
     if (!setupForm.cseUserId || !setupForm.entityType) {
       return setupForm.entityType
@@ -1508,7 +1563,7 @@ const {
 // The state the page owns itself. The tabs below own theirs and announce it (@change).
 watch(clientForm, () => markDirty("client"), { deep: true });
 // `setupForm` is two writes, so it is two flags rather than one deep watcher: the CSE and the entity type
-// go to the EMS form record together, the industry to the engagement.
+// go to the COP form record together, the industry to the engagement.
 watch([() => setupForm.cseUserId, () => setupForm.entityType], () => markDirty("form"));
 watch(() => setupForm.industry, () => markDirty("industry"));
 
@@ -1555,7 +1610,7 @@ const resetPage = () => {
 };
 
 // ---- A follow-up request ----
-// Create EMS on one of a client's other businesses opens this page, as a new request, naming the request
+// Create COP on one of a client's other businesses opens this page, as a new request, naming the request
 // and the row it came from. The row is read off that request so a reload comes back the same way, and its
 // id goes with the create: the link is made by Save and Continue and by nothing before it, so backing out
 // of the form leaves the row outstanding.
@@ -1634,7 +1689,7 @@ const maconomyJobSyncNote = computed(() => {
         return "No Maconomy job: the job sync is switched off. Start it under Tenant Settings → Maconomy → Job.";
       }
       return s.blockedReason ||
-        "No Maconomy job yet. Sync job now is on the Approvals list, EMS Review and the Maconomy settings page's Job tab.";
+        "No Maconomy job yet. Sync job now is on the Approvals list, COP Review and the Maconomy settings page's Job tab.";
   }
 });
 
@@ -1644,7 +1699,7 @@ const load = async () => {
   suspendSaves();
   try {
     // Nothing to read for a request that does not exist: the blank form IS the state — unless it was
-    // opened from Create EMS, which fills it in before the client section mounts and reads it.
+    // opened from Create COP, which fills it in before the client section mounts and reads it.
     if (isNew.value) {
       try {
         await seedFollowUp();
@@ -1699,7 +1754,7 @@ const load = async () => {
 };
 
 // One request per page, but the page outlives the id: creating one replaces "new" with its id, and the
-// Create-EMS action on another of the client's businesses moves it to a new request entirely. The route
+// Create-COP action on another of the client's businesses moves it to a new request entirely. The route
 // changes but the component is reused, so what the last request left on screen is cleared by hand.
 watch(remsId, (id) => {
   if (!id) resetPage();
@@ -1739,7 +1794,7 @@ const createDraft = async () => {
   // afterwards, or a second attempt would file a second copy of it.
   let created = null;
   try {
-    // The row Create EMS was pressed on goes with the create, so the originating request stops flagging
+    // The row Create COP was pressed on goes with the create, so the originating request stops flagging
     // it — linked by this one write and by nothing before it.
     created = await remsApi.create({ ...clientPayload(), fromAdditionalEntityId: followUp.value?.entity });
     const mediaIds = (await clientFieldsRef.value?.uploadAttachments(created.id)) || [];
@@ -1798,8 +1853,8 @@ const openSend = async () => {
   sendOpen.value = true;
 };
 
-// A copy's hand-off to the admins. No form goes out: the client answered the intake on the request it was
-// copied from. Confirmed because it is the initiator's last move on the copy.
+// The hand-off to the admins for a client whose intake is on file. No form goes out. Confirmed because it
+// is the initiator's last move on the request.
 const submitForReview = async () => {
   const said = announcements;
   await flushSaves();
@@ -1808,11 +1863,14 @@ const submitForReview = async () => {
     return;
   }
   const number = request.value?.remsNumber || "This request";
-  const source = request.value?.copiedFrom?.remsNumber || "the request it was copied from";
+  const client = request.value?.clientName || "The client";
+  const onFile = intakeOnFile.value;
+  const since = onFile?.submittedOnUtc ? ` since ${dateFmt.formatDateTime(onFile.submittedOnUtc)}` : "";
+  const via = onFile?.remsNumber ? ` (${onFile.remsNumber})` : "";
   const ok = await confirm({
     title: "Submit for review",
-    message: `${number} goes to the admins for review. The client is not emailed: their intake form came in ` +
-      `with ${source}. Continue?`,
+    message: `${client}'s intake is on file${since}${via}. ${number} goes to COP Review for an admin to ` +
+      "pick up; no form is sent to the client. Continue?",
     confirmLabel: "Submit for review"
   });
   if (!ok) return;
@@ -1906,7 +1964,7 @@ const returnToAdmin = async () => {
   }
 };
 
-// Create EMS on one of the client's other businesses: opens a new request pre-filled from what the client
+// Create COP on one of the client's other businesses: opens a new request pre-filled from what the client
 // said about it (see seedFollowUp). Nothing is written here.
 const createFollowUp = async (row) => {
   await flushSaves();

@@ -115,7 +115,7 @@ public sealed class RemsRequestsController : ControllerBase
         [FromQuery] string? type = null,
         [FromQuery] Guid? assignedAdminUserId = null,
         [FromQuery] Guid? cseUserId = null,
-        // "NotStarted", or a form status name (Sent, Submitted, Cancelled): the EMS State column's values.
+        // "NotStarted", or a form status name (Sent, Submitted, Cancelled): the COP State column's values.
         [FromQuery] string? emsFormState = null,
         // A REMS.EntityType code.
         [FromQuery] string? entityType = null,
@@ -984,7 +984,7 @@ public sealed class RemsRequestsController : ControllerBase
             CopiedFromRemsId = source.Id,
             DepartmentId = source.DepartmentId,
             ServiceLineId = source.ServiceLineId,
-            JobTemplateId = source.JobTemplateId,
+            JobTypeId = source.JobTypeId,
             BillingPeriodId = source.BillingPeriodId,
             DepartmentDirectorId = source.DepartmentDirectorId,
             EngagementExecutiveId = source.EngagementExecutiveId,
@@ -993,6 +993,7 @@ public sealed class RemsRequestsController : ControllerBase
             EngagementFee = source.EngagementFee,
             RealizationPercentage = source.RealizationPercentage,
             BillingProcessDescription = source.BillingProcessDescription,
+            JobDescription = source.JobDescription,
             ContractId = source.ContractId,
             ContractNumber = source.ContractNumber,
             PurchaseOrderNumber = source.PurchaseOrderNumber,
@@ -1047,9 +1048,9 @@ public sealed class RemsRequestsController : ControllerBase
     }
 
     /// <summary>
-    /// A copy's hand-off to the admins. Its client answered the intake form on the request it was copied
-    /// from, so no form goes out: the copy moves to Admin Review once that answer is on file, and until
-    /// then it waits.
+    /// The hand-off to the admins for a client whose intake is already on file: no form goes out, and the
+    /// request moves straight to Admin Review reading the intake off the client. A copy, or a request whose
+    /// client has the form out on another request, waits here until that intake is in.
     /// </summary>
     [HttpPost("{id:guid}/submit-for-review")]
     [RequirePermission(Permissions.RemsFormsSend)]
@@ -1067,13 +1068,10 @@ public sealed class RemsRequestsController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
         }
         var privileged = IsPrivileged();
-        if (!CanAct(rems, me, privileged))
+        // The same people who may send the form: whoever the request is with at this stage.
+        if (!await CanFinishAsync(rems, me, cancellationToken))
         {
             return StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Forbidden("Not permitted to submit this request."));
-        }
-        if (rems.CopiedFromRemsId is null)
-        {
-            return Refusal(CodeNotSubmittable, "Only a copied request goes for review without a form. Send this one to the client instead.");
         }
         if (!IsDraft(rems))
         {
@@ -1091,16 +1089,18 @@ public sealed class RemsRequestsController : ControllerBase
             return Refusal(CodeNotSubmittable,
                 $"Commission totals {allocated:0.##}% — the recipients on the Commission tab must add up to 100% first.");
         }
-        if (await _rems.LatestFormSubmittedOnAsync(rems.ClientId, cancellationToken) is not { } submittedOn)
+        var (onFile, waiting) = await IntakeStandingAsync(rems, cancellationToken);
+        if (!onFile)
         {
-            var sentWith = rems.CopiedFrom?.RemsNumber is { Length: > 0 } number ? $", sent with {number}" : string.Empty;
-            return Refusal(CodeIntakeNotOnFile, $"The client's intake form has not come in yet{sentWith}. The copy waits until it has.");
+            return Refusal(CodeIntakeNotOnFile, waiting ?? "This client has no intake on file. Send them the form instead.");
         }
 
-        // The answers are the client's, on their record. The copy records when they arrived, which is what
-        // the review queue and the submitted-form pane go by.
-        rems.FormSubmittedOnUtc = submittedOn;
-        rems.FormLastSavedOnUtc ??= submittedOn;
+        // The answers are the client's, on their record. The request notes where they came from and when
+        // it went for review, which is what the review queue and the submitted-form pane go by.
+        var now = DateTime.UtcNow;
+        rems.IntakeOnFileFromRemsId = rems.Client!.IntakeSubmittedRemsId;
+        rems.FormSubmittedOnUtc = now;
+        rems.FormLastSavedOnUtc ??= now;
         await MoveToAsync(rems, RemsRequestStatuses.AdminReview, me, null, null, cancellationToken);
         _rems.Update(rems);
         await _activity.WriteAsync(
@@ -1329,7 +1329,7 @@ public sealed class RemsRequestsController : ControllerBase
     }
 
     /// <summary>
-    /// The refusal for a caller who may claim work but does not work the EMS Review queue, or null to
+    /// The refusal for a caller who may claim work but does not work the COP Review queue, or null to
     /// carry on.
     /// </summary>
     private IActionResult? RejectNonReviewer()
@@ -1903,23 +1903,62 @@ public sealed class RemsRequestsController : ControllerBase
     private static RemsRequestRef? CopiedFromOf(RemsRequest r)
         => r.CopiedFromRemsId is { } id ? new RemsRequestRef(id, r.CopiedFrom?.RemsNumber ?? string.Empty) : null;
 
+    /// <summary>Whoever the request is with at this stage may finish it: the same rule the form's send applies.</summary>
+    private async Task<bool> CanFinishAsync(RemsRequest r, Guid me, CancellationToken cancellationToken)
+        => RemsSetupAccess.CanWork(User, r, me, await RemsSetupAccess.CoverForWorkAsync(_delegations, r, me, cancellationToken));
+
     /// <summary>
-    /// Whether Submit for review is offered on this request, and why it cannot be pressed yet. It is a
-    /// copy's move: its client answered the intake on the request it was copied from, so nothing goes to
-    /// them; until that answer is in, the copy waits.
+    /// Where the client's intake stands for this draft: on file, or expected without this request sending
+    /// anything — out with the client on another request, or coming with the request a copy was made from
+    /// — with the reason to wait. Neither means the form has to go out from here.
     /// </summary>
-    private async Task<(bool Offered, string? Blocked)> SubmitForReviewStateAsync(RemsRequest r, Guid me, bool privileged, CancellationToken cancellationToken)
+    private async Task<(bool OnFile, string? Waiting)> IntakeStandingAsync(RemsRequest r, CancellationToken cancellationToken)
     {
-        if (r.CopiedFromRemsId is null || !IsDraft(r) || !CanAct(r, me, privileged) || !User.HasPermission(Permissions.RemsFormsSend))
-        {
-            return (false, null);
-        }
-        if (await _rems.LatestFormSubmittedOnAsync(r.ClientId, cancellationToken) is not null)
+        if (r.Client is { IsIntakeOnFile: true })
         {
             return (true, null);
         }
-        var sentWith = r.CopiedFrom?.RemsNumber is { Length: > 0 } number ? $", sent with {number}" : string.Empty;
-        return (true, $"Waiting for the client's intake form{sentWith}. The copy can be submitted for review once it is in.");
+        if (await _rems.FindOutstandingIntakeAsync(r.ClientId, r.Id, cancellationToken) is { } outstanding)
+        {
+            return (false, $"Waiting for the client's intake form, sent with {outstanding.RemsNumber}. This request can be submitted for review once it is in.");
+        }
+        if (r.CopiedFromRemsId is not null)
+        {
+            var source = r.CopiedFrom?.RemsNumber is { Length: > 0 } number ? number : "the request it was copied from";
+            return (false, $"Waiting for the client's intake form, which goes out with {source}. The copy can be submitted for review once it is in.");
+        }
+        return (false, null);
+    }
+
+    /// <summary>
+    /// Which finishing move a draft offers this caller: Submit for review, with the reason it cannot be
+    /// pressed yet, or Submit to Client. A client fills the intake once, so only one with nothing on file
+    /// and nothing on the way is sent the form.
+    /// </summary>
+    private async Task<(bool SubmitForReview, string? Blocked, bool SendToClient)> FinishStateAsync(RemsRequest r, Guid me, CancellationToken cancellationToken)
+    {
+        if (!IsDraft(r) || !User.HasPermission(Permissions.RemsFormsSend) || !await CanFinishAsync(r, me, cancellationToken))
+        {
+            return (false, null, false);
+        }
+        var (onFile, waiting) = await IntakeStandingAsync(r, cancellationToken);
+        return onFile || waiting is not null ? (true, waiting, false) : (false, null, true);
+    }
+
+    /// <summary>The client's intake on file, with the number of the request it came in on.</summary>
+    private async Task<RemsIntakeOnFileView?> IntakeOnFileViewAsync(
+        Client? client, IReadOnlyDictionary<Guid, string> names, CancellationToken cancellationToken)
+    {
+        if (client?.IntakeSubmittedOnUtc is not { } submittedOn)
+        {
+            return null;
+        }
+        string? number = null;
+        if (client.IntakeSubmittedRemsId is { } remsId)
+        {
+            number = (await _rems.GetNumbersAsync(new[] { remsId }, cancellationToken)).GetValueOrDefault(remsId);
+        }
+        return new RemsIntakeOnFileView(submittedOn, client.IntakeSubmittedRemsId, number, NameOf(names, client.IntakeSubmittedByUserId));
     }
 
     private IActionResult Refusal(string code, string message)
@@ -1943,7 +1982,8 @@ public sealed class RemsRequestsController : ControllerBase
             client?.MaconomyCustomerNumber,
             MaconomySync: SyncViewFor(r, syncEnabled, canSync),
             MaconomyJobSync: JobSyncViewFor(r, jobContext, canSync, names),
-            CopiedFrom: CopiedFromOf(r));
+            CopiedFrom: CopiedFromOf(r),
+            IntakeReused: RemsDerived.IsIntakeReused(r));
     }
 
     /// <summary>Whether the caller's tenant posts approved new clients to Maconomy right now.</summary>
@@ -1965,8 +2005,11 @@ public sealed class RemsRequestsController : ControllerBase
     private async Task<RemsRequestDetail> BuildDetailAsync(RemsRequest rems, Guid me, bool privileged, CancellationToken cancellationToken)
     {
         var names = await _users.GetFullNamesAsync(
-            new[] { rems.AdminAssignedToId, rems.CSEId, rems.CreatedById, rems.UpdatedById, rems.MaconomyJobSyncedById }
-                .Where(x => x.HasValue).Select(x => x!.Value),
+            new[]
+            {
+                rems.AdminAssignedToId, rems.CSEId, rems.CreatedById, rems.UpdatedById, rems.MaconomyJobSyncedById,
+                rems.IntakeCompletedByUserId, rems.Client?.IntakeSubmittedByUserId,
+            }.Where(x => x.HasValue).Select(x => x!.Value),
             cancellationToken);
         var form = RemsWorkspaceMapper.FormStateOf(rems);
         var (ems, submission) = MapFormState(form);
@@ -1988,7 +2031,12 @@ public sealed class RemsRequestsController : ControllerBase
             rems, await CustomerSyncEnabledAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage));
         var maconomyJobSync = JobSyncViewFor(
             rems, await JobSyncContextAsync(cancellationToken), User.HasPermission(Permissions.RemsEngagementsManage), names);
-        var (canSubmitForReview, submitBlocked) = await SubmitForReviewStateAsync(rems, me, privileged, cancellationToken);
+        var (canSubmitForReview, submitBlocked, canSendToClient) = await FinishStateAsync(rems, me, cancellationToken);
+        // Completing the form for the client: while it is out with them, by the people on the request.
+        var canCompleteIntake = RemsDerived.IsFormOut(rems)
+            && !RemsRequestStatuses.IsFrozen(rems.Status!.Value)
+            && RemsSetupAccess.CanCompleteIntake(User, rems, me)
+            && (User.HasPermission(Permissions.RemsEngagementsManage) || User.HasPermission(Permissions.RemsRequestsUpdate));
 
         return new RemsRequestDetail(
             rems.Id, rems.RemsNumber,
@@ -2015,7 +2063,13 @@ public sealed class RemsRequestsController : ControllerBase
             MaconomyJobSync: maconomyJobSync,
             CopiedFrom: CopiedFromOf(rems),
             CanSubmitForReview: canSubmitForReview,
-            SubmitForReviewBlockedReason: submitBlocked);
+            SubmitForReviewBlockedReason: submitBlocked,
+            CanSendToClient: canSendToClient,
+            IntakeOnFile: await IntakeOnFileViewAsync(client, names, cancellationToken),
+            IntakeReused: RemsDerived.IsIntakeReused(rems),
+            FormSent: rems.InviteSentOnUtc is not null,
+            CanCompleteIntake: canCompleteIntake,
+            IntakeCompletedBy: NameOf(names, rems.IntakeCompletedByUserId));
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>
@@ -2027,7 +2081,7 @@ public sealed class RemsRequestsController : ControllerBase
                 ? $"{_baseUrl.TrimEnd('/')}/rems/form/{form.InviteCode}"
                 : null;
 
-    /// <summary>Projects the (optional) EMS form into dashboard state strings.</summary>
+    /// <summary>Projects the (optional) COP form into dashboard state strings.</summary>
     private static (string EmsFormState, string? ClientSubmissionState) MapFormState(RemsFormStateInfo? form)
         => RemsWorkspaceMapper.FormState(form);
 

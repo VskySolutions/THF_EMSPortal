@@ -1,7 +1,7 @@
 <template>
   <q-page padding>
     <app-list-header
-      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'EMS Review' }]"
+      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'COP Review' }]"
       :search="search"
       show-search
       search-placeholder="Search REMS number or client"
@@ -23,7 +23,7 @@
     <app-data-table
       page-key="rems-ems-review"
       row-key="remsId"
-      title="EMS Review"
+      title="COP Review"
       :rows="rows"
       :columns="columns"
       :loading="loading"
@@ -180,9 +180,10 @@
             <q-tooltip>Copy — a new request for the same client with this engagement setup carried over</q-tooltip>
           </q-btn>
           <!-- What the client has been emailed about this request and what came back, plus the reminder for
-               one who still has not answered. -->
+               one who still has not answered. Not on a request that reused the client's intake on file:
+               nothing was sent. -->
           <q-btn
-            v-if="canReadEmailLog" type="a"
+            v-if="canReadEmailLog && !cell.row.intakeReused" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
           >
             <q-tooltip>Email log</q-tooltip>
@@ -215,7 +216,7 @@
           <div>
             {{ assignment === "mine"
               ? "Switch to All to see the requests waiting for an admin to pick them up."
-              : "A request appears here once its initiator has sent the intake form to their client." }}
+              : "A request appears here once its initiator has sent the intake form to their client, or submitted it for review on an intake already on file." }}
           </div>
         </div>
       </template>
@@ -270,7 +271,7 @@ const {
   requestStatusOption, submissionStateOption, statusFilterOptions, engagementOwnerDenial, workAction
 } = useRemsMeta();
 
-// The "EMS State" column is a boolean on the row.
+// The "COP State" column is a boolean on the row.
 const submittedOption = (submitted) => submissionStateOption(submitted ? "Submitted" : "AwaitingCustomer");
 const submittedFilterOptions = computed(() => [
   { label: submittedOption(true).label, value: "true" },
@@ -316,7 +317,7 @@ const editBlocked = (row) => {
 const columns = computed(() => [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
-  { name: "submitted", label: "EMS State", field: "submitted", align: "left", sortable: true, default: true, filterOptions: submittedFilterOptions.value },
+  { name: "submitted", label: "COP State", field: "submitted", align: "left", sortable: true, default: true, filterOptions: submittedFilterOptions.value },
   // On by default now. It is where a row says "Waiting for pickup", which is the one thing an admin
   // opening this list is looking for.
   { name: "requestStatus", label: "Request Status", field: "requestStatus", align: "left", sortable: true, default: true, filterOptions: statusFilterOptions.value },
@@ -448,7 +449,7 @@ const handingBack = ref(null);
 const handBack = async (row) => {
   const ok = await confirm({
     title: "Hand back to the queue",
-    message: `${row.remsNumber} goes back to EMS Review as waiting for pickup, and its engagement setup ` +
+    message: `${row.remsNumber} goes back to COP Review as waiting for pickup, and its engagement setup ` +
       "goes read-only to you. Any admin can take it from there — including you. Continue?",
     confirmLabel: "Hand back"
   });

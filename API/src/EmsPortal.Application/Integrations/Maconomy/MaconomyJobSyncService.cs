@@ -58,12 +58,13 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
             return MaconomyJobSyncContext.None;
         }
         // The numbers are configuration (project manager, default template) and the tenant's REMS Job
-        // Template option items (the template map); the connection row holds only the switch.
+        // Template and REMS Department option items (the template and location maps); the connection row
+        // holds only the switch.
         var numbers = await _numbers.GetAsync(tenantId, cancellationToken);
         return new MaconomyJobSyncContext(
             Connected: true, connection.JobSyncEnabled,
             Clean(_options.JobCard.ProjectManagerNumber), Clean(_options.JobCard.DefaultTemplateJobNumber),
-            numbers.TemplateMap);
+            numbers.TemplateMap, numbers.LocationMap);
     }
 
     public Task<RemsRequest?> GetAsync(Guid remsId, CancellationToken cancellationToken = default)

@@ -22,8 +22,8 @@ const META = {
   // every admin. The number was minted for "assigned to you", back when an initiator named one.
   [NotificationType.RemsRequestAssigned]: { label: "Waiting for pickup", icon: "o_pan_tool_alt", color: "amber-8" },
   [NotificationType.RemsCseAssigned]: { label: "CSE assigned", icon: "o_support_agent", color: "primary" },
-  [NotificationType.RemsFormSent]: { label: "EMS form sent", icon: "o_send", color: "teal-7" },
-  [NotificationType.RemsFormSubmitted]: { label: "EMS form submitted", icon: "o_assignment_turned_in", color: "deep-purple-6" },
+  [NotificationType.RemsFormSent]: { label: "COP form sent", icon: "o_send", color: "teal-7" },
+  [NotificationType.RemsFormSubmitted]: { label: "COP form submitted", icon: "o_assignment_turned_in", color: "deep-purple-6" },
   [NotificationType.RemsApprovalRequested]: { label: "Approval requested", icon: "o_approval", color: "orange-8" },
   [NotificationType.RemsEngagementApproved]: { label: "Engagement approved", icon: "o_verified", color: "positive" },
   [NotificationType.RemsEngagementRejected]: { label: "Engagement rejected", icon: "o_cancel", color: "negative" },

@@ -11,7 +11,7 @@ import GOOGLE_FONTS from "./google-fonts.json";
 // custom.scss) and have to be kept in step with it.
 export const DEFAULT_THEME = Object.freeze({
   identity: {
-    applicationName: "EMS Portal",
+    applicationName: "COP Portal",
     tagline: null,
     footerText: null,
     supportEmail: null,

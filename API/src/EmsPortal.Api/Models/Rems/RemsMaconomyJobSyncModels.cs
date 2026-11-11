@@ -36,12 +36,16 @@ public sealed record RemsMaconomyJobSyncPreview(
     string ClientName,
     string? CustomerNumber,
     string? ServiceLine,
-    string? JobTemplate,
+    string? JobType,
     string? TemplateJobNumber,
     string? ProjectManagerNumber,
-    string? JobName);
+    string? JobName,
+    string? Department,
+    /// <summary>The Department's Maconomy location number; null while it carries none, so the template job's location stands.</summary>
+    string? LocationNumber,
+    string? PurchaseOrderNumber);
 
-/// <summary>The settings page's Job tab: the switch, the settings, the counts and the template map.</summary>
+/// <summary>The settings page's Job tab: the switch, the settings, the counts, the job type and department maps.</summary>
 public sealed record MaconomyJobSyncOverviewResponse(
     bool Connected,
     bool Enabled,
@@ -53,13 +57,17 @@ public sealed record MaconomyJobSyncOverviewResponse(
     int Failed,
     int Syncing,
     int Waiting,
-    IReadOnlyList<MaconomyJobTemplateRow> Templates);
+    IReadOnlyList<MaconomyJobTypeRow> JobTypes,
+    IReadOnlyList<MaconomyDepartmentRow> Departments);
 
 /// <summary>
-/// One value of the tenant's REMS Job Template list and the Maconomy template job number it carries
+/// One value of the tenant's REMS Job Type list and the Maconomy template job number it carries
 /// (<c>OptionSetItem.MaconomyNumber</c>, edited under Option Sets), blank while unset.
 /// </summary>
-public sealed record MaconomyJobTemplateRow(Guid JobTemplateId, string Code, string Label, string? TemplateJobNumber);
+public sealed record MaconomyJobTypeRow(Guid JobTypeId, string Code, string Label, string? TemplateJobNumber);
+
+/// <summary>One offered value of the tenant's REMS Department list and the Maconomy location number it carries, blank while unset.</summary>
+public sealed record MaconomyDepartmentRow(Guid DepartmentId, string Code, string Label, string? LocationNumber);
 
 /// <summary>One row of the Job tab's table: an approved request and where its job stands.</summary>
 public sealed record MaconomyJobSyncRow(
@@ -68,7 +76,8 @@ public sealed record MaconomyJobSyncRow(
     string ClientName,
     string? CustomerNumber,
     string? ServiceLine,
-    string? JobTemplate,
+    string? JobType,
+    string? Department,
     DateTime UpdatedOnUtc,
     RemsMaconomyJobSyncView Sync);
 
@@ -133,10 +142,13 @@ public static class RemsMaconomyJobSyncViews
             request.Client is { } client ? MaconomyJobDataMapping.ClientNameOf(client) : string.Empty,
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.CustomerField),
             request.ServiceLine?.Label,
-            request.JobTemplate?.Label,
+            request.JobType?.Label,
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.TemplateField) ?? write.InitValues?.GetValueOrDefault(MaconomyJobDataMapping.TemplateField),
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.ProjectManagerField),
-            write.Values.GetValueOrDefault(MaconomyJobDataMapping.NameField));
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.NameField),
+            request.Department?.Label,
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.LocationField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.PurchaseOrderField));
     }
 
     public static string MessageFor(RemsMaconomyJobSyncView view) => view.Status switch

@@ -35,7 +35,7 @@
         <q-icon name="o_check_circle" size="56px" color="positive" />
         <div class="text-h5 q-mt-md">Thank you{{ thankYouName ? `, ${thankYouName}` : "" }}!</div>
         <div class="text-body1 text-grey-8 q-mt-sm" style="max-width: 480px;">
-          Your EMS onboarding form has been submitted successfully. Our team has been notified and will be in
+          Your COP onboarding form has been submitted successfully. Our team has been notified and will be in
           touch with you shortly.
         </div>
         <div class="text-caption text-grey-6 q-mt-md">You can safely close this window.</div>
@@ -48,7 +48,7 @@
       <!-- The entity type is NOT shown. -->
       <div class="pef-head">
         <div class="row items-center q-gutter-sm">
-          <div class="text-h5 text-weight-bold col">EMS Onboarding Form</div>
+          <div class="text-h5 text-weight-bold col">COP Onboarding Form</div>
         </div>
         <div class="text-body2 text-grey-7 q-mt-xs">
           Please review and complete the details below. Your progress saves automatically as you go.
@@ -137,7 +137,7 @@
 </template>
 
 <script setup>
-// Public, anonymous REMS client EMS form (WO-116, Part B).
+// Public, anonymous REMS client COP form (WO-116, Part B).
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { debounce } from "quasar";

@@ -79,7 +79,7 @@ public class OptionSetItem : AuditableEntity
     /// <summary>
     /// The number Maconomy files this value under, where the Maconomy sync needs one: the specification 6
     /// number on a REMS Entity Type, the specification 1 number on a REMS Industry, the template job number
-    /// on a REMS Job Template. Set by hand under Option Sets; null means Maconomy gets no value for it.
+    /// on a REMS Job Type. Set by hand under Option Sets; null means Maconomy gets no value for it.
     /// </summary>
     public string? MaconomyNumber { get; set; }
 

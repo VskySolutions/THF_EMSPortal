@@ -46,8 +46,8 @@
       @request="onRequest"
       @refresh="load"
     >
-      <!-- The admins' second reading of this list first, on the row of counted shortcuts where EMS Review
-           keeps its own pair; then the shortcuts over the Status and EMS State filters, each of which IS
+      <!-- The admins' second reading of this list first, on the row of counted shortcuts where COP Review
+           keeps its own pair; then the shortcuts over the Status and COP State filters, each of which IS
            the drawer's filter. -->
       <template #quick-filters>
         <quick-filter-bar :active-count="allChips.length" @clear="onClearFilters">
@@ -59,7 +59,7 @@
             v-model="filters.status" label="Status" :options="statusQuick" :counts="quickCounts?.status"
           />
           <quick-filter-group
-            v-model="filters.emsFormState" label="EMS" :options="emsQuick" :counts="quickCounts?.emsFormState"
+            v-model="filters.emsFormState" label="COP" :options="emsQuick" :counts="quickCounts?.emsFormState"
           />
         </quick-filter-bar>
       </template>
@@ -115,7 +115,7 @@
       </template>
 
       <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved;
-           read-only here, since Sync job now lives on the Approvals list and EMS Review. -->
+           read-only here, since Sync job now lives on the Approvals list and COP Review. -->
       <template #body-cell-maconomyJobSync="cell">
         <q-td :props="cell">
           <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
@@ -199,7 +199,7 @@
 
     <conversation-dialog v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle" />
 
-    <!-- A sent reminder adds an email event and nothing else, but the row's EMS State and Updated On are
+    <!-- A sent reminder adds an email event and nothing else, but the row's COP State and Updated On are
          what the list shows of it, so it reloads on the way out. -->
     <email-log-dialog v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load" />
   </q-page>
@@ -330,7 +330,7 @@ const columns = computed(() => [
     default: true,
     ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
   },
-  { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
+  { name: "emsFormState", label: "COP State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
   { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
   { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being

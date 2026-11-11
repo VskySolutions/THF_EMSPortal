@@ -62,7 +62,7 @@ public static class ActivityEventTypes
     /// <summary>The initiator handed the revised setup back to the Admin to confirm.</summary>
     public const string RemsReturnedToAdmin = "RemsReturnedToAdmin";
 
-    // ---- REMS EMS form lifecycle (WO-112) ----
+    // ---- REMS COP form lifecycle (WO-112) ----
     public const string RemsFormBuilt = "RemsFormBuilt";
     public const string RemsFormSent = "RemsFormSent";
 
@@ -94,10 +94,15 @@ public static class ActivityEventTypes
     public const string RemsRejected = "RemsRejected";
     public const string RemsFullyApproved = "RemsFullyApproved";
 
-    // Copy: a request made from another's setup (on both), and the copy's hand-off to the admins without a form.
+    // Copy: a request made from another's setup (on both).
     public const string RemsCopiedFrom = "RemsCopiedFrom";
     public const string RemsCopiedTo = "RemsCopiedTo";
+
+    /// <summary>A request handed to the admins without a form: its client's intake was already on file.</summary>
     public const string RemsSubmittedForReview = "RemsSubmittedForReview";
+
+    /// <summary>A user completed the intake form for a client who had it but had not answered.</summary>
+    public const string RemsFormCompletedByUser = "RemsFormCompletedByUser";
 
     // The customer sync: what became of posting the request's new client to Maconomy.
     public const string RemsMaconomyCustomerSynced = "RemsMaconomyCustomerSynced";
