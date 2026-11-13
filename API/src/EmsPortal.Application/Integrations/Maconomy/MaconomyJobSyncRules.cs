@@ -54,18 +54,34 @@ public static class MaconomyJobSyncRules
         }
         if (request.ServiceLineId is null)
         {
-            return "The request names no Service Line, which the job name needs.";
+            return "The request names no Service Line, which the template job is found by.";
         }
-        if (MaconomyJobDataMapping.ResolveTemplate(request, context) is null)
+        if (request.JobTypeId is null)
         {
-            return request.JobTypeId is null
-                ? $"The request names no Job Type and no default template job is set under {SettingsPlace}."
-                : $"The request's Job Type is not mapped to a Maconomy template job, and no default template job is set under {SettingsPlace}.";
-        }
-        if (string.IsNullOrWhiteSpace(context.ProjectManagerNumber))
-        {
-            return $"No project manager employee number is set under {SettingsPlace}.";
+            return "The request names no Job Type, which the job name needs.";
         }
         return null;
     }
+
+    /// <summary>Why a job sync stopped for want of a template job. Sync job now reads it as "ask which one".</summary>
+    public static string NoTemplateReason(RemsRequest request)
+        => $"{NoTemplatePrefix} \"{request.ServiceLine?.Label?.Trim()}\". Press Sync job now and pick the template job to use.";
+
+    public const string NoTemplatePrefix = "No Maconomy template job is named as the Service Line";
+
+    /// <summary>The job is in Maconomy and its budget's fee line is not: a sync then sets only the line.</summary>
+    public static bool IsBudgetOwed(RemsRequest request)
+        => request.IsMaconomyJobBudgetSyncPending && !string.IsNullOrWhiteSpace(request.MaconomyJobNumber);
+
+    public static string BudgetOwedReason(string jobNumber, string why)
+        => $"Job {jobNumber} is in Maconomy, but the First-Year Fee Estimate could not be put on its budget: {why} Press Sync job now to try that again; no second job is created.";
+
+    public const string NoBudgetLineReason =
+        "The job's budget has no Outlay line on task FEE. Add that line to the job's budget in Maconomy (and to its template job, for the next ones).";
+
+    /// <summary>What a refusal is followed by when people on the engagement have no Maconomy Number.</summary>
+    public static string? MissingNumbersAdvice(RemsRequest request)
+        => MaconomyJobDataMapping.MissingNumbersOf(request) is { Count: > 0 } missing
+            ? $" No Maconomy Number is set for: {string.Join(", ", missing)}. Add it on each user's page under Administration → Users, then sync again."
+            : null;
 }

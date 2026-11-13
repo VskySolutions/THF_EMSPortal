@@ -210,6 +210,7 @@ public sealed class UsersController : ControllerBase
             IsActive = true,
             MustChangePassword = true,
             TokenVersion = 1,
+            MaconomyNumber = string.IsNullOrWhiteSpace(request.MaconomyNumber) ? null : request.MaconomyNumber.Trim(),
             CreatedDate = DateTime.UtcNow,
         };
         await _users.AddAsync(user, cancellationToken);
@@ -420,6 +421,11 @@ public sealed class UsersController : ControllerBase
         else if (request.DisplayName is { } displayNameOnly)
         {
             user.DisplayName = displayNameOnly;
+        }
+
+        if (request.MaconomyNumber is { } maconomyNumber)
+        {
+            user.MaconomyNumber = string.IsNullOrWhiteSpace(maconomyNumber) ? null : maconomyNumber.Trim();
         }
 
         _users.Update(user);
@@ -1138,6 +1144,7 @@ public sealed class UsersController : ControllerBase
             department?.Department,
             department?.IsHead ?? false,
             p?.ProfileMedia?.PublicUrl,
+            user.MaconomyNumber,
             audit);
     }
 

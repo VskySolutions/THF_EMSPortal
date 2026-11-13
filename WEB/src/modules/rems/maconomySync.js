@@ -25,3 +25,33 @@ export const MACONOMY_JOB_SYNC_LOOKS = Object.freeze({
 
 // The label for a list column's field. A request that is not approved carries no job view and reads as a dash.
 export const maconomyJobSyncLabel = (status) => (status ? (MACONOMY_JOB_SYNC_LOOKS[status]?.label || status) : "—");
+
+// One of the request's FILES as Maconomy holds it — an attachment under the client's customer, the signed
+// CAF or the purchase order under the job — as the tag on the file's row. `doc` is the file's `maconomy`
+// view ({ status, archiveNumber, documentName, failureReason }); null gives no tag: there is nothing to say
+// about a file on a request that is not approved.
+export const maconomyDocumentTag = (doc) => {
+  switch (doc?.status) {
+    case "synced":
+      // Maconomy's own name for where the document sits: "Customer 900004", "Job 10234".
+      return {
+        label: doc.archiveNumber || "In Maconomy",
+        color: "positive",
+        icon: "o_cloud_done",
+        tooltip: `In Maconomy${doc.documentName ? ` as "${doc.documentName}"` : ""}${doc.archiveNumber ? `, in ${doc.archiveNumber}` : ""}.`
+      };
+    case "syncing":
+      return { label: "Uploading to Maconomy", color: "blue-6", icon: "o_sync" };
+    case "failed":
+      return { label: "Maconomy upload failed", color: "negative", icon: "o_cloud_off", tooltip: doc.failureReason };
+    case "notSynced":
+      return {
+        label: "Not in Maconomy",
+        color: "grey-5",
+        icon: "o_cloud_off",
+        tooltip: "Not uploaded yet. It follows the customer or the job into Maconomy, or goes with Upload documents under Tenant Settings → Maconomy → Job."
+      };
+    default:
+      return null;
+  }
+};

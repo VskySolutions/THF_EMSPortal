@@ -284,22 +284,28 @@ export const maconomyApi = {
   // Also always the caller's own tenant. A request is posted by itself once approved with its client in
   // Maconomy; Sync job now, pressed on a list, is for one that failed or was approved while the sync was off.
   // → { connected, enabled, changedOnUtc, changedByName, projectManagerNumber, defaultTemplateNumber (both from
-  //     the server configuration), synced, failed, syncing, waiting, jobTypes: [{ jobTypeId, code, label,
+  //     the server configuration), synced, failed, syncing, waiting, serviceLines: [{ serviceLineId, code, label,
   //     templateJobNumber }], departments: [{ departmentId, code, label, locationNumber }] } — the template and
-  //     location numbers are the REMS Job Type and REMS Department option items' Maconomy numbers.
+  //     location numbers are the REMS Service Line and REMS Department option items' Maconomy numbers.
   jobSync: () => api.get("/api/integrations/maconomy/job-sync").then(unwrap),
   // Start posts approvals from now on (nothing already approved); Stop queues nothing and hides the action. Both → the overview.
   startJobSync: () => api.post("/api/integrations/maconomy/job-sync/start").then(unwrap),
   stopJobSync: () => api.post("/api/integrations/maconomy/job-sync/stop").then(unwrap),
   // Every approved request and where its job stands: [{ remsId, remsNumber, clientName, customerNumber,
-  // serviceLine, jobType, department, updatedOnUtc, sync }].
+  // serviceLine, jobType, department, updatedOnUtc, sync, documents: { total, uploaded, failed, waiting,
+  // canUploadNow, blockedReason } }] — documents counts the request's files that are in Maconomy.
   jobSyncRequests: () => api.get("/api/integrations/maconomy/job-sync/requests").then(unwrap),
   // Sync job now for one request → its job sync view. A failed post is a 200 with status "failed"; only a
   // refusal (sync off, not eligible) is an error.
-  runJobSync: (remsId) => api.post(`/api/integrations/maconomy/job-sync/${remsId}/run`).then(unwrap),
+  runJobSync: (remsId, templateJobNumber) =>
+    api.post(`/api/integrations/maconomy/job-sync/${remsId}/run`, { templateJobNumber: templateJobNumber || null }).then(unwrap),
+  // Upload documents for one request: its files not yet in Maconomy → the same `documents` counts. A failed
+  // upload is a 200 with `failed` counted; only "nothing can go" is an error.
+  runDocumentSync: (remsId) => api.post(`/api/integrations/maconomy/documents/${remsId}/run`).then(unwrap),
 
-  // How each card is filled, in words, for the Customer and Job tabs — the same for every tenant:
-  // → { customer: { container, fields: [{ field, label, source, rule, readBack }] }, job: { … } }.
+  // How each card is filled, for the Customer and Job tabs — the same for every tenant. Every field of the
+  // forms in form order; `field` and `label` are null for one that is not sent:
+  // → { customer: { container, fields: [{ section, formField, field, label, rule, readBack, isDocument }] }, job: { … } }.
   mapping: () => api.get("/api/integrations/maconomy/mapping").then(unwrap)
 };
 
@@ -616,9 +622,14 @@ export const remsApi = {
   maconomySyncNow: (id) => api.post(`/api/rems/requests/${id}/maconomy-sync`).then(unwrap),
   // Sync job now: post this approved request's engagement to Maconomy as a job, inline → the job sync view
   // { status, jobNumber, syncedByName, syncedOnUtc, failureReason, syncEnabled, canSyncNow, blockedReason }.
-  maconomyJobSyncNow: (id) => api.post(`/api/rems/requests/${id}/maconomy-job-sync`).then(unwrap),
+  // templateJobNumber: the template job picked when the Service Line matched none in Maconomy; kept on the request.
+  maconomyJobSyncNow: (id, templateJobNumber) =>
+    api.post(`/api/rems/requests/${id}/maconomy-job-sync`, { templateJobNumber: templateJobNumber || null }).then(unwrap),
+  // Maconomy's template jobs, read live, for that pick: [{ number, name }].
+  maconomyJobTemplates: (id) => api.get(`/api/rems/requests/${id}/maconomy-job-sync/templates`).then(unwrap),
   // What a press would send, for the confirmation before it → { sync, remsNumber, clientName, customerNumber,
-  // serviceLine, jobType, templateJobNumber, projectManagerNumber, jobName, department, locationNumber,
+  // serviceLine, jobType, jobTypeValue (what specification 2 is given), templateJobNumber, projectManagerNumber,
+  // jobName, department, locationNumber,
   // purchaseOrderNumber }.
   maconomyJobSyncPreview: (id) => api.get(`/api/rems/requests/${id}/maconomy-job-sync`).then(unwrap),
   // One client on file, in the picker's shape.
@@ -689,18 +700,15 @@ export const remsApi = {
   // where it is. Idempotent — an engagement carrying none answers 200, not 404.
   removePurchaseOrder: (id) =>
     api.delete(`/api/rems/engagements/${id}/government/purchase-order`).then(unwrap),
-  // payload: { fiscalYearEnd?, originalDueDate?, firstExtensionDueDate?, taxFormIds:[] }. A due date left
+  // payload: { fiscalYearEnd?, originalDueDate?, firstExtensionDueDate? }. A due date left
   // null is DERIVED from the fiscal year end rather than cleared — the rule is the default.
   updateTax: (id, payload) => api.put(`/api/rems/engagements/${id}/tax`, payload).then(unwrap),
-  // The forms the client's OTHER requests hold for a year end: [{ taxFormId, remsId, remsNumber, status }].
-  taxTakenForms: (id, fiscalYearEnd) =>
-    api.get(`/api/rems/engagements/${id}/tax/taken-forms`, { params: { fiscalYearEnd } }).then(unwrap),
   // Every approval round on an engagement, oldest first: [{ roundId, roundNumber, status, sentOnUtc,
   // sentBy, completedOnUtc, declineThreshold, declineCount, decisions:[{ taskId, approver, role.
   approvalHistory: (engagementId) => api.get(`/api/rems/engagements/${engagementId}/approval/history`).then(unwrap),
   // Set the marketing tags (≥1 required to save; saving makes approval reachable). Returns the engagement.
   updateMarketing: (id, marketingMethodIds) => api.put(`/api/rems/engagements/${id}/marketing`, { marketingMethodIds }).then(unwrap),
-  // Set the commission splits (≤10 recipients, each > 0 and ≤ 100). splits: [{ employeeId, percentage }].
+  // Set the commission splits (≤3 recipients, each > 0 and ≤ 100). splits: [{ employeeId, percentage }].
   updateCommission: (id, splits) => api.put(`/api/rems/engagements/${id}/commission`, { splits }).then(unwrap),
   // The full approver list: { engagementId, engagementStatus, approvers:[{ user:{id,name}, role }],
   // selectedApproverIds }. approvers = the automatic ones (the firm's shareholders.

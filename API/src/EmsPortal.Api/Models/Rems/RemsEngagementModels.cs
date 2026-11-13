@@ -195,7 +195,9 @@ public sealed record RemsAuditDetailView(
     Guid Id,
     Guid? ClientAcceptanceFormMediaId,
     string? FileName,
-    DateOnly? ClientFiscalYearEnd);
+    DateOnly? ClientFiscalYearEnd,
+    /// <summary>Where uploading the signed form to the Maconomy job has got to.</summary>
+    RemsMaconomyDocumentView? MaconomyDocument = null);
 
 /// <summary>
 /// Government audit detail — contract number, Florida 1% flag and the copied contract/PO dates —
@@ -216,7 +218,9 @@ public sealed record RemsGovernmentDetailView(
     Guid? PurchaseOrderMediaId,
     string? PurchaseOrderFileName,
     /// <summary>The GCS rate card, in the personnel-level list's own order.</summary>
-    IReadOnlyList<RemsPersonnelRateView> PersonnelRates);
+    IReadOnlyList<RemsPersonnelRateView> PersonnelRates,
+    /// <summary>Where uploading the purchase order to the Maconomy job has got to.</summary>
+    RemsMaconomyDocumentView? PurchaseOrderMaconomyDocument = null);
 
 /// <summary>
 /// One line of a GCS engagement's rate card. The level is the <c>REMS.PersonnelLevel</c> code, with its
@@ -226,19 +230,15 @@ public sealed record RemsGovernmentDetailView(
 public sealed record RemsPersonnelRateView(string PersonnelLevel, string PersonnelLevelLabel, decimal? BillRatePerHour);
 
 /// <summary>
-/// Tax engagement detail: fiscal year end, the two due dates (derived from it and then editable), the
-/// snapshot JSON the approver's packet reads, and the form checklist.
+/// Tax engagement detail: fiscal year end, the two due dates (derived from it and then editable), and the
+/// snapshot JSON the approver's packet reads.
 /// </summary>
 public sealed record RemsTaxDetailView(
     Guid Id,
     DateOnly? FiscalYearEnd,
     DateOnly? OriginalDueDate,
     DateOnly? FirstExtensionDueDate,
-    string? CalculatedDueDates,
-    IReadOnlyList<Guid> TaxFormIds);
-
-/// <summary>A tax form another request of the same client holds for a fiscal year end, so the picker greys it with that number.</summary>
-public sealed record RemsTakenTaxFormView(Guid TaxFormId, Guid RemsId, string RemsNumber, string Status);
+    string? CalculatedDueDates);
 
 // -------------------- Editing requests --------------------
 
@@ -378,8 +378,8 @@ public sealed class UpdateRemsGovernmentDetailRequest
     public string? PurchaseOrderNumber { get; set; }
     public decimal? PurchaseOrderAmount { get; set; }
 
-    /// <summary>The rate card. Levels not listed, and lines with no rate, are levels the engagement is not staffed at.</summary>
-    public List<RemsPersonnelRateInput> PersonnelRates { get; set; } = new();
+    /// <summary>The rate card. Null leaves the stored card alone; levels not listed, and lines with no rate, are levels the engagement is not staffed at.</summary>
+    public List<RemsPersonnelRateInput>? PersonnelRates { get; set; }
 }
 
 /// <summary>One line of the rate card: a <c>REMS.PersonnelLevel</c> code and the hourly rate billed at it.</summary>
@@ -390,15 +390,13 @@ public sealed class RemsPersonnelRateInput
 }
 
 /// <summary>
-/// Set the tax detail: fiscal year end, the two due dates, and the tax-form checklist
-/// (AC-REMS-014.14).
+/// Set the tax detail: fiscal year end and the two due dates (AC-REMS-014.14).
 /// </summary>
 public sealed class UpdateRemsTaxDetailRequest
 {
     public DateOnly? FiscalYearEnd { get; set; }
     public DateOnly? OriginalDueDate { get; set; }
     public DateOnly? FirstExtensionDueDate { get; set; }
-    public List<Guid> TaxFormIds { get; set; } = new();
 }
 
 // -------------------- Part B: marketing + commission --------------------
@@ -410,7 +408,7 @@ public sealed class SetRemsMarketingRequest
 }
 
 /// <summary>
-/// Set the engagement commission splits (AC-REMS-016): up to ten recipients, each &gt; 0 and &lt;=
+/// Set the engagement commission splits (AC-REMS-016): up to three recipients, each &gt; 0 and &lt;=
 /// 100, allocating no more than 100% in total.
 /// </summary>
 public sealed class SetRemsCommissionRequest

@@ -64,8 +64,9 @@ public static class DefaultOptionSets
         bool IsActive = true,
         /// <summary>
         /// The number Maconomy files the value under, where the Maconomy sync needs one: the specification 6
-        /// number on an entity type, the specification 1 number on an industry, the location number on a
-        /// department. Seeded so the sync works on a new tenant; a Tenant Admin edits it under Option Sets
+        /// number on an entity type, the specification 1 number on an industry, the template job number on a
+        /// service line, the location number on a department. Seeded so the sync works on a new tenant; a
+        /// Tenant Admin edits it under Option Sets
         /// like any other field here.
         /// </summary>
         string? MaconomyNumber = null);
@@ -102,9 +103,8 @@ public static class DefaultOptionSets
     /// <summary>
     /// The platform-standard option lists to seed. Most of the REMS lists keyed to
     /// <see cref="EntityType.Rems"/> are CODE-valued — the chosen item's <c>Value</c> is what gets stored
-    /// on the REMS / REMSForm / REMSEngagement row. Two are not: the grouped marketing-methods list and the
-    /// tax-form checklist are referenced by item ID, as foreign keys from
-    /// <c>REMSEngagementMarketingMethod</c> and <c>REMSEngagementTaxForm</c>. Each marketing item carries
+    /// on the REMS / REMSForm / REMSEngagement row. One is not: the grouped marketing-methods list is referenced by item ID,
+    /// as a foreign key from <c>REMSEngagementMarketingMethod</c>. Each marketing item carries
     /// its group and behaviour flags in <see cref="ItemDefinition.MetadataJson"/>.
     /// </summary>
     public static IReadOnlyList<Definition> All { get; } = new[]
@@ -382,126 +382,89 @@ public static class DefaultOptionSets
         // booked as an engagement so the same setup and approval route covers it. The picker narrows the
         // list to the lines the chosen department offers (REMS_SERVICE_LINES_BY_DEPARTMENT in
         // useRemsMeta.js); a line a firm adds is offered under every department.
+        // The service the firm is engaged for. Each value's Maconomy number is the template job the Maconomy
+        // job is created from (the user, 11 Nov 2026: the template follows the service line, the job type goes
+        // to specification 2). THF's template jobs on thmasd01 are numbered "ZZ" + the job's name (the probe of
+        // the same day); seeded from THF's department table where a line had one template. Assurance Services
+        // (six candidates) and Non-Chargeable Internal (sixteen) are left for the tenant to set.
         new Definition(EntityType.Rems, "REMS.ServiceLine", "REMS Service Line", OptionItemSortMode.Custom, new[]
         {
             new ItemDefinition("attest_services", "Assurance Services", 1),
-            new ItemDefinition("tax_compliance", "Tax Compliance", 2),
-            new ItemDefinition("client_accounting_services", "Client Accounting Services", 3),
-            new ItemDefinition("consulting", "Consulting", 4),
+            new ItemDefinition("tax_compliance", "Tax Compliance", 2, MaconomyNumber: "ZZTax Compliance"),
+            new ItemDefinition("client_accounting_services", "Client Accounting Services", 3, MaconomyNumber: "ZZClient Accounting Services"),
+            new ItemDefinition("consulting", "Consulting", 4, MaconomyNumber: "ZZConsulting Engagement"),
             // RETIRED: on THF's department table Business Valuation and Peer Review are JOB TYPES
             // (under Tax › Consulting and Assurance › Assurance Services), not lines of their own, so no
             // department offers them. Hidden rather than removed in case an engagement records one.
-            new ItemDefinition("business_valuation", "Business Valuation", 5, IsActive: false),
-            new ItemDefinition("it_services", "IT Services", 6),
-            new ItemDefinition("plan_administration", "Plan Administration", 7),
-            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 8),
-            new ItemDefinition("peer_review", "Peer Review", 9, IsActive: false),
+            new ItemDefinition("business_valuation", "Business Valuation", 5, IsActive: false, MaconomyNumber: "ZZBusiness Valuation"),
+            new ItemDefinition("it_services", "IT Services", 6, MaconomyNumber: "ZZInformation Technology Services"),
+            new ItemDefinition("plan_administration", "Plan Administration", 7, MaconomyNumber: "ZZPension Administration and Tax Compliance"),
+            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 8, MaconomyNumber: "ZZMergers and Acquisitions"),
+            new ItemDefinition("peer_review", "Peer Review", 9, IsActive: false, MaconomyNumber: "ZZPeer Review"),
             new ItemDefinition("soc", "SOC", 10, Description:
-                "System and Organization Controls reporting (SOC 1 / SOC 2)."),
-            new ItemDefinition("employee_benefits", "Employee Benefits", 11),
-            new ItemDefinition("estate_planning", "Estate Planning", 12),
-            new ItemDefinition("litigation_support", "Litigation Support", 13),
-            new ItemDefinition("forensic_accounting", "Forensic Accounting", 14),
+                "System and Organization Controls reporting (SOC 1 / SOC 2).", MaconomyNumber: "ZZSOC"),
+            new ItemDefinition("employee_benefits", "Employee Benefits", 11, MaconomyNumber: "ZZPension Administration and Tax Compliance"),
+            new ItemDefinition("estate_planning", "Estate Planning", 12, MaconomyNumber: "ZZTax Compliance"),
+            new ItemDefinition("litigation_support", "Litigation Support", 13, MaconomyNumber: "ZZLitigation"),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 14, MaconomyNumber: "ZZForensic Accounting"),
             new ItemDefinition("non_chargeable_internal", "Non-Chargeable Internal", 15),
         }),
         // The kind of job the engagement is set up as, finer than the service line beside it: THF's list of
         // 46 in its order (11 Nov 2026), offered whole — it is deliberately NOT narrowed by the department or
-        // the service line. Nothing on the server branches on a value. Each value's Maconomy number is the
-        // template job the job sync creates the job from (MaconomyJobDataMapping.ResolveTemplate): THF's
-        // template jobs on thmasd01 are numbered "ZZ" + the job's name (the 11 Nov 2026 probe, `template =
-        // true` on the jobs container), seeded here where a value matches one by name or is the same work
-        // renamed; every tax form takes the one tax template, ZZTax Compliance (the user, 11 Nov 2026).
-        // Estate Planning and Internal IT have no template and stay empty. The tax-form codes are reused
-        // where a value is the same form. Replaced REMS.JobTemplate, which the AddRemsJobType migration retired.
+        // the service line. Nothing on the server branches on a value. On the job card the value goes to
+        // specification 2 (MaconomyJobDataMapping.JobTypeField): its label, which is what Maconomy's job type
+        // list calls it, or the item's Maconomy number where a tenant sets one to say it differently. The
+        // template job is the Service Line's, not the job type's (the user, 11 Nov 2026). The tax-form codes
+        // are reused where a value is the same form. Replaced REMS.JobTemplate, which the AddRemsJobType
+        // migration retired.
         new Definition(EntityType.Rems, "REMS.JobType", "REMS Job Type", OptionItemSortMode.Custom, new[]
         {
-            new ItemDefinition("agreed_upon_procedures", "Agreed Upon Procedures", 1, MaconomyNumber: "ZZAgreed Upon Procedures"),
-            new ItemDefinition("audit", "Audit", 2, MaconomyNumber: "ZZAudit"),
-            new ItemDefinition("examination", "Examination", 3, MaconomyNumber: "ZZExamination"),
-            new ItemDefinition("compilation", "Compilation", 4, MaconomyNumber: "ZZCompilation"),
-            new ItemDefinition("review", "Review", 5, MaconomyNumber: "ZZReview"),
-            new ItemDefinition("soc", "SOC", 6, MaconomyNumber: "ZZSOC"),
-            new ItemDefinition("1040", "1040 - Individual", 7, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("1041_estate", "1041 - Estate", 8, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("1120_pc", "1120-PC - Property & Casualty Insurance", 9, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("990", "990 - Tax-Exempt", 10, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("1065", "1065 - Partnership", 11, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("1041_trust", "1041 - Trust", 12, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("1120", "1120 - C Corporation", 13, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("1120_s", "1120-S - S Corporation", 14, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("5500", "5500 - Employee Benefit Plan", 15, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("tax_other", "Tax Other", 16, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("706", "706 - Estate", 17, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("709", "709 - Gift", 18, MaconomyNumber: "ZZTax Compliance"),
-            new ItemDefinition("8752", "8752 - Tax", 19, MaconomyNumber: "ZZTax Compliance"),
+            new ItemDefinition("agreed_upon_procedures", "Agreed Upon Procedures", 1),
+            new ItemDefinition("audit", "Audit", 2),
+            new ItemDefinition("examination", "Examination", 3),
+            new ItemDefinition("compilation", "Compilation", 4),
+            new ItemDefinition("review", "Review", 5),
+            new ItemDefinition("soc", "SOC", 6),
+            new ItemDefinition("1040", "1040 - Individual", 7),
+            new ItemDefinition("1041_estate", "1041 - Estate", 8),
+            new ItemDefinition("1120_pc", "1120-PC - Property & Casualty Insurance", 9),
+            new ItemDefinition("990", "990 - Tax-Exempt", 10),
+            new ItemDefinition("1065", "1065 - Partnership", 11),
+            new ItemDefinition("1041_trust", "1041 - Trust", 12),
+            new ItemDefinition("1120", "1120 - C Corporation", 13),
+            new ItemDefinition("1120_s", "1120-S - S Corporation", 14),
+            new ItemDefinition("5500", "5500 - Employee Benefit Plan", 15),
+            new ItemDefinition("tax_other", "Tax Other", 16),
+            new ItemDefinition("706", "706 - Estate", 17),
+            new ItemDefinition("709", "709 - Gift", 18),
+            new ItemDefinition("8752", "8752 - Tax", 19),
             new ItemDefinition("estate_planning", "Estate Planning", 20),
-            new ItemDefinition("consulting", "Consulting", 21, MaconomyNumber: "ZZConsulting Engagement"),
-            new ItemDefinition("governmental_consulting_services", "Governmental Consulting Services", 22, MaconomyNumber: "ZZGovernmental Consulting Services"),
-            new ItemDefinition("plan_administration_and_5500", "Plan Administration and 5500", 23, MaconomyNumber: "ZZPension Administration and Tax Compliance"),
-            new ItemDefinition("client_accounting_services", "Client Accounting Services", 24, MaconomyNumber: "ZZClient Accounting Services"),
-            new ItemDefinition("litigation_support", "Litigation Support", 25, MaconomyNumber: "ZZLitigation"),
-            new ItemDefinition("forensic_accounting", "Forensic Accounting", 26, MaconomyNumber: "ZZForensic Accounting"),
-            new ItemDefinition("business_valuation", "Business Valuation", 27, MaconomyNumber: "ZZBusiness Valuation"),
-            new ItemDefinition("it_services", "IT Services", 28, MaconomyNumber: "ZZInformation Technology Services"),
-            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 29, MaconomyNumber: "ZZMergers and Acquisitions"),
-            new ItemDefinition("peer_review", "Peer Review", 30, MaconomyNumber: "ZZPeer Review"),
-            new ItemDefinition("nonchargeable_administrative", "Nonchargeable - Administrative", 31, MaconomyNumber: "ZZNonchargeable - Administrative"),
-            new ItemDefinition("nonchargeable_internal_firm_accounting", "NONCHARGEABLE - INTERNAL FIRM ACCOUNTING", 32, MaconomyNumber: "ZZNONCHARGEABLE - INTERNAL FIRM ACCOUNTING"),
-            new ItemDefinition("nonchargeable_leave_time", "Nonchargeable - Leave Time", 33, MaconomyNumber: "ZZNonchargeable - Leave Time"),
-            new ItemDefinition("nonchargeable_personnel", "Nonchargeable - Personnel", 34, MaconomyNumber: "ZZNonchargeable - Personnel"),
+            new ItemDefinition("consulting", "Consulting", 21),
+            new ItemDefinition("governmental_consulting_services", "Governmental Consulting Services", 22),
+            new ItemDefinition("plan_administration_and_5500", "Plan Administration and 5500", 23),
+            new ItemDefinition("client_accounting_services", "Client Accounting Services", 24),
+            new ItemDefinition("litigation_support", "Litigation Support", 25),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 26),
+            new ItemDefinition("business_valuation", "Business Valuation", 27),
+            new ItemDefinition("it_services", "IT Services", 28),
+            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 29),
+            new ItemDefinition("peer_review", "Peer Review", 30),
+            new ItemDefinition("nonchargeable_administrative", "Nonchargeable - Administrative", 31),
+            new ItemDefinition("nonchargeable_internal_firm_accounting", "NONCHARGEABLE - INTERNAL FIRM ACCOUNTING", 32),
+            new ItemDefinition("nonchargeable_leave_time", "Nonchargeable - Leave Time", 33),
+            new ItemDefinition("nonchargeable_personnel", "Nonchargeable - Personnel", 34),
             new ItemDefinition("nonchargeable_internal_it", "NONCHARGEABLE - INTERNAL IT", 35),
-            new ItemDefinition("nonchargeable_recruiting", "Nonchargeable - Recruiting", 36, MaconomyNumber: "ZZNonchargeable - Recruiting"),
-            new ItemDefinition("nonchargeable_education", "Nonchargeable - Education", 37, MaconomyNumber: "ZZNonchargeable - Education"),
-            new ItemDefinition("nonchargeable_professional", "Nonchargeable - Professional", 38, MaconomyNumber: "ZZNonchargeable - Professional"),
-            new ItemDefinition("nonchargeable_marketing", "Nonchargeable - Marketing", 39, MaconomyNumber: "ZZNonchargeable - Marketing"),
-            new ItemDefinition("nonchargeable_chamber_of_commerce_conference", "Nonchargeable - Chamber of Commerce Conference", 40, MaconomyNumber: "ZZNonchargeable - Chamber of Commerce Conference"),
-            new ItemDefinition("nonchargeable_client_social", "Nonchargeable - Client Social", 41, MaconomyNumber: "ZZNonchargeable - Client Social"),
-            new ItemDefinition("nonchargeable_finrep", "Nonchargeable - FINREP", 42, MaconomyNumber: "ZZNonchargeable - FINREP"),
-            new ItemDefinition("nonchargeable_firm_forum", "Nonchargeable - Firm Forum", 43, MaconomyNumber: "ZZNonchargeable - Firm Forum"),
-            new ItemDefinition("nonchargeable_synergy", "Nonchargeable - Synergy", 44, MaconomyNumber: "ZZNonchargeable - Synergy"),
-            new ItemDefinition("nonchargeable_shareholder_meetings", "Nonchargeable - Shareholder Meetings", 45, MaconomyNumber: "ZZNonchargeable - Shareholder Meetings"),
-            new ItemDefinition("nonchargeable_holiday_party", "Nonchargeable - Holiday Party", 46, MaconomyNumber: "ZZNonchargeable - Holiday Party"),
-        }),
-        // Engagement tax forms (WO-114): the checklist values referenced by foreign key from
-        // REMSEngagementTaxForm.TaxFormId on a tax engagement's tax detail.
-        //
-        // Ordered as a preparer reads a return shelf rather than alphabetically or by popularity: the
-        // 1040 family, then the 1041s, then the entity returns in form-number order, then the exempt and
-        // plan returns, and finally the four that are not a federal form at all. A checklist is scanned,
-        // not searched, and scanning it is far quicker when the numbers run in order.
-        //
-        // Every label is "form number — who files it", because the number alone is the part staff know
-        // and the gloss is the part that settles which of two similar numbers is meant — 1041 (Trust) and
-        // 1041 (Estate) are the same IRS form filed by two different kinds of client, and the whole
-        // reason they are two rows here is that THF tracks them apart.
-        new Definition(EntityType.Rems, "REMS.TaxForm", "REMS Tax Form", OptionItemSortMode.Custom, new[]
-        {
-            new ItemDefinition("1040", "1040 — Individual", 1),
-            new ItemDefinition("1040_es", "1040-ES — Estimated Tax", 2),
-            // One IRS form, two codes. A trust and a decedent's estate file the same 1041 but are
-            // different engagements with different deadlines and different people to chase, so the
-            // checklist says which — and the codes have to differ because each is its own row.
-            new ItemDefinition("1041_trust", "1041 — Trust", 3),
-            new ItemDefinition("1041_estate", "1041 — Estate", 4),
-            new ItemDefinition("1065", "1065 — Partnership", 5),
-            new ItemDefinition("1120", "1120 — C Corporation", 6),
-            new ItemDefinition("1120_pc", "1120-PC — Property & Casualty Insurance", 7),
-            new ItemDefinition("1120_pol", "1120-POL — Political Organization", 8),
-            new ItemDefinition("1120_s", "1120-S — S Corporation", 9),
-            new ItemDefinition("990", "990 — Tax-Exempt", 10),
-            new ItemDefinition("990_t", "990-T — Exempt Organization Business Income", 11),
-            new ItemDefinition("5500", "5500 — Employee Benefit Plan", 12),
-            // The last four are not federal income-tax forms. They are on the same checklist because
-            // they are the same question — what does this engagement actually file? — and a tax
-            // engagement that files a tangible-property return and a payroll return had nowhere to say
-            // so.
-            new ItemDefinition("tpp", "TPP — Tangible Personal Property", 13),
-            new ItemDefinition("payroll", "Payroll", 14),
-            // Deliberately last, and deliberately vague: "Other" is the row that keeps a return nobody
-            // listed from being left off the checklist altogether, and "States" covers whichever state
-            // returns this engagement files.
-            new ItemDefinition("other", "Other", 15),
-            new ItemDefinition("states", "States", 16),
+            new ItemDefinition("nonchargeable_recruiting", "Nonchargeable - Recruiting", 36),
+            new ItemDefinition("nonchargeable_education", "Nonchargeable - Education", 37),
+            new ItemDefinition("nonchargeable_professional", "Nonchargeable - Professional", 38),
+            new ItemDefinition("nonchargeable_marketing", "Nonchargeable - Marketing", 39),
+            new ItemDefinition("nonchargeable_chamber_of_commerce_conference", "Nonchargeable - Chamber of Commerce Conference", 40),
+            new ItemDefinition("nonchargeable_client_social", "Nonchargeable - Client Social", 41),
+            new ItemDefinition("nonchargeable_finrep", "Nonchargeable - FINREP", 42),
+            new ItemDefinition("nonchargeable_firm_forum", "Nonchargeable - Firm Forum", 43),
+            new ItemDefinition("nonchargeable_synergy", "Nonchargeable - Synergy", 44),
+            new ItemDefinition("nonchargeable_shareholder_meetings", "Nonchargeable - Shareholder Meetings", 45),
+            new ItemDefinition("nonchargeable_holiday_party", "Nonchargeable - Holiday Party", 46),
         }),
 
         // ---------------------------------------------------------------------------------------------

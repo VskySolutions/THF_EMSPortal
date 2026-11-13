@@ -461,9 +461,16 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("IntakeSubmittedRemsId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("IsMaconomyContactSyncPending")
+                        .HasColumnType("bit");
+
                     b.Property<string>("LegalName")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("MaconomyContactCompanyNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("MaconomyCustomerNumber")
                         .HasMaxLength(64)
@@ -2726,6 +2733,32 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("MaconomyDocumentArchiveNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("MaconomyDocumentKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("MaconomyDocumentName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("MaconomyDocumentSyncError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("MaconomyDocumentSyncStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("NotSynced");
+
+                    b.Property<DateTime?>("MaconomyDocumentSyncedOnUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid>("MediaId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2957,6 +2990,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("IsFloridaOnePercentFeeApplicable")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsMaconomyJobBudgetSyncPending")
+                        .HasColumnType("bit");
+
                     b.Property<string>("JobDescription")
                         .HasMaxLength(6)
                         .HasColumnType("nvarchar(6)");
@@ -2984,6 +3020,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("MaconomyJobSyncedOnUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("MaconomyTemplateJobNumber")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<Guid?>("OnBehalfOfUserId")
                         .HasColumnType("uniqueidentifier");
@@ -3267,54 +3307,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasFilter("[Deleted] = 0");
 
                     b.ToTable("REMS_TaxDueDate", (string)null);
-                });
-
-            modelBuilder.Entity("EmsPortal.Domain.Entities.RemsTaxForm", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("CreatedById")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedOnUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("Deleted")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("DeletedOnUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("REMSId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("TaxFormId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("UpdatedById")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("UpdatedOnUtc")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("REMSId");
-
-                    b.HasIndex("TaxFormId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("TenantId", "REMSId", "TaxFormId")
-                        .IsUnique()
-                        .HasFilter("[Deleted] = 0");
-
-                    b.ToTable("REMS_TaxForm", (string)null);
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.Role", b =>
@@ -3874,6 +3866,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
+
+                    b.Property<string>("MaconomyNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<bool>("MustChangePassword")
                         .HasColumnType("bit");
@@ -4996,31 +4992,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("Request");
                 });
 
-            modelBuilder.Entity("EmsPortal.Domain.Entities.RemsTaxForm", b =>
-                {
-                    b.HasOne("EmsPortal.Domain.Entities.RemsRequest", "Request")
-                        .WithMany("TaxForms")
-                        .HasForeignKey("REMSId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", "TaxForm")
-                        .WithMany()
-                        .HasForeignKey("TaxFormId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Request");
-
-                    b.Navigation("TaxForm");
-                });
-
             modelBuilder.Entity("EmsPortal.Domain.Entities.RolePermissionGroup", b =>
                 {
                     b.HasOne("EmsPortal.Domain.Entities.PermissionGroup", "PermissionGroup")
@@ -5249,8 +5220,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("StatusHistory");
 
                     b.Navigation("TaxDueDates");
-
-                    b.Navigation("TaxForms");
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.RemsSettings", b =>

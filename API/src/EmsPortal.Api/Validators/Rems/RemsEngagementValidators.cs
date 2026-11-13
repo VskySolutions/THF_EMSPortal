@@ -112,11 +112,12 @@ public sealed class UpdateRemsGovernmentDetailRequestValidator : AbstractValidat
             .When(x => x.PurchaseOrderAmount.HasValue);
         // The rate card: each level once, and a rate is never a credit.
         RuleFor(x => x.PersonnelRates)
-            .Must(rates => rates
+            .Must(rates => rates!
                 .Select(r => (r.PersonnelLevel ?? string.Empty).Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count() == rates.Count)
-            .WithMessage("personnelRates must name each personnel level once.");
+            .WithMessage("personnelRates must name each personnel level once.")
+            .When(x => x.PersonnelRates is not null);
         RuleForEach(x => x.PersonnelRates).ChildRules(rate =>
         {
             rate.RuleFor(r => r.PersonnelLevel)
@@ -126,19 +127,6 @@ public sealed class UpdateRemsGovernmentDetailRequestValidator : AbstractValidat
                 .GreaterThanOrEqualTo(0).WithMessage("personnelRates[].billRatePerHour must be zero or greater.")
                 .When(r => r.BillRatePerHour.HasValue);
         });
-    }
-}
-
-/// <summary>Validates a tax-detail update (WO-114): at most one tax form, since 5 Nov 2026 a tax REMS is one return.</summary>
-public sealed class UpdateRemsTaxDetailRequestValidator : AbstractValidator<UpdateRemsTaxDetailRequest>
-{
-    public UpdateRemsTaxDetailRequestValidator()
-    {
-        RuleFor(x => x.TaxFormIds)
-            .Must(ids => ids.Distinct().Count() == ids.Count)
-            .WithMessage("taxFormIds must not contain duplicates.")
-            .Must(ids => ids.Count <= 1)
-            .WithMessage("taxFormIds holds at most one form: a tax REMS carries one return. Copy the request for another.");
     }
 }
 
@@ -157,7 +145,7 @@ public sealed class SetRemsMarketingRequestValidator : AbstractValidator<SetRems
 }
 
 /// <summary>
-/// Validates setting commission splits (WO-114, AC-REMS-016.1/2): up to ten distinct recipients, each
+/// Validates setting commission splits (WO-114, AC-REMS-016.1/2): up to three distinct recipients, each
 /// with a percentage greater than 0 and at most 100, and no more than 100% allocated in total.
 /// </summary>
 public sealed class SetRemsCommissionRequestValidator : AbstractValidator<SetRemsCommissionRequest>
@@ -165,7 +153,7 @@ public sealed class SetRemsCommissionRequestValidator : AbstractValidator<SetRem
     public SetRemsCommissionRequestValidator()
     {
         RuleFor(x => x.Splits)
-            .Must(s => s.Count <= 10).WithMessage("At most ten commission recipients are allowed.");
+            .Must(s => s.Count <= 3).WithMessage("At most three commission recipients are allowed.");
         RuleFor(x => x.Splits)
             .Must(s => s.Select(i => i.EmployeeId).Distinct().Count() == s.Count)
             .WithMessage("A recipient may appear only once.")

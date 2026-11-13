@@ -319,8 +319,6 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
             .Where(r => r.REMSId == remsId).ExecuteDeleteAsync(cancellationToken);
         await _dbContext.RemsMarketingMethods.IgnoreQueryFilters()
             .Where(m => m.REMSId == remsId).ExecuteDeleteAsync(cancellationToken);
-        await _dbContext.RemsTaxForms.IgnoreQueryFilters()
-            .Where(f => f.REMSId == remsId).ExecuteDeleteAsync(cancellationToken);
         await _dbContext.RemsTaxDueDates.IgnoreQueryFilters()
             .Where(d => d.REMSId == remsId).ExecuteDeleteAsync(cancellationToken);
 

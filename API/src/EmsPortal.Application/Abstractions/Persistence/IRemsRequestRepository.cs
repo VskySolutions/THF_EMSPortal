@@ -16,13 +16,24 @@ public interface IRemsRequestRepository
 
     /// <summary>
     /// Everything the setup, submission and approval screens read: the request's option items and seats,
-    /// its contract, personnel rates, marketing methods, commission splits, tax forms, due dates, picked
+    /// its contract, personnel rates, marketing methods, commission splits, tax due dates, picked
     /// approvers and files, and the client's full graph.
     /// </summary>
     Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default);
 
-    /// <summary>The request with what the Maconomy job sync reads: type, status, client with person, service line, job type.</summary>
+    /// <summary>
+    /// The request with what the Maconomy job and document syncs read: type, status, client with person,
+    /// service line, job type, department, contract, marketing methods and files with their media.
+    /// </summary>
     Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The same attachment, already uploaded to Maconomy, on another request of the client — a copy of a
+    /// request carries its source's files. Null when there is none.
+    /// </summary>
+    Task<RemsFile?> FindUploadedTwinAsync(Guid clientId, Guid mediaId, Guid excludingFileId, CancellationToken cancellationToken = default);
+
+    void UpdateFile(RemsFile file);
 
     /// <summary>The caller's tenant's approved requests, newest change first, with the same graph loaded. The Job tab's table.</summary>
     Task<IReadOnlyList<RemsRequest>> ListApprovedForJobSyncAsync(CancellationToken cancellationToken = default);
@@ -45,9 +56,6 @@ public interface IRemsRequestRepository
 
     /// <summary>The client's OTHER request whose intake form is out with them and unanswered, or null. One form per client at a time.</summary>
     Task<RemsIntakeHolder?> FindOutstandingIntakeAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default);
-
-    /// <summary>The tax forms the client's OTHER requests hold for a fiscal year end, with the request holding each.</summary>
-    Task<IReadOnlyList<RemsTaxFormHolder>> ListTaxFormHoldersAsync(Guid clientId, DateOnly fiscalYearEnd, Guid excludingRemsId, CancellationToken cancellationToken = default);
 
     /// <summary>A client's requests, newest first, with type and status.</summary>
     Task<IReadOnlyList<RemsRequest>> ListByClientAsync(Guid clientId, CancellationToken cancellationToken = default);
@@ -114,9 +122,6 @@ public interface IRemsRequestRepository
     Task AddMarketingMethodAsync(RemsMarketingMethod method, CancellationToken cancellationToken = default);
     void RemoveMarketingMethod(RemsMarketingMethod method);
 
-    Task AddTaxFormAsync(RemsTaxForm taxForm, CancellationToken cancellationToken = default);
-    void RemoveTaxForm(RemsTaxForm taxForm);
-
     Task AddTaxDueDateAsync(RemsTaxDueDate dueDate, CancellationToken cancellationToken = default);
     void UpdateTaxDueDate(RemsTaxDueDate dueDate);
     void RemoveTaxDueDate(RemsTaxDueDate dueDate);
@@ -124,9 +129,6 @@ public interface IRemsRequestRepository
 
 /// <summary>Approved requests by Maconomy job sync state: created, failed (lost attempts included), under way, and still to post.</summary>
 public sealed record RemsMaconomyJobSyncCounts(int Synced, int Failed, int Syncing, int Waiting);
-
-/// <summary>A tax form another request of the same client holds for the same fiscal year end.</summary>
-public sealed record RemsTaxFormHolder(Guid TaxFormId, Guid RemsId, string RemsNumber, string Status);
 
 /// <summary>The request a client's intake form went out with.</summary>
 public sealed record RemsIntakeHolder(Guid RemsId, string RemsNumber);

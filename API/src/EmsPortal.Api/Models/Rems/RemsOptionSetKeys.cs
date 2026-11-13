@@ -20,9 +20,8 @@ public static class RemsOptionSetKeys
     /// </summary>
     public const string RelatedEntityStatus = "REMS.RelatedEntityStatus";
 
-    /// <summary>Referenced by item ID already — the grouped marketing list and the tax-form checklist.</summary>
+    /// <summary>Referenced by item ID already: the grouped marketing list.</summary>
     public const string MarketingMethods = "REMSMarketing_MarketingMethods.MarketingMethodId";
-    public const string TaxForm = "REMS.TaxForm";
     public const string AddressType = "REMS.AddressType";
     public const string ContactRole = "REMS.ContactRole";
     public const string RelationType = "REMS.RelationType";

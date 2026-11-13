@@ -181,7 +181,7 @@ export function useRemsMeta () {
   const jobTypeLabel = (v) => labelFrom(options.jobType, v);
   const industryLabel = (v) => labelFrom(options.industry, v);
   // GCS staffing level. Resolved here because the approver's packet carries the CODE — that screen's
-  // option labels are resolved server-side only for the sets keyed by item id (marketing, tax forms).
+  // option labels are resolved server-side only for the sets keyed by item id (marketing).
   const personnelLevelLabel = (v) => labelFrom(options.personnelLevel, v);
   // How often a CAS engagement is billed, resolved for the same reason.
   const billingPeriodLabel = (v) => labelFrom(options.billingPeriod, v);
@@ -383,17 +383,15 @@ export const isGcsDepartment = (department) => department === REMS_DEPARTMENT_CO
 export const requiresClientAcceptanceForm = (department) =>
   isAuditDepartment(department) || isAssuranceDepartment(department);
 
-// Loads the engagement's code-valued option sets (Department, Service Line and Industry) plus Marketing /
-// Tax Form for the workspace.
+// Loads the engagement's code-valued option sets (Department, Service Line and Industry) plus Marketing
+// for the workspace.
 export function useRemsEngagementOptionSets () {
-  // The code-valued lists come from the shared catalogue (the same ones the labels read); Marketing and Tax
-  // Form are resolved here because they are keyed by OptionSetItem *id* rather than by code.
+  // The code-valued lists come from the shared catalogue (the same ones the labels read); Marketing
+  // is resolved here because it is keyed by OptionSetItem *id* rather than by code.
   const catalog = useRemsOptionCatalog();
   const departmentOptions = computed(() => catalog.department);
   const marketingGroups = ref([]);
   const marketingUnavailable = ref(false);
-  const taxFormOptions = ref([]);
-  const taxFormUnavailable = ref(false);
 
   const groupOf = (metadataJson) => {
     try {
@@ -429,21 +427,9 @@ export function useRemsEngagementOptionSets () {
     }
   };
 
-  const resolveTaxForms = async () => {
-    try {
-      const items = await optionSetApi.resolve({ entityType: EntityType.Rems, key: "REMS.TaxForm" });
-      taxFormOptions.value = (items || []).map((i) => ({ value: i.id, label: i.label }));
-      taxFormUnavailable.value = taxFormOptions.value.length === 0;
-    } catch {
-      taxFormOptions.value = [];
-      taxFormUnavailable.value = true;
-    }
-  };
-
   const load = () => Promise.all([
     ensureRemsOptionsLoaded(),
-    resolveMarketing(),
-    resolveTaxForms()
+    resolveMarketing()
   ]);
 
   return {
@@ -460,8 +446,6 @@ export function useRemsEngagementOptionSets () {
     personnelLevelOptions: computed(() => catalog.personnelLevel),
     marketingGroups,
     marketingUnavailable,
-    taxFormOptions,
-    taxFormUnavailable,
     load
   };
 }

@@ -46,13 +46,112 @@ public sealed record MaconomyCardWrite(
     IReadOnlyList<string> Fields,
     IReadOnlyDictionary<string, string?> Values,
     IReadOnlyDictionary<string, string?>? InitValues,
-    string KeyField);
+    string KeyField,
+    // Fields Maconomy holds as numbers (a year, an amount): their values go out as JSON numbers.
+    IReadOnlyCollection<string>? NumberFields = null);
+
+/// <summary>What Maconomy itself says, read for one job write: Popup 2's months, and the template jobs (number, name).</summary>
+public sealed record MaconomyJobLookups(MaconomyPickList? Months, MaconomyPickList? Templates);
 
 /// <summary>The record Maconomy created, as field name → value text.</summary>
 public sealed record MaconomyCreatedRecord(IReadOnlyDictionary<string, string?> Data);
 
 /// <summary>The job Maconomy created: the number its series assigned, and the name as stored.</summary>
 public sealed record MaconomyCreatedJob(string Number, string Name);
+
+/// <summary>One entry of a Maconomy pick list (a popup): the literal Maconomy stores, and the title a person reads.</summary>
+public sealed record MaconomyPickListItem(string Value, string Title);
+
+/// <summary>
+/// A Maconomy pick list as its popup container gives it. A popup field is written with the literal
+/// ("fl", "united_kingdom"), never the title ("FL", "United Kingdom"), so every value goes through here.
+/// </summary>
+public sealed class MaconomyPickList
+{
+    public static readonly MaconomyPickList Empty = new(Array.Empty<MaconomyPickListItem>());
+
+    public MaconomyPickList(IReadOnlyList<MaconomyPickListItem> items) => Items = items;
+
+    public IReadOnlyList<MaconomyPickListItem> Items { get; }
+
+    /// <summary>The literal for a title, or for a literal itself, whatever its case; null when the list holds neither.</summary>
+    public string? ValueOf(string? text)
+    {
+        var wanted = (text ?? string.Empty).Trim();
+        if (wanted.Length == 0)
+        {
+            return null;
+        }
+        var item = Items.FirstOrDefault(i => string.Equals(i.Title.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+            ?? Items.FirstOrDefault(i => string.Equals(i.Value.Trim(), wanted, StringComparison.OrdinalIgnoreCase));
+        return item?.Value;
+    }
+}
+
+/// <summary>A file on its way to Maconomy: the name it is filed under, its type and its bytes.</summary>
+public sealed record MaconomyFile(string FileName, string? ContentType, byte[] Content);
+
+/// <summary>An action run on an existing record's card, with the dropped file it takes when it takes one.</summary>
+public sealed record MaconomyCardAction(
+    string Container,
+    IReadOnlyList<string> Fields,
+    string KeyField,
+    string KeyValue,
+    string Action,
+    string? FileDropUri);
+
+/// <summary>Values written onto an existing record's card.</summary>
+public sealed record MaconomyCardUpdate(
+    string Container,
+    IReadOnlyList<string> Fields,
+    string KeyField,
+    string KeyValue,
+    IReadOnlyDictionary<string, string?> Values,
+    IReadOnlyCollection<string>? NumberFields = null);
+
+/// <summary>
+/// A dropped file added to a document archive as a new line. The archive is created first, with
+/// <see cref="NewArchiveValues"/>, when Maconomy holds none under that number. With no
+/// <see cref="FileDropUri"/> nothing is added: the call only makes sure the archive is there.
+/// </summary>
+public sealed record MaconomyArchiveDocumentAdd(
+    string Container,
+    string ArchiveNumberField,
+    string ArchiveNumber,
+    IReadOnlyList<string> ArchiveFields,
+    IReadOnlyDictionary<string, string?> NewArchiveValues,
+    IReadOnlyList<string> LineFields,
+    string? FileDropUri);
+
+/// <summary>
+/// Rows added to the table under an existing card (contact persons under a contact company). A row that
+/// already stands there, alike on every one of <see cref="MatchFields"/>, is not added again.
+/// </summary>
+public sealed record MaconomyTableRowsAdd(
+    string Container,
+    string KeyField,
+    string KeyValue,
+    IReadOnlyList<string> CardFields,
+    IReadOnlyList<string> RowFields,
+    IReadOnlyList<IReadOnlyDictionary<string, string?>> Rows,
+    IReadOnlyList<string> MatchFields);
+
+/// <summary>
+/// Values for one row of the table under an existing card: the row alike on every one of
+/// <see cref="Match"/> is given <see cref="Values"/>. No row is added when none matches.
+/// </summary>
+public sealed record MaconomyTableRowSet(
+    string Container,
+    string KeyField,
+    string KeyValue,
+    IReadOnlyList<string> CardFields,
+    IReadOnlyList<string> RowFields,
+    IReadOnlyDictionary<string, string?> Match,
+    IReadOnlyDictionary<string, string?> Values,
+    IReadOnlyCollection<string>? NumberFields = null);
+
+/// <summary>A document as Maconomy filed it: the archive it sits in, the name it carries there and its own key.</summary>
+public sealed record MaconomyStoredDocument(string ArchiveNumber, string? DocumentName, string? DocumentKey);
 
 /// <summary>Why a call to Maconomy did not produce an answer.</summary>
 public enum MaconomyFailure

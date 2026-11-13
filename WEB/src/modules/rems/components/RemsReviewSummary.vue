@@ -96,6 +96,7 @@ import {
 } from "modules/rems/remsContactRoles";
 import { additionalIndividualHasData, individualSummary } from "modules/rems/useRemsIntakeForm";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 
 const props = defineProps({
   payload: { type: Object, required: true },
@@ -132,6 +133,7 @@ const groups = computed(() => {
   const contact = isIndividual.value
     ? [
       { label: "First Name", value: val(p.clientFirstName) },
+      ...(SHOW_MIDDLE_NAME ? [{ label: "Middle Name", value: val(p.clientMiddleName) }] : []),
       { label: "Last Name", value: val(p.clientLastName) },
       { label: "Suffix", value: val(p.clientSuffix) }
     ]

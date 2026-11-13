@@ -6,7 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace EmsPortal.Application.Integrations.Maconomy;
 
 /// <summary>
-/// Default <see cref="IMaconomyNumberMaps"/>: the four lists read through the option-set repository
+/// Default <see cref="IMaconomyNumberMaps"/>: the five lists read through the option-set repository
 /// (the tenant's own copy where it has one, the standard list otherwise) and kept for a minute per
 /// tenant. Saving an item under Option Sets forgets the tenant's map, so an edit shows at once.
 /// </summary>
@@ -14,6 +14,7 @@ public sealed class MaconomyNumberMaps : IMaconomyNumberMaps
 {
     public const string EntityTypeSetKey = "REMS.EntityType";
     public const string IndustrySetKey = "REMS.Industry";
+    public const string ServiceLineSetKey = "REMS.ServiceLine";
     public const string JobTypeSetKey = "REMS.JobType";
     public const string DepartmentSetKey = "REMS.Department";
 
@@ -37,6 +38,7 @@ public sealed class MaconomyNumberMaps : IMaconomyNumberMaps
         var map = new MaconomyNumberMap(
             await ListAsync(tenantId, EntityTypeSetKey, cancellationToken),
             await ListAsync(tenantId, IndustrySetKey, cancellationToken),
+            await ListAsync(tenantId, ServiceLineSetKey, cancellationToken),
             await ListAsync(tenantId, JobTypeSetKey, cancellationToken),
             await ListAsync(tenantId, DepartmentSetKey, cancellationToken));
         _cache.Set(Key(tenantId), map, Lifetime);

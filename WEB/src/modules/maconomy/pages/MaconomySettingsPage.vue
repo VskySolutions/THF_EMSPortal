@@ -165,7 +165,9 @@
         <div class="col-12 col-md-7">
           <maconomy-mapping-card title="Customer card mapping" :mapping="mapping.customer" :loading="mappingLoading">
             What a Brand New Client is posted as, once, when the customer is created. Nothing is updated
-            afterwards, and a blank value is left out so Maconomy applies its own default.
+            afterwards, and a blank value is left out so Maconomy applies its own default. Every field of
+            the Client Information tab and of the client's form is listed in the order it is asked; one
+            with nothing beside it is not sent.
           </maconomy-mapping-card>
         </div>
       </div>
@@ -186,7 +188,8 @@
             When on, a Brand New Client request that is fully approved posts its client to Maconomy as a new
             customer, with the number left to Maconomy's series and written back onto the client. Starting it
             posts nothing by itself: requests approved while it was off, and attempts that failed, are listed
-            below for syncing by hand.
+            below for syncing by hand. While it is on, an approved request's attachments are uploaded to its
+            client's customer in Maconomy; the Job tab's table shows how each request's files stand.
           </p>
           <div v-if="sync.changedOnUtc" class="text-caption text-grey-7 q-mb-md">
             {{ sync.enabled ? "Started" : "Stopped" }} {{ fmt.formatDateTime(sync.changedOnUtc) }}{{ sync.changedByName ? ` by ${sync.changedByName}` : "" }}.
@@ -262,7 +265,7 @@
     <!-- The job sync: an approved engagement posted to Maconomy as a job, by itself once its client is in
          Maconomy, or by hand from a list's Sync job now. Always the caller's OWN tenant, like the customer sync. The
          project manager and the default template job are server configuration; the template job numbers
-         sit on the REMS Job Type values under Option Sets — so there is nothing to type here. -->
+         sit on the REMS Service Line values under Option Sets — so there is nothing to type here. -->
     <div v-show="tab === 'job'">
       <q-banner v-if="exists && !token.present" dense class="bg-amber-1 text-grey-9 rounded-borders q-mb-md">
         <template #avatar><q-icon name="o_info" color="amber-8" /></template>
@@ -281,22 +284,20 @@
               <div class="ms-facts text-body2 text-grey-8">
                 <div>
                   <q-icon name="o_badge" size="16px" class="q-mr-xs" />
-                  Project manager:
-                  <template v-if="job.projectManagerNumber">employee <b>{{ job.projectManagerNumber }}</b></template>
-                  <span v-else class="text-negative">not configured — every sync is refused until it is</span>
-                  <span class="text-caption text-grey-7">(server configuration, Maconomy:JobCard)</span>
+                  Project manager: the request's Engagement Executive, by the Maconomy Number on their user
+                  record. The same goes for the CSE, the Billing Manager and the commission recipients.
                 </div>
-                <div v-if="job.defaultTemplateNumber">
+                <div>
                   <q-icon name="o_description" size="16px" class="q-mr-xs" />
-                  Default template job: <b>{{ job.defaultTemplateNumber }}</b>, used when a request's Job Type carries
-                  no Maconomy number <span class="text-caption text-grey-7">(server configuration)</span>
+                  Template job: the Service Line's Maconomy number where one is set, else the Maconomy template
+                  named as the Service Line. With no match, Sync job now asks which template to use.
                 </div>
                 <div>
                   <q-icon name="o_account_tree" size="16px" class="q-mr-xs" />
-                  {{ numberedJobTypes }} of {{ job.jobTypes.length }} job types carry a Maconomy template job number
-                  <template v-if="numberedJobTypes < job.jobTypes.length">
+                  {{ numberedServiceLines }} of {{ job.serviceLines.length }} service lines carry a Maconomy template job number
+                  <template v-if="numberedServiceLines < job.serviceLines.length">
                     — set the rest under
-                    <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Job Type</router-link>
+                    <router-link :to="{ name: 'option_sets' }" class="text-primary">Option Sets → REMS Service Line</router-link>
                   </template>
                 </div>
                 <div>
@@ -316,7 +317,8 @@
         <div class="col-12 col-md-7">
           <maconomy-mapping-card title="Job card mapping" :mapping="mapping.job" :loading="mappingLoading">
             What an approved engagement is posted as: a job header against a template job, nothing below it.
-            A job is posted only once every value is there.
+            Every field of the Engagement Setup, Marketing and Commission tabs is listed in the order it is
+            asked; one with nothing beside it is not sent.
           </maconomy-mapping-card>
         </div>
       </div>
@@ -333,10 +335,12 @@
           <p class="text-body2 text-grey-8 q-mb-xs">
             When on, a request is posted to Maconomy as a job by itself once it is fully approved and its client
             is a Maconomy customer: straight away for a client already there, or as soon as the customer sync has
-            posted a brand-new one. The job is created from the template job for the request's Job Type, under
+            posted a brand-new one. The job is created from the template job for the request's Service Line, under
             the client's customer, with the job number left to Maconomy's series and written back onto the request.
             Sync job now — in the Approvals list, COP Review and the table below — is for a request that failed or
             was approved while the sync was off. While off, nothing is queued and the action is hidden everywhere.
+            Once the job exists, the request's signed client acceptance form and purchase order are uploaded to
+            it. Documents says how many of a request's files are in Maconomy; Upload documents sends the rest.
           </p>
           <div v-if="job.changedOnUtc" class="text-caption text-grey-7 q-mb-md">
             {{ job.enabled ? "Started" : "Stopped" }} {{ fmt.formatDateTime(job.changedOnUtc) }}{{ job.changedByName ? ` by ${job.changedByName}` : "" }}.
@@ -375,6 +379,15 @@
                 <template v-else>—</template>
               </q-td>
             </template>
+            <template #body-cell-documents="cell">
+              <q-td :props="cell">
+                <template v-if="cell.row.documents?.total">
+                  {{ cell.row.documents.uploaded }} of {{ cell.row.documents.total }}
+                  <span v-if="cell.row.documents.failed" class="text-negative">· {{ cell.row.documents.failed }} failed</span>
+                </template>
+                <template v-else>—</template>
+              </q-td>
+            </template>
             <template #body-cell-reason="cell">
               <q-td :props="cell" class="ms-reason">{{ jobReason(cell.row) || "—" }}</q-td>
             </template>
@@ -393,6 +406,19 @@
                 >
                   <q-tooltip max-width="320px">
                     {{ cell.row.sync?.canSyncNow ? "Sync job now — create this engagement's job in Maconomy" : cell.row.sync?.blockedReason }}
+                  </q-tooltip>
+                </q-btn>
+                <!-- Shown while a file is still to go: pressable when one can, greyed with the reason when none can. -->
+                <q-btn
+                  v-if="documentsOutstanding(cell.row)" type="a"
+                  flat round dense color="primary" icon="o_upload_file"
+                  :loading="uploadingRems === cell.row.remsId" :disable="!cell.row.documents.canUploadNow || !!uploadingRems"
+                  @click="uploadDocuments(cell.row)"
+                >
+                  <q-tooltip max-width="320px">
+                    {{ cell.row.documents.canUploadNow
+                      ? "Upload documents — send this request's files that are not in Maconomy yet"
+                      : cell.row.documents.blockedReason }}
                   </q-tooltip>
                 </q-btn>
               </q-td>
@@ -734,7 +760,7 @@ const blankJob = () => ({
   failed: 0,
   syncing: 0,
   waiting: 0,
-  jobTypes: [],
+  serviceLines: [],
   departments: []
 });
 const job = ref(blankJob());
@@ -742,8 +768,8 @@ const jobRows = ref([]);
 const jobLoading = ref(false);
 const jobToggling = ref(false);
 
-// How many REMS Job Type values carry a Maconomy template job number: the rest cannot be posted without the default.
-const numberedJobTypes = computed(() => (job.value.jobTypes || []).filter((t) => t.templateJobNumber).length);
+// How many REMS Service Line values carry a Maconomy template job number: the rest cannot be posted without the default.
+const numberedServiceLines = computed(() => (job.value.serviceLines || []).filter((l) => l.templateJobNumber).length);
 // How many offered departments carry a Maconomy location number: a job under the rest keeps the template's location.
 const numberedDepartments = computed(() => (job.value.departments || []).filter((d) => d.locationNumber).length);
 
@@ -763,6 +789,8 @@ const jobColumns = [
   { name: "department", label: "Department", field: (r) => r.department || "—", align: "left", sortable: true, default: true },
   { name: "sync", label: "Job", field: (r) => r.sync?.jobNumber || r.sync?.status, align: "left", sortable: true, default: true },
   { name: "syncedOn", label: "Synced", field: (r) => r.sync?.syncedOnUtc, align: "left", sortable: true, default: true },
+  // How many of the request's files are in Maconomy: attachments under the customer, the CAF and purchase order under the job.
+  { name: "documents", label: "Documents", field: (r) => (r.documents?.total ? `${r.documents.uploaded} of ${r.documents.total}` : ""), align: "left", sortable: true, default: true },
   { name: "reason", label: "Reason", field: (r) => r.sync?.failureReason || r.sync?.blockedReason, align: "left", sortable: false, default: true },
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ];
@@ -804,7 +832,29 @@ const setJob = async (enabled) => {
 };
 
 // Sync job now from this table: the same confirmation as on the lists, through the settings page's own endpoint.
-const { syncingJobRems, syncJobNow } = useMaconomyJobSync({ run: (remsId) => maconomyApi.runJobSync(remsId), afterwards: loadJob });
+const { syncingJobRems, syncJobNow } = useMaconomyJobSync({ run: (remsId, templateJobNumber) => maconomyApi.runJobSync(remsId, templateJobNumber), afterwards: loadJob });
+
+// ---- The documents ----
+// A file still to go: not uploaded, or failed. The action is offered only while there is one.
+const documentsOutstanding = (row) => !!row.documents && row.documents.uploaded < row.documents.total;
+// The request whose files are being uploaded right now, so only its button spins.
+const uploadingRems = ref(null);
+
+// One run, inline. A failed upload comes back as a count, not an error; only "nothing can go" throws.
+const uploadDocuments = async (row) => {
+  uploadingRems.value = row.remsId;
+  try {
+    const result = await maconomyApi.runDocumentSync(row.remsId);
+    const said = `${row.remsNumber}: ${result.uploaded} of ${result.total} document(s) are in Maconomy`;
+    if (result.failed) notify.error(`${said}; ${result.failed} failed. Open the request to see why.`);
+    else notify.success(`${said}.`);
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    uploadingRems.value = null;
+    await loadJob();
+  }
+};
 </script>
 
 <style scoped>

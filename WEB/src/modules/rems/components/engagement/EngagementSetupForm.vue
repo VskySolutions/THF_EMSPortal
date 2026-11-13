@@ -27,9 +27,9 @@
         />
         <!-- Independent of the Department and Service Line above it: every value is offered. -->
         <app-select
-          v-model="core.jobType" :options="jobTypeOptions" label="Job Type" class="col-12 col-sm-6"
-          :readonly="!editable"
-          info="From the REMS Job Type option list (Administration → Option Sets). The kind of job the engagement is set up as; the value's Maconomy number is the template job the Maconomy job is created from."
+          v-model="core.jobType" :options="jobTypeOptions" label="Job Type" required class="col-12 col-sm-6"
+          :readonly="!editable" :rules="[requiredRule('a Job Type')]"
+          info="From the REMS Job Type option list (Administration → Option Sets). The kind of job the engagement is set up as; it is part of the Maconomy job's name."
         />
         <!-- A short plain-text tag for the job, under its job type. Optional. -->
         <app-text-field
@@ -130,7 +130,8 @@
           <!-- The document itself, not just the claim that one exists: the same preview row every other
                saved file gets, and a click opens it in a new tab. -->
           <app-stored-file-item
-            v-if="hasCaf" :file="storedCaf" :removable="editable" :disable="removingCaf" class="q-mt-sm"
+            v-if="hasCaf" :file="storedCaf" :tag="maconomyDocumentTag(cafDetail?.maconomyDocument)"
+            :removable="editable" :disable="removingCaf" class="q-mt-sm"
             @remove="removeCaf"
           />
 
@@ -180,11 +181,10 @@
         </q-card-section>
       </q-card>
 
-      <!-- Conditional: GCS → the purchase order the engagement is set up against, and the rate it bills
-           at each level it is staffed at. -->
+      <!-- Conditional: GCS → the purchase order the engagement is set up against. -->
       <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
-          <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
+          <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />{{ SHOW_BILL_RATES ? "GCS — Purchase Order & Rate" : "GCS — Purchase Order" }}
         </q-card-section>
         <q-separator />
         <q-card-section>
@@ -212,7 +212,7 @@
             <!-- The rate card and the order it bills against, side by side. The card lists every level on
                  the REMS Personnel Level list with the hourly rate this engagement bills it at; a level left
                  blank is one the engagement is not staffed at. -->
-            <div class="col-12 col-sm-6">
+            <div v-if="SHOW_BILL_RATES" class="col-12 col-sm-6">
               <div class="section-subhead gcs-block__title">
                 Bill Rate by Personnel Level
                 <q-icon name="o_info" size="14px" color="grey-6" class="q-ml-xs">
@@ -255,7 +255,7 @@
             <!-- The purchase order itself, in the same order as the CAF card above: what is on file, the
                  picker, then the document at the bottom — which is where the picker previews an unsaved
                  one. The column's heading is the picker's label, so the two halves start level. -->
-            <div class="col-12 col-sm-6">
+            <div :class="SHOW_BILL_RATES ? 'col-12 col-sm-6' : 'col-12'">
               <div class="section-subhead gcs-block__title">{{ purchaseOrderTitle }}</div>
               <q-banner v-if="hasPurchaseOrderFile && poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
                 <template #avatar><q-icon name="o_swap_horiz" color="teal-9" /></template>
@@ -274,7 +274,8 @@
               <!-- The ✕ takes it back off the engagement, as it does on the CAF above: uploading again
                    replaces the order. -->
               <app-stored-file-item
-                v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder" :removable="editable"
+                v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder"
+                :tag="maconomyDocumentTag(govDetail?.purchaseOrderMaconomyDocument)" :removable="editable"
                 :disable="removingPurchaseOrder" :class="{ 'q-mt-sm': editable }" @remove="removePurchaseOrder"
               />
             </div>
@@ -282,17 +283,15 @@
         </q-card-section>
       </q-card>
 
-      <!-- Conditional: Tax → fiscal year end + calculated due dates + tax-form checklist
-           (AC-REMS-014.14). -->
+      <!-- Conditional: Tax → fiscal year end + calculated due dates (AC-REMS-014.14). -->
       <q-card v-if="showTax" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
-          <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year &amp; Forms
+          <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year
         </q-card-section>
         <q-separator />
         <q-card-section>
           <!-- The two due dates follow from the fiscal year end — the 15th of the fourth month after it,
-               and six months past that — and are then EDITABLE. All three are owed, as is at least one
-               form below: the whole card is what a Tax engagement is set up from. -->
+               and six months past that — and are then EDITABLE. All three are owed. -->
           <div class="row q-col-gutter-md">
             <app-date-field
               v-model="tax.fiscalYearEnd" label="Fiscal Year End" required class="col-12 col-sm-4"
@@ -308,28 +307,6 @@
             />
           </div>
 
-          <div class="section-subhead">Tax Form <span class="text-negative">*</span></div>
-          <!-- Beside the list, not in its place: the list has to stay on screen for the caption to be
-               answerable. One form per REMS: another return is a Copy of this request. -->
-          <div v-if="!taxFormUnavailable && !tax.taxFormId" class="text-caption text-negative q-mb-xs">
-            Select the tax form. A REMS carries one return; copy the request for another.
-          </div>
-          <div v-if="taxFormUnavailable" class="text-caption text-grey-6">
-            The tax-form list could not be loaded for your account.
-          </div>
-          <!-- Three across on a desktop, two on a tablet, one on a phone. A form another request of this
-               client holds for the same year end is greyed, with that request's number beside it. -->
-          <div v-else class="row q-col-gutter-x-md">
-            <q-radio
-              v-for="opt in taxFormChoices" :key="opt.value" v-model="tax.taxFormId" :val="opt.value"
-              :label="opt.holder ? `${opt.label} — ${opt.holder.remsNumber}` : opt.label"
-              :disable="!editable || !!opt.holder" class="col-12 col-sm-6 col-md-4"
-            >
-              <q-tooltip v-if="opt.holder">
-                Already on {{ opt.holder.remsNumber }} for this fiscal year end. A client holds each form once a year.
-              </q-tooltip>
-            </q-radio>
-          </div>
         </q-card-section>
       </q-card>
     </q-form>
@@ -356,6 +333,8 @@ import AppDateField from "components/common/AppDateField.vue";
 import AppReadonlyField from "components/common/AppReadonlyField.vue";
 import AppSingleFileUpload from "components/common/AppSingleFileUpload.vue";
 import AppStoredFileItem from "components/common/AppStoredFileItem.vue";
+import { maconomyDocumentTag } from "modules/rems/maconomySync";
+import { SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 
 const props = defineProps({
   engagement: { type: Object, required: true },
@@ -363,8 +342,6 @@ const props = defineProps({
   // Rendered as "Service Line"; still named for the data behind it. See the note at the top of useRemsMeta.
   serviceLineOptions: { type: Array, default: () => [] },
   jobTypeOptions: { type: Array, default: () => [] },
-  taxFormOptions: { type: Array, default: () => [] },
-  taxFormUnavailable: { type: Boolean, default: false },
   billingPeriodOptions: { type: Array, default: () => [] },
   // The levels a GCS engagement can be staffed at (REMS.PersonnelLevel) — the rows of its rate card.
   personnelLevelOptions: { type: Array, default: () => [] },
@@ -462,9 +439,7 @@ const buildTax = (t) => {
   return {
     fiscalYearEnd,
     originalDueDate: t?.originalDueDate || derived.originalDueDate,
-    firstExtensionDueDate: t?.firstExtensionDueDate || derived.firstExtensionDueDate,
-    // One form per REMS since 5 Nov 2026; the API still carries a list, of at most one.
-    taxFormId: (t?.taxFormIds || [])[0] || null
+    firstExtensionDueDate: t?.firstExtensionDueDate || derived.firstExtensionDueDate
   };
 };
 const tax = ref(buildTax(props.engagement.tax));
@@ -566,31 +541,6 @@ const attestCardTitle = computed(() =>
 // none there is nothing to derive from and both boxes are simply blank.
 const dueDateHint = computed(() =>
   (tax.value.fiscalYearEnd ? "From the fiscal year end. Change either date if this return differs." : ""));
-
-// ---- The forms the client already files for this year end ----
-// Held by the client's OTHER requests, re-read whenever the year end moves: the rule is per fiscal year. A
-// held form is greyed with its request's number rather than hidden, so the reader sees why it is not offered.
-const takenForms = ref([]);
-const loadTakenForms = async () => {
-  const id = props.engagement?.id;
-  const fye = tax.value.fiscalYearEnd;
-  if (!id || !fye || !showTax.value) {
-    takenForms.value = [];
-    return;
-  }
-  try {
-    takenForms.value = await remsApi.taxTakenForms(id, fye);
-  } catch {
-    takenForms.value = [];
-  }
-  // A pick the new year end has just made unavailable is let go rather than saved and refused.
-  if (takenForms.value.some((t) => t.taxFormId === tax.value.taxFormId)) tax.value.taxFormId = null;
-};
-const taxFormChoices = computed(() => props.taxFormOptions.map((opt) => ({
-  ...opt,
-  holder: takenForms.value.find((t) => t.taxFormId === opt.value) || null
-})));
-watch(() => [props.engagement?.id, tax.value.fiscalYearEnd, showTax.value], loadTakenForms, { immediate: true });
 
 const departmentChangedUnsaved = computed(() => core.value.department !== props.engagement.department);
 
@@ -731,7 +681,7 @@ const removePurchaseOrder = async () => {
 
 // Service Line, Department, the engagement team and % Realization are mandatory, and so is what the chosen
 // department asks: the first-year fee estimate on Tax and CAS, the billing pair on CAS, the engagement fee,
-// the client's year end on Assurance, the whole fiscal-year card on Tax. The boxes are
+// the client's year end on Assurance, the whole fiscal-year card on Tax. So is the Job Type. The boxes are
 // marked and ruled here; the page still auto-saves whatever is typed, and the send-for-approval check on
 // the server (RemsApprovalController) is what refuses an engagement with any of them blank.
 const requiredRule = (what) => (v) => (v !== null && v !== undefined && v !== "") || `Select ${what}`;
@@ -863,11 +813,13 @@ const saveSetup = async (engagementId, remsId = null) => {
     view = await remsApi.updateGovernment(engagementId, {
       ...gov.value,
       purchaseOrderAmount: toNum(gov.value.purchaseOrderAmount),
-      // The rate card as rows, and only the levels given a rate: a blank is "not staffed at this level",
-      // which is the absence of a row rather than a row with nothing in it.
-      personnelRates: rateRows.value
-        .map((row) => ({ personnelLevel: row.value, billRatePerHour: toNum(gov.value.personnelRates[row.value]) }))
-        .filter((r) => r.billRatePerHour !== null)
+      // The rate card as rows, and only the levels given a rate. Not sent at all while the card is hidden:
+      // the API leaves the stored one alone.
+      personnelRates: SHOW_BILL_RATES
+        ? rateRows.value
+          .map((row) => ({ personnelLevel: row.value, billRatePerHour: toNum(gov.value.personnelRates[row.value]) }))
+          .filter((r) => r.billRatePerHour !== null)
+        : undefined
     });
   }
   if (showAssurance.value) {
@@ -881,8 +833,7 @@ const saveSetup = async (engagementId, remsId = null) => {
     view = await remsApi.updateTax(engagementId, {
       fiscalYearEnd: tax.value.fiscalYearEnd || null,
       originalDueDate: tax.value.originalDueDate || null,
-      firstExtensionDueDate: tax.value.firstExtensionDueDate || null,
-      taxFormIds: tax.value.taxFormId ? [tax.value.taxFormId] : []
+      firstExtensionDueDate: tax.value.firstExtensionDueDate || null
     });
   }
   if (cafFile.value) {
@@ -922,7 +873,8 @@ const validateFormats = () => {
   return (!showFeeEstimate.value || positive(core.value.firstYearFeeEstimate)) &&
     (!showEngagementFee.value || positive(core.value.engagementFee)) &&
     inRange(core.value.realizationPercentage, 0, 100) &&
-    (!showGcs.value || (positive(gov.value.purchaseOrderAmount) && Object.values(gov.value.personnelRates).every(positive))) &&
+    (!showGcs.value || (positive(gov.value.purchaseOrderAmount) &&
+      (!SHOW_BILL_RATES || Object.values(gov.value.personnelRates).every(positive)))) &&
     (!showBilling.value || (core.value.billingProcessDescription ?? "").length <= BILLING_DESCRIPTION_MAX);
 };
 

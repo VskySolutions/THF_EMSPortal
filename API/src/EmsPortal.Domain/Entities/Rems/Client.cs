@@ -49,6 +49,11 @@ public class Client : AuditableEntity
     public RemsMaconomyCustomerSyncStatus MaconomySyncStatus { get; set; } = RemsMaconomyCustomerSyncStatus.NotSynced;
     public DateTime? MaconomySyncedOnUtc { get; set; }
     public string? MaconomySyncError { get; set; }
+    // The contact company made for the client, ahead of its customer and under the same number. Kept as soon
+    // as Maconomy has it, so a second attempt does not make a second company.
+    public string? MaconomyContactCompanyNumber { get; set; }
+    // The customer is in Maconomy but the contact persons under its contact company are still to be added.
+    public bool IsMaconomyContactSyncPending { get; set; }
 
     // ---- Navigations ----
     public Person? Person { get; set; }

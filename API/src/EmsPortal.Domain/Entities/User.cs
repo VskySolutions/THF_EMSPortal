@@ -35,6 +35,9 @@ public class User : AuditableEntity
     /// <summary>Session-invalidation counter embedded in issued JWTs.</summary>
     public int TokenVersion { get; set; }
 
+    /// <summary>Their employee number in Maconomy, typed in by hand; null until somebody sets it.</summary>
+    public string? MaconomyNumber { get; set; }
+
     public DateTime CreatedDate { get; set; }
 
     /// <summary>The user's tenant/role assignments.</summary>

@@ -10,11 +10,12 @@ namespace EmsPortal.Application.Abstractions.Integrations.Maconomy;
 /// <see cref="RemsRequest.MaconomyJobSyncStatus"/>, <see cref="RemsRequest.MaconomyJobSyncedById"/>,
 /// <see cref="RemsRequest.MaconomyJobSyncedOnUtc"/>, <see cref="RemsRequest.MaconomyJobSyncError"/>).
 /// The project manager and the default template job are platform configuration; the template job and
-/// location numbers are the REMS Job Type and REMS Department option items' (<see cref="IMaconomyNumberMaps"/>).
+/// location numbers are the REMS Service Line and REMS Department option items', and the job type's
+/// specification 2 value the REMS Job Type item's (<see cref="IMaconomyNumberMaps"/>).
 /// </summary>
 public interface IMaconomyJobSyncService
 {
-    /// <summary>What every row needs to answer "may this be posted now": the switch, the configured numbers, the template and location maps.</summary>
+    /// <summary>What every row needs to answer "may this be posted now": the switch, the configured numbers, the template, location and job type maps.</summary>
     Task<MaconomyJobSyncContext> GetContextAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -30,10 +31,21 @@ public interface IMaconomyJobSyncService
     Task<RemsRequest?> RunAsync(Guid remsId, Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>One attempt, inline, by the person named. Throws <see cref="MaconomyJobSyncException"/> for a refusal; a failed post is recorded on the row, not thrown.</summary>
-    Task<RemsRequest> SyncNowAsync(Guid remsId, Guid tenantId, Guid actorId, CancellationToken cancellationToken = default);
+    /// <param name="templateJobNumber">A template job picked for this request, kept on it; null to resolve one.</param>
+    Task<RemsRequest> SyncNowAsync(
+        Guid remsId, Guid tenantId, Guid actorId, string? templateJobNumber = null, CancellationToken cancellationToken = default);
 
     /// <summary>The request with everything the job needs loaded, or null. For the confirmation shown before a press.</summary>
     Task<RemsRequest?> GetAsync(Guid remsId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Maconomy's Popup 1 list, for a request with a fiscal year to put in it. Null when it has none, or
+    /// when the list cannot be read: the year is then left off the card.
+    /// </summary>
+    Task<MaconomyJobLookups> GetLookupsAsync(RemsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Maconomy's template jobs (value = job number, title = job name), for the pick on Sync job now.</summary>
+    Task<MaconomyPickList> GetTemplatesAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>Whether a request has sat queued or in Syncing longer than an attempt can take.</summary>
     bool IsStale(RemsRequest request);
@@ -57,12 +69,15 @@ public sealed record MaconomyJobSyncContext(
     bool Enabled,
     string? ProjectManagerNumber,
     string? DefaultTemplateNumber,
+    /// <summary>REMS Service Line item id → template job number, for the lines that carry one.</summary>
     IReadOnlyDictionary<Guid, string> TemplateMap,
     /// <summary>REMS Department item id → Maconomy location number, for the departments that carry one.</summary>
-    IReadOnlyDictionary<Guid, string> LocationMap)
+    IReadOnlyDictionary<Guid, string> LocationMap,
+    /// <summary>REMS Job Type item id → the job card's specification 2 value: the item's Maconomy number, else its label.</summary>
+    IReadOnlyDictionary<Guid, string> JobTypeValueMap)
 {
     public static readonly MaconomyJobSyncContext None = new(
-        false, false, null, null, new Dictionary<Guid, string>(), new Dictionary<Guid, string>());
+        false, false, null, null, new Dictionary<Guid, string>(), new Dictionary<Guid, string>(), new Dictionary<Guid, string>());
 }
 
 public sealed record MaconomyJobSyncOverview(

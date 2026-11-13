@@ -60,6 +60,10 @@ public class RemsRequest : AuditableEntity
     public Guid? MaconomyJobSyncedById { get; set; }
     public DateTime? MaconomyJobSyncedOnUtc { get; set; }
     public string? MaconomyJobSyncError { get; set; }
+    // The template job somebody picked for this request, when the Service Line named none in Maconomy.
+    public string? MaconomyTemplateJobNumber { get; set; }
+    // The job is in Maconomy but its budget's fee line is not set yet: the next sync does only that.
+    public bool IsMaconomyJobBudgetSyncPending { get; set; }
 
     /// <summary>The tax engagement's fiscal year end. The client's own year end stays on the client, for Assurance.</summary>
     public DateOnly? FiscalYearEnd { get; set; }
@@ -98,6 +102,5 @@ public class RemsRequest : AuditableEntity
     public ICollection<RemsApprovalTask> ApprovalTasks { get; set; } = new List<RemsApprovalTask>();
     public ICollection<RemsPersonnelRate> PersonnelRates { get; set; } = new List<RemsPersonnelRate>();
     public ICollection<RemsMarketingMethod> MarketingMethods { get; set; } = new List<RemsMarketingMethod>();
-    public ICollection<RemsTaxForm> TaxForms { get; set; } = new List<RemsTaxForm>();
     public ICollection<RemsTaxDueDate> TaxDueDates { get; set; } = new List<RemsTaxDueDate>();
 }

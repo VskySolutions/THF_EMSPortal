@@ -36,6 +36,11 @@ public static class DependencyInjection
         // The Maconomy numbers the tenant's option items carry, read once per call and kept a minute.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyNumberMaps, Integrations.Maconomy.MaconomyNumberMaps>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyJobSyncService, Integrations.Maconomy.MaconomyJobSyncService>();
+        // Maconomy's pick lists (the country list, the job's Popup 1), read once and kept briefly: a popup takes its own literal.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyPickLists, Integrations.Maconomy.MaconomyPickLists>();
+        // The document upload: the request's files under the client's customer and the engagement's job.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyDocumentWriter, Integrations.Maconomy.MaconomyDocumentWriter>();
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyDocumentSyncService, Integrations.Maconomy.MaconomyDocumentSyncService>();
 
         // Email templates: management + rendering.
         services.AddScoped<Abstractions.Email.IEmailTemplateService, Email.EmailTemplateService>();

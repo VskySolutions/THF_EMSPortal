@@ -37,6 +37,8 @@ internal sealed class RemsRequestConfiguration : IEntityTypeConfiguration<RemsRe
         // Text, like the client's customer status, with the default spelt out so the rows that predate the column read as NotSynced.
         builder.Property(r => r.MaconomyJobSyncStatus).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(RemsMaconomyJobSyncStatus.NotSynced);
         builder.Property(r => r.MaconomyJobSyncError).HasMaxLength(1000);
+        builder.Property(r => r.MaconomyTemplateJobNumber).HasMaxLength(255);
+        builder.Property(r => r.IsMaconomyJobBudgetSyncPending).IsRequired();
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(r => r.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(r => r.TenantId);
@@ -84,6 +86,13 @@ internal sealed class RemsFileConfiguration : IEntityTypeConfiguration<RemsFile>
         builder.ToTable("REMS_File");
         builder.HasKey(f => f.Id);
         builder.Property(f => f.Kind).HasConversion<string>().HasMaxLength(32).IsRequired();
+        // Text, like the job's status, with the default spelt out so the rows that predate the column read as NotSynced.
+        builder.Property(f => f.MaconomyDocumentSyncStatus).HasConversion<string>().HasMaxLength(20).IsRequired()
+            .HasDefaultValue(RemsMaconomyDocumentSyncStatus.NotSynced);
+        builder.Property(f => f.MaconomyDocumentArchiveNumber).HasMaxLength(64);
+        builder.Property(f => f.MaconomyDocumentName).HasMaxLength(255);
+        builder.Property(f => f.MaconomyDocumentKey).HasMaxLength(64);
+        builder.Property(f => f.MaconomyDocumentSyncError).HasMaxLength(1000);
         builder.HasOne<Tenant>().WithMany().HasForeignKey(f => f.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(f => f.TenantId);
         builder.HasOne(f => f.Request).WithMany(r => r.Files).HasForeignKey(f => f.REMSId).OnDelete(DeleteBehavior.Restrict);
@@ -232,21 +241,6 @@ internal sealed class RemsMarketingMethodConfiguration : IEntityTypeConfiguratio
         builder.HasOne(m => m.MarketingMethod).WithMany().HasForeignKey(m => m.MarketingMethodId).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(m => m.MarketingMethod).AutoInclude();
         builder.HasIndex(m => new { m.TenantId, m.REMSId, m.MarketingMethodId }).IsUnique().HasFilter("[Deleted] = 0");
-    }
-}
-
-internal sealed class RemsTaxFormConfiguration : IEntityTypeConfiguration<RemsTaxForm>
-{
-    public void Configure(EntityTypeBuilder<RemsTaxForm> builder)
-    {
-        builder.ToTable("REMS_TaxForm");
-        builder.HasKey(f => f.Id);
-        builder.HasOne<Tenant>().WithMany().HasForeignKey(f => f.TenantId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(f => f.TenantId);
-        builder.HasOne(f => f.Request).WithMany(r => r.TaxForms).HasForeignKey(f => f.REMSId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(f => f.TaxForm).WithMany().HasForeignKey(f => f.TaxFormId).OnDelete(DeleteBehavior.Restrict);
-        builder.Navigation(f => f.TaxForm).AutoInclude();
-        builder.HasIndex(f => new { f.TenantId, f.REMSId, f.TaxFormId }).IsUnique().HasFilter("[Deleted] = 0");
     }
 }
 

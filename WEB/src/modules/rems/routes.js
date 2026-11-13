@@ -90,7 +90,8 @@ export default [
         path: "",
         name: "rems_public_form",
         component: () => import("modules/rems/pages/PublicEmsForm.vue"),
-        meta: { requiresAuth: false, title: "COP Form" }
+        // Named after the site that sent it: "<site title> Form", on the tab and as the page's own heading.
+        meta: { requiresAuth: false, title: (siteTitle) => `${siteTitle} Form` }
       }
     ]
   }

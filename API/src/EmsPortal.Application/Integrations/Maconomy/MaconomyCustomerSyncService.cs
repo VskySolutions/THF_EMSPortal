@@ -17,6 +17,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
 
     private readonly IClientRepository _clients;
     private readonly IRemsRequestRepository _requests;
+    private readonly IUserRepository _users;
     private readonly IMaconomyConnectionRepository _connections;
     private readonly IMaconomyCustomerWriter _writer;
     private readonly IMaconomyCardWriter _cards;
@@ -26,6 +27,8 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
     private readonly IActivityEventWriter _activity;
     private readonly IMaconomyCustomerSyncQueue _queue;
     private readonly IMaconomyJobSyncService _jobSync;
+    private readonly IMaconomyPickLists _pickLists;
+    private readonly IMaconomyDocumentSyncService _documents;
     private readonly ITenantContext _tenant;
     private readonly MaconomyOptions _options;
     private readonly ILogger<MaconomyCustomerSyncService> _logger;
@@ -33,6 +36,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
     public MaconomyCustomerSyncService(
         IClientRepository clients,
         IRemsRequestRepository requests,
+        IUserRepository users,
         IMaconomyConnectionRepository connections,
         IMaconomyCustomerWriter writer,
         IMaconomyCardWriter cards,
@@ -42,12 +46,15 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         IActivityEventWriter activity,
         IMaconomyCustomerSyncQueue queue,
         IMaconomyJobSyncService jobSync,
+        IMaconomyPickLists pickLists,
+        IMaconomyDocumentSyncService documents,
         ITenantContext tenant,
         IOptions<MaconomyOptions> options,
         ILogger<MaconomyCustomerSyncService> logger)
     {
         _clients = clients;
         _requests = requests;
+        _users = users;
         _connections = connections;
         _writer = writer;
         _cards = cards;
@@ -57,6 +64,8 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         _activity = activity;
         _queue = queue;
         _jobSync = jobSync;
+        _pickLists = pickLists;
+        _documents = documents;
         _tenant = tenant;
         _options = options.Value;
         _logger = logger;
@@ -69,7 +78,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         {
             return null;
         }
-        if (client.MaconomySyncStatus is RemsMaconomyCustomerSyncStatus.Synced or RemsMaconomyCustomerSyncStatus.Linked)
+        if (IsDone(client))
         {
             return null;
         }
@@ -94,7 +103,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
             _logger.LogWarning("Client {ClientId} for tenant {TenantId} no longer exists; nothing to post to Maconomy.", clientId, tenantId);
             return null;
         }
-        if (client.MaconomySyncStatus is RemsMaconomyCustomerSyncStatus.Synced or RemsMaconomyCustomerSyncStatus.Linked)
+        if (IsDone(client))
         {
             return client;
         }
@@ -123,7 +132,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
             ?? throw new MaconomyCustomerSyncException(MaconomyCustomerSyncRefusal.NotFound, "Request not found.");
         var client = await _clients.GetSyncSubjectAsync(remsId, tenantId, cancellationToken)
             ?? throw new MaconomyCustomerSyncException(MaconomyCustomerSyncRefusal.NotFound, "Request not found.");
-        if (client.MaconomySyncStatus is RemsMaconomyCustomerSyncStatus.Synced or RemsMaconomyCustomerSyncStatus.Linked)
+        if (IsDone(client))
         {
             throw new MaconomyCustomerSyncException(
                 MaconomyCustomerSyncRefusal.NotEligible, $"This client is already Maconomy customer {client.MaconomyCustomerNumber}.");
@@ -225,7 +234,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         try
         {
-            if (client.IsMaconomyClient)
+            if (client.IsMaconomyClient && !client.IsMaconomyContactSyncPending)
             {
                 await SucceedAsync(client, remsId, client.MaconomyCustomerNumber!, RemsMaconomyCustomerSyncStatus.Linked, actorId, cancellationToken);
                 return;
@@ -234,6 +243,12 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
             if (connection is null || !connection.IsEnabled)
             {
                 throw new PortalRefusal("Maconomy is not connected for this tenant.");
+            }
+            if (client.IsMaconomyClient)
+            {
+                // The customer was created on an earlier attempt; only its contact persons are owed.
+                await AddContactPersonsAsync(client, connection, remsId, actorId, cancellationToken);
+                return;
             }
             var email = (client.PrimaryEmail ?? client.Person?.PrimaryEmail)?.Trim();
             if (string.IsNullOrEmpty(email))
@@ -256,10 +271,35 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
                 await SucceedAsync(client, remsId, matches[0].Number, RemsMaconomyCustomerSyncStatus.Linked, actorId, cancellationToken);
                 return;
             }
+            // The card's country is a pick list holding the state codes and the countries: a place it does not
+            // hold would be refused by Maconomy, record and all, so it is said here instead.
+            var countries = await _pickLists.GetAsync(connection, MaconomyCustomerDataMapping.CountryList, cancellationToken);
+            if (MaconomyCustomerDataMapping.UnlistedCountryOf(client, countries) is { } unlisted)
+            {
+                throw new PortalRefusal(
+                    $"The client's physical address names \"{unlisted}\", which Maconomy's Country list does not have. "
+                    + $"Ask your Maconomy administrator to add \"{unlisted}\" to the Country list, or correct the address, then sync again.");
+            }
             // The mapping says what is sent; the card writer sends it; the container is the instance's own.
-            var write = MaconomyCustomerDataMapping.Map(client, email, await _numbers.GetAsync(client.TenantId, cancellationToken)) with { Container = _options.CustomerCard.Container };
+            var mapped = MaconomyCustomerDataMapping.Map(
+                client, email, await _numbers.GetAsync(client.TenantId, cancellationToken), countries,
+                await CseMaconomyNumberAsync(remsId, cancellationToken)) with { Container = _options.CustomerCard.Container };
+            // The contact company comes first: Maconomy hands out no number for one and refuses a customer
+            // whose company it does not hold. Its number is kept at once, so a retry does not make another.
+            if (string.IsNullOrWhiteSpace(client.MaconomyContactCompanyNumber))
+            {
+                var next = await _writer.NextContactCompanyNumberAsync(connection, cancellationToken);
+                await _cards.CreateAsync(connection, MaconomyContactCompanyDataMapping.Map(mapped, next), cancellationToken);
+                client.MaconomyContactCompanyNumber = next;
+                _clients.Update(client);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            var write = MaconomyCustomerDataMapping.WithNumber(mapped, client.MaconomyContactCompanyNumber!);
             var created = MaconomyCustomerDataMapping.FromCreated((await _cards.CreateAsync(connection, write, cancellationToken)).Data, write);
+            // The customer is in, under its company's number; the company's people follow.
+            client.IsMaconomyContactSyncPending = true;
             await SucceedAsync(client, remsId, created.Number, RemsMaconomyCustomerSyncStatus.Synced, actorId, cancellationToken);
+            await AddContactPersonsAsync(client, connection, remsId, actorId, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -278,6 +318,55 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
             _logger.LogError(ex, "Maconomy customer sync for client {ClientId} failed unexpectedly.", client.Id);
             await FailAsync(client, remsId, $"The portal hit an error: {ex.Message}", actorId, cancellationToken);
         }
+    }
+
+    private static bool IsDone(Client client)
+        => client.MaconomySyncStatus is RemsMaconomyCustomerSyncStatus.Synced or RemsMaconomyCustomerSyncStatus.Linked
+            && !client.IsMaconomyContactSyncPending;
+
+    // The client's contacts and individuals, as contact persons under the contact company made ahead of
+    // the customer. A failure leaves the customer in place and the people owed: syncing again adds them.
+    private async Task AddContactPersonsAsync(
+        Client client, MaconomyConnection connection, Guid? remsId, Guid? actorId, CancellationToken cancellationToken)
+    {
+        var number = client.MaconomyCustomerNumber!;
+        int added;
+        try
+        {
+            var lists = new MaconomyContactPersonDataMapping.PickLists(
+                await _pickLists.GetAsync(connection, MaconomyContactPersonDataMapping.TypeList, cancellationToken),
+                await _pickLists.GetAsync(connection, MaconomyContactPersonDataMapping.FilingTypeList, cancellationToken),
+                await _pickLists.GetAsync(connection, MaconomyContactPersonDataMapping.MinorList, cancellationToken),
+                await _pickLists.GetAsync(connection, MaconomyContactPersonDataMapping.BillingPreferenceList, cancellationToken));
+            var add = MaconomyContactPersonDataMapping.Map(client, number, lists);
+            added = add.Rows.Count == 0 ? 0 : await _cards.AddTableRowsAsync(connection, add, cancellationToken);
+        }
+        catch (MaconomyException ex)
+        {
+            throw new PortalRefusal(
+                $"Customer {number} is in Maconomy, but its contact persons could not be added: {ex.Message} Sync again to add them.");
+        }
+        client.IsMaconomyContactSyncPending = false;
+        client.MaconomySyncStatus = RemsMaconomyCustomerSyncStatus.Synced;
+        client.MaconomySyncError = null;
+        _clients.Update(client);
+        if (added > 0)
+        {
+            await WriteActivityAsync(
+                client, remsId, ActivityEventTypes.RemsMaconomyCustomerSynced,
+                $"Added {added} contact person{(added == 1 ? string.Empty : "s")} to Maconomy contact company {number}", actorId, cancellationToken);
+        }
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    // The request's CSE, as the Maconomy Number on their user record; null when there is no CSE or no number.
+    private async Task<string?> CseMaconomyNumberAsync(Guid? remsId, CancellationToken cancellationToken)
+    {
+        if (remsId is not { } id || (await _requests.GetByIdAsync(id, cancellationToken))?.CSEId is not { } cseId)
+        {
+            return null;
+        }
+        return (await _users.GetByIdAsync(cseId, cancellationToken))?.MaconomyNumber;
     }
 
     private async Task SucceedAsync(
@@ -308,6 +397,11 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         if (pendingJob is not null)
         {
             _jobSync.Enqueue(pendingJob);
+        }
+        // The request's attachments go under the customer, now that there is one.
+        if (remsId is { } withFiles)
+        {
+            _documents.Enqueue(withFiles, client.TenantId);
         }
         try
         {
@@ -351,7 +445,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         {
             return "The request is not approved yet.";
         }
-        if (client.IsMaconomyClient)
+        if (client.IsMaconomyClient && !client.IsMaconomyContactSyncPending)
         {
             return $"The client is already Maconomy customer {client.MaconomyCustomerNumber}.";
         }

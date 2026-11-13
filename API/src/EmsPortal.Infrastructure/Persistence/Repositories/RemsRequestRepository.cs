@@ -37,8 +37,9 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
     public Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default)
         => Requests.WorkspaceGraph().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-    // The tax form rides along for the job name: one client's returns are separate jobs. The department
-    // for the location.
+    // The job type rides along for the job name. The department for the location,
+    // the contract for the purchase order dates, the marketing methods for their
+    // labels, the files for what is uploaded beside the job.
     private IQueryable<RemsRequest> JobSyncGraph()
         => Requests
             .Include(r => r.Type)
@@ -48,10 +49,29 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
             .Include(r => r.ServiceLine)
             .Include(r => r.JobType)
             .Include(r => r.Department)
-            .Include(r => r.TaxForms.Where(f => !f.Deleted)).ThenInclude(f => f.TaxForm);
+            // The people, for the Maconomy Number on each user record.
+            .Include(r => r.CSE)
+            .Include(r => r.EngagementExecutive)
+            .Include(r => r.BillingManager)
+            .Include(r => r.CommissionSplits.Where(s => !s.Deleted)).ThenInclude(s => s.Employee)
+            .Include(r => r.Contract)
+            .Include(r => r.MarketingMethods.Where(m => !m.Deleted)).ThenInclude(m => m.MarketingMethod)
+            .Include(r => r.Files.Where(f => !f.Deleted)).ThenInclude(f => f.Media)
+            .AsSplitQuery();
 
     public Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default)
         => JobSyncGraph().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+
+    public Task<RemsFile?> FindUploadedTwinAsync(Guid clientId, Guid mediaId, Guid excludingFileId, CancellationToken cancellationToken = default)
+        => _dbContext.RemsFiles
+            .Where(f => !f.Deleted && f.Id != excludingFileId && f.MediaId == mediaId
+                && f.Kind == RemsFileKind.Attachment
+                && f.MaconomyDocumentSyncStatus == RemsMaconomyDocumentSyncStatus.Synced
+                && f.Request!.ClientId == clientId)
+            .OrderBy(f => f.MaconomyDocumentSyncedOnUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public void UpdateFile(RemsFile file) => _dbContext.RemsFiles.Update(file);
 
     public async Task<IReadOnlyList<RemsRequest>> ListApprovedForJobSyncAsync(CancellationToken cancellationToken = default)
     {
@@ -135,15 +155,6 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
             .OrderByDescending(r => r.InviteSentOnUtc)
             .Select(r => new RemsIntakeHolder(r.Id, r.RemsNumber))
             .FirstOrDefaultAsync(cancellationToken);
-
-    public async Task<IReadOnlyList<RemsTaxFormHolder>> ListTaxFormHoldersAsync(
-        Guid clientId, DateOnly fiscalYearEnd, Guid excludingRemsId, CancellationToken cancellationToken = default)
-        => await Requests
-            .Where(r => r.ClientId == clientId && r.FiscalYearEnd == fiscalYearEnd && r.Id != excludingRemsId)
-            .SelectMany(
-                r => r.TaxForms.Where(f => !f.Deleted),
-                (r, f) => new RemsTaxFormHolder(f.TaxFormId, r.Id, r.RemsNumber, r.Status!.Value))
-            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<RemsRequest>> ListByClientAsync(Guid clientId, CancellationToken cancellationToken = default)
         => await Requests
@@ -929,11 +940,6 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
         => await _dbContext.RemsMarketingMethods.AddAsync(method, cancellationToken);
 
     public void RemoveMarketingMethod(RemsMarketingMethod method) => _dbContext.RemsMarketingMethods.Remove(method);
-
-    public async Task AddTaxFormAsync(RemsTaxForm taxForm, CancellationToken cancellationToken = default)
-        => await _dbContext.RemsTaxForms.AddAsync(taxForm, cancellationToken);
-
-    public void RemoveTaxForm(RemsTaxForm taxForm) => _dbContext.RemsTaxForms.Remove(taxForm);
 
     public async Task AddTaxDueDateAsync(RemsTaxDueDate dueDate, CancellationToken cancellationToken = default)
         => await _dbContext.RemsTaxDueDates.AddAsync(dueDate, cancellationToken);

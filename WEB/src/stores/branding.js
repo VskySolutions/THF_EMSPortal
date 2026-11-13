@@ -27,6 +27,9 @@ const writeCache = (value) => {
 // What the cache holds: the look, and the name it is worn under.
 const cacheable = (store) => ({ tenantName: store.tenantName, theme: store.theme, assets: store.assets });
 
+// The invite whose branding has been asked for, and the request itself — see loadForInvite.
+let inviteLoad = null;
+
 // BrandingStore: the branding of the tenant the user is working in, and the page wearing it.
 export const useBrandingStore = defineStore("branding", {
   state: () => ({
@@ -96,12 +99,17 @@ export const useBrandingStore = defineStore("branding", {
 
     /**
      * The public client form. Not cached: a member of staff opening a client's link should not come
-     * back to find their own sign-in screen rebranded by it.
+     * back to find their own sign-in screen rebranded by it. One request per invite however many ask:
+     * the layout wears the brand and the form waits on it, because the form is named after the site.
      */
-    async loadForInvite (inviteCode) {
-      try {
-        this.set(await brandingApi.getForInvite(inviteCode), { cache: false });
-      } catch { /* stays as it is */ }
+    loadForInvite (inviteCode) {
+      if (inviteLoad?.inviteCode !== inviteCode) {
+        const done = brandingApi.getForInvite(inviteCode)
+          .then((branding) => this.set(branding, { cache: false }))
+          .catch(() => { /* stays as it is */ });
+        inviteLoad = { inviteCode, done };
+      }
+      return inviteLoad.done;
     },
 
     /** Try a draft on the whole page without adopting it. */

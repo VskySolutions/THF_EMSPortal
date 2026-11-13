@@ -22,7 +22,6 @@ internal static class RemsRequestQueries
             .Include(r => r.PersonnelRates.Where(x => !x.Deleted)).ThenInclude(x => x.PersonnelLevel)
             .Include(r => r.MarketingMethods.Where(x => !x.Deleted)).ThenInclude(x => x.MarketingMethod)
             .Include(r => r.CommissionSplits.Where(x => !x.Deleted))
-            .Include(r => r.TaxForms.Where(x => !x.Deleted)).ThenInclude(x => x.TaxForm)
             .Include(r => r.TaxDueDates.Where(x => !x.Deleted))
             .Include(r => r.Approvers.Where(x => !x.Deleted))
             .ClientGraph()

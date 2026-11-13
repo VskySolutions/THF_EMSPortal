@@ -71,6 +71,10 @@ public sealed class RemsFormPayloadValidator
             RequireName(failures, "clientFirstName", payload.ClientFirstName, "First name");
             RequireName(failures, "clientLastName", payload.ClientLastName, "Last name");
             LimitSuffix(failures, "clientSuffix", payload.ClientSuffix);
+            if ((payload.ClientMiddleName?.Trim().Length ?? 0) > 100)
+            {
+                failures.Add(new ValidationFailure("clientMiddleName", "A middle name is at most 100 characters."));
+            }
         }
         else if (string.IsNullOrWhiteSpace(payload.ClientName))
         {

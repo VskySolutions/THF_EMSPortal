@@ -73,7 +73,7 @@ public class MaconomyConnection : AuditableEntity
 
     // ---- The job sync: posting an approved engagement to Maconomy as a job, once its client is there ----
     // The project manager and the default template job are platform configuration (Maconomy:JobCard);
-    // the template numbers live on the REMS Job Type option items.
+    // the template numbers live on the REMS Service Line option items.
 
     /// <summary>
     /// Whether approved engagements are posted as jobs: by themselves once the client is in Maconomy, and by

@@ -194,3 +194,14 @@ field, in the order the write names them. `GET /api/integrations/maconomy/mappin
 the configured containers, and the Customer and Job tabs show them (`MaconomyMappingCard.vue`). A change
 to `Map` is a change to `Describe`: they sit side by side so the page never says something the code
 stopped doing.
+
+**12 Nov 2026 — the mapping in form order, pick lists, documents.** `Describe` now lists EVERY field of
+the forms in the order the forms ask them (`MaconomyFieldMapping`: section, form field, then the Maconomy
+field, its title and the rule; the field is null for one that is not sent), and the card on the Customer
+and Job tabs shows it as Form field | Maconomy field | How, with a Mapped only switch. A field added to a
+form is added to the list by hand. Two more things live in the Mapping folder: the names of the two pick
+lists a popup value is looked up in (`CountryList`, `FiscalYearList`; `IMaconomyPickLists` reads them —
+a popup takes its own literal, never the title), and `MaconomyDocumentMapping`, which says which of a
+request's files goes under the customer and which under the job, and names every container, field and
+action the upload uses. The fields added that day and how the documents travel:
+`REMS_MACONOMY_CUSTOMER_SYNC_PLAN.md` section 6 and `REMS_MACONOMY_JOB_SYNC_PLAN.md` section 14.

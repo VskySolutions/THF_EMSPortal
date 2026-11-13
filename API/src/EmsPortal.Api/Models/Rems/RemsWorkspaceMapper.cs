@@ -84,7 +84,9 @@ internal static class RemsWorkspaceMapper
         var department = request.Department?.Value;
 
         var auditView = RemsEngagementCodes.RequiresClientAcceptanceForm(department) || acceptance is not null || client?.FiscalYearEnd is not null
-            ? new RemsAuditDetailView(request.Id, acceptance?.MediaId, acceptance?.Media?.OriginalFileName, client?.FiscalYearEnd)
+            ? new RemsAuditDetailView(
+                request.Id, acceptance?.MediaId, acceptance?.Media?.OriginalFileName, client?.FiscalYearEnd,
+                RemsMaconomyDocumentViews.Of(acceptance, request))
             : null;
         var govView = RemsEngagementCodes.IsGcs(department) || request.ContractId is not null || request.ContractNumber is not null
             || request.PurchaseOrderNumber is not null || request.PersonnelRates.Any(r => !r.Deleted)
@@ -94,10 +96,11 @@ internal static class RemsWorkspaceMapper
                 request.Contract?.PurchaseOrderStartDate, request.Contract?.PurchaseOrderEndDate,
                 request.PurchaseOrderNumber, request.PurchaseOrderAmount,
                 purchaseOrder?.MediaId, purchaseOrder?.Media?.OriginalFileName,
-                PersonnelRates(request))
+                PersonnelRates(request),
+                RemsMaconomyDocumentViews.Of(purchaseOrder, request))
             : null;
         var taxView = RemsEngagementCodes.IsTax(department) || request.FiscalYearEnd is not null
-            || request.TaxForms.Any(f => !f.Deleted) || request.TaxDueDates.Any(d => !d.Deleted)
+            || request.TaxDueDates.Any(d => !d.Deleted)
             ? TaxDetail(request)
             : null;
 
@@ -146,8 +149,7 @@ internal static class RemsWorkspaceMapper
             request.Id, fye,
             original is { IsOverridden: true } ? original.DueOn : null,
             extension is { IsOverridden: true } ? extension.DueOn : null,
-            schedule,
-            request.TaxForms.Where(f => !f.Deleted).Select(f => f.TaxFormId).ToList());
+            schedule);
     }
 
     /// <summary>The client as the setup screen edits it. Billing name and email come from the first billing contact.</summary>

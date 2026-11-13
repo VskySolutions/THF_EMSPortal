@@ -42,7 +42,6 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
             .Include(t => t.Request).ThenInclude(r => r!.PersonnelRates.Where(x => !x.Deleted)).ThenInclude(x => x.PersonnelLevel)
             .Include(t => t.Request).ThenInclude(r => r!.MarketingMethods.Where(x => !x.Deleted)).ThenInclude(x => x.MarketingMethod)
             .Include(t => t.Request).ThenInclude(r => r!.CommissionSplits.Where(x => !x.Deleted))
-            .Include(t => t.Request).ThenInclude(r => r!.TaxForms.Where(x => !x.Deleted)).ThenInclude(x => x.TaxForm)
             .Include(t => t.Request).ThenInclude(r => r!.TaxDueDates.Where(x => !x.Deleted))
             .Include(t => t.Request).ThenInclude(r => r!.Approvers.Where(x => !x.Deleted))
             .Include(t => t.Request).ThenInclude(r => r!.Client).ThenInclude(c => c!.Person)

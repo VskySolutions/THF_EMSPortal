@@ -459,7 +459,7 @@ const copyRequest = async (row) => {
   const ok = await confirm({
     title: "Copy this request",
     message: `A new draft for ${row.clientName} with ${row.remsNumber}'s engagement setup carried over — team, ` +
-      "fees, marketing tags, commission and files. Its fiscal year end, due dates and tax form start blank. Continue?",
+      "fees, marketing tags, commission and files. Its fiscal year end and due dates start blank. Continue?",
     confirmLabel: "Copy"
   });
   if (!ok) return;

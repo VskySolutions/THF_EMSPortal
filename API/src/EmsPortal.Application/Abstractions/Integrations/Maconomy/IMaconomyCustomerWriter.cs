@@ -11,4 +11,10 @@ public interface IMaconomyCustomerWriter
     /// <summary>Every customer whose email address is exactly this one, any case.</summary>
     Task<IReadOnlyList<MaconomyClientDetails>> FindByEmailAsync(
         MaconomyConnection connection, string email, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The number for a new contact company and its customer: one more than the highest all-digit contact
+    /// company number, stepped past any number a customer already holds.
+    /// </summary>
+    Task<string> NextContactCompanyNumberAsync(MaconomyConnection connection, CancellationToken cancellationToken = default);
 }

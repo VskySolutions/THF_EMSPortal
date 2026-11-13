@@ -119,6 +119,10 @@
                 v-model="phoneNumber" label="Phone Number" class="col-12 col-sm-6"
                 :readonly="!canEdit" @blur="autoSaveBasics"
               />
+              <app-text-field
+                v-model="maconomyNumber" label="Maconomy Number" maxlength="64" class="col-12 col-sm-6"
+                :readonly="!canEdit" hint="Their employee number in Maconomy." @blur="autoSaveBasics"
+              />
             </q-card-section>
           </q-card>
 
@@ -367,6 +371,7 @@ const firstName = ref("");
 const lastName = ref("");
 const email = ref("");
 const phoneNumber = ref("");
+const maconomyNumber = ref("");
 const tenantOptions = ref([]);
 const loadingTenants = ref(false);
 
@@ -453,6 +458,7 @@ const load = async ({ syncFields = true } = {}) => {
     firstName.value = user.value.firstName || "";
     lastName.value = user.value.lastName || "";
     phoneNumber.value = user.value.phoneNumber || "";
+    maconomyNumber.value = user.value.maconomyNumber || "";
     email.value = user.value.email;
     department.value = user.value.department || null;
     isDepartmentHead.value = !!user.value.isDepartmentHead;
@@ -543,18 +549,20 @@ const autoSaveBasics = async () => {
   if (suffix.value === (u.suffix || "") &&
     firstName.value === (u.firstName || "") &&
     lastName.value === (u.lastName || "") &&
-    phoneNumber.value === (u.phoneNumber || "")) {
+    phoneNumber.value === (u.phoneNumber || "") &&
+    maconomyNumber.value.trim() === (u.maconomyNumber || "")) {
     return;
   }
 
   await runAutoSave(basicSave, async () => {
     await userApi.update(userId, {
       // "" rather than null: the endpoint reads an omitted field as "leave it alone", so a suffix taken
-      // back off would otherwise stay on the record.
+      // back off would otherwise stay on the record. The Maconomy number clears the same way.
       suffix: suffix.value || "",
       firstName: firstName.value,
       lastName: lastName.value,
       phoneNumber: phoneNumber.value,
+      maconomyNumber: maconomyNumber.value.trim(),
       email: u.email
     });
     await load({ syncFields: false });

@@ -11,6 +11,7 @@ import {
 // not wake one.
 import { isBusinessEntityType, REMS_ENTITY_TYPE_TRUST_ESTATE } from "modules/rems/useRemsMeta";
 import { nameIssue } from "utils/personName";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 
 // The client intake form's DATA, in one place — its shape, how a stored payload is read into it, how it
 // is written back out, and what still has to be filled in before it can be sent.
@@ -37,6 +38,8 @@ export const blankIntakePayload = () => reactive({
   // The generational particle on an individual's name — Jr., Sr., III. Held apart from the name, and
   // deliberately not folded into it: the name is what THF files and searches the client under.
   clientSuffix: "",
+  // Hidden for now (remsFeatureFlags): asked beside the first name once it is switched on.
+  clientMiddleName: "",
   // Retired from the form, which asked for a courtesy title here before it asked for the suffix. Kept in
   // the shape for the reason blankRole gives: a submission saved under the old box carries one.
   clientPrefix: "",
@@ -303,6 +306,7 @@ export function seedIntakePayload (payload, stored, prefill = null) {
   // From the prefill where the client has not answered yet: the staff intake asks for the particle, and the
   // client's form has a box of its own.
   payload.clientSuffix = d.clientSuffix ?? prefill?.clientSuffix ?? "";
+  payload.clientMiddleName = d.clientMiddleName ?? prefill?.clientMiddleName ?? "";
   payload.clientPrefix = d.clientPrefix ?? "";
   // The two parts come from the stored answer where they were given.
   payload.clientFirstName = d.clientFirstName ?? prefill?.clientFirstName ?? "";
@@ -381,6 +385,8 @@ export function buildIntakePayload (payload, entityType) {
     version: 1,
     clientName: intakeClientName(payload),
     clientSuffix: s(payload.clientSuffix),
+    // Not sent while the box is hidden: an omitted middle name leaves the record's alone.
+    ...(SHOW_MIDDLE_NAME ? { clientMiddleName: s(payload.clientMiddleName) } : {}),
     clientPrefix: s(payload.clientPrefix),
     clientFirstName: s(payload.clientFirstName),
     clientLastName: s(payload.clientLastName),

@@ -48,7 +48,7 @@
           class="col-12"
           label="Maconomy number"
           maxlength="64"
-          hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Job type: the template job number. Department: the location number."
+          hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Service line: the template job number. Job type: the specification 2 value, only where it differs from the label. Department: the location number."
         />
 
         <!-- Cascading lists: tie this value to a parent-list item. -->

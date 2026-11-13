@@ -8,8 +8,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
     /// Job Type in place of Job Template on the engagement setup (11 Nov 2026): the REMS.JobType list is
     /// seeded here rather than left to the bootstrap seeder, because the column is remapped in the same
     /// step — every request that named a template now names the job type that stands for it, Tax
-    /// Compliance by the request's tax form — and the REMS.JobTemplate list is then retired. The one
-    /// template number already set (Audit) is carried across.
+    /// Compliance by the request's tax form — and the REMS.JobTemplate list is then retired. The template
+    /// job follows the Service Line (the user, later the same day), so THF's template job numbers go onto
+    /// the service lines; the job type goes to the job card's specification 2 by its label.
     /// </summary>
     public partial class AddRemsJobType : Migration
     {
@@ -109,7 +110,7 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
             // 3. Every request that named a template names the job type that stands for it. The Tax Compliance
             //    template is the job type of the request's tax form (Tax Other without one). A template value
             //    with no counterpart — a tenant's own addition — is left empty rather than guessed.
-            //    Then the template's Maconomy number moves to the job type where it has none, and the old list goes.
+            //    Then the old list goes.
             migrationBuilder.Sql("""
                 DECLARE @now datetime2 = SYSUTCDATETIME();
                 DECLARE @setId uniqueidentifier = (SELECT TOP 1 Id FROM OptionSets WHERE TenantId IS NULL AND [Key] = N'REMS.JobType' AND Deleted = 0);
@@ -159,12 +160,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                 JOIN OptionSetItems o ON o.Id = r.JobTypeId
                 JOIN OptionSets os ON os.Id = o.OptionSetId AND os.[Key] = N'REMS.JobTemplate';
 
-                UPDATE n SET n.MaconomyNumber = o.MaconomyNumber, n.UpdatedOnUtc = @now
-                FROM OptionSetItems n
-                JOIN @map m ON m.NewValue = n.Value
-                JOIN OptionSetItems o ON o.Value = m.OldValue AND o.MaconomyNumber IS NOT NULL AND o.Deleted = 0
-                JOIN OptionSets os ON os.Id = o.OptionSetId AND os.[Key] = N'REMS.JobTemplate' AND os.TenantId IS NULL
-                WHERE n.OptionSetId = @setId AND n.MaconomyNumber IS NULL;
 
                 UPDATE i SET i.Deleted = 1, i.DeletedOnUtc = @now, i.UpdatedOnUtc = @now
                 FROM OptionSetItems i JOIN OptionSets s ON s.Id = i.OptionSetId
@@ -174,60 +169,30 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                 WHERE [Key] = N'REMS.JobTemplate' AND Deleted = 0;
                 """);
 
-            // 4. THF's template jobs onto the job types that stand for them (the probe of 11 Nov 2026: `template =
-            //    true` on the jobs container lists 38, numbered "ZZ" + the job's name). Only where none is set yet.
-            //    Every tax form takes the one tax template, ZZTax Compliance (the user, 11 Nov 2026); Estate
-            //    Planning and Internal IT have no template and stay empty.
+            // 4. THF's template jobs onto the service lines: the template job follows the Service Line (the user,
+            //    11 Nov 2026), from THF's department table where a line had one template. The probe of the same
+            //    day (`template = true` on the jobs container) lists 38 template jobs numbered "ZZ" + the job's
+            //    name. Only where none is set yet; Assurance Services (six candidates) and Non-Chargeable
+            //    Internal (sixteen) are left for the tenant to set.
             migrationBuilder.Sql("""
                 DECLARE @now datetime2 = SYSUTCDATETIME();
                 UPDATE i SET i.MaconomyNumber = v.Number, i.UpdatedOnUtc = @now
                 FROM OptionSetItems i
-                JOIN OptionSets s ON s.Id = i.OptionSetId AND s.[Key] = N'REMS.JobType'
+                JOIN OptionSets s ON s.Id = i.OptionSetId AND s.[Key] = N'REMS.ServiceLine'
                 JOIN (VALUES
-                    (N'agreed_upon_procedures', N'ZZAgreed Upon Procedures'),
-                    (N'audit', N'ZZAudit'),
-                    (N'examination', N'ZZExamination'),
-                    (N'compilation', N'ZZCompilation'),
-                    (N'review', N'ZZReview'),
-                    (N'soc', N'ZZSOC'),
-                    (N'consulting', N'ZZConsulting Engagement'),
-                    (N'governmental_consulting_services', N'ZZGovernmental Consulting Services'),
-                    (N'plan_administration_and_5500', N'ZZPension Administration and Tax Compliance'),
+                    (N'tax_compliance', N'ZZTax Compliance'),
                     (N'client_accounting_services', N'ZZClient Accounting Services'),
-                    (N'litigation_support', N'ZZLitigation'),
-                    (N'forensic_accounting', N'ZZForensic Accounting'),
+                    (N'consulting', N'ZZConsulting Engagement'),
                     (N'business_valuation', N'ZZBusiness Valuation'),
                     (N'it_services', N'ZZInformation Technology Services'),
+                    (N'plan_administration', N'ZZPension Administration and Tax Compliance'),
                     (N'mergers_acquisitions', N'ZZMergers and Acquisitions'),
                     (N'peer_review', N'ZZPeer Review'),
-                    (N'nonchargeable_administrative', N'ZZNonchargeable - Administrative'),
-                    (N'nonchargeable_internal_firm_accounting', N'ZZNONCHARGEABLE - INTERNAL FIRM ACCOUNTING'),
-                    (N'nonchargeable_leave_time', N'ZZNonchargeable - Leave Time'),
-                    (N'nonchargeable_personnel', N'ZZNonchargeable - Personnel'),
-                    (N'nonchargeable_recruiting', N'ZZNonchargeable - Recruiting'),
-                    (N'nonchargeable_education', N'ZZNonchargeable - Education'),
-                    (N'nonchargeable_professional', N'ZZNonchargeable - Professional'),
-                    (N'nonchargeable_marketing', N'ZZNonchargeable - Marketing'),
-                    (N'nonchargeable_chamber_of_commerce_conference', N'ZZNonchargeable - Chamber of Commerce Conference'),
-                    (N'nonchargeable_client_social', N'ZZNonchargeable - Client Social'),
-                    (N'nonchargeable_finrep', N'ZZNonchargeable - FINREP'),
-                    (N'nonchargeable_firm_forum', N'ZZNonchargeable - Firm Forum'),
-                    (N'nonchargeable_synergy', N'ZZNonchargeable - Synergy'),
-                    (N'nonchargeable_shareholder_meetings', N'ZZNonchargeable - Shareholder Meetings'),
-                    (N'nonchargeable_holiday_party', N'ZZNonchargeable - Holiday Party'),
-                    (N'1040', N'ZZTax Compliance'),
-                    (N'1041_estate', N'ZZTax Compliance'),
-                    (N'1120_pc', N'ZZTax Compliance'),
-                    (N'990', N'ZZTax Compliance'),
-                    (N'1065', N'ZZTax Compliance'),
-                    (N'1041_trust', N'ZZTax Compliance'),
-                    (N'1120', N'ZZTax Compliance'),
-                    (N'1120_s', N'ZZTax Compliance'),
-                    (N'5500', N'ZZTax Compliance'),
-                    (N'tax_other', N'ZZTax Compliance'),
-                    (N'706', N'ZZTax Compliance'),
-                    (N'709', N'ZZTax Compliance'),
-                    (N'8752', N'ZZTax Compliance')
+                    (N'soc', N'ZZSOC'),
+                    (N'employee_benefits', N'ZZPension Administration and Tax Compliance'),
+                    (N'estate_planning', N'ZZTax Compliance'),
+                    (N'litigation_support', N'ZZLitigation'),
+                    (N'forensic_accounting', N'ZZForensic Accounting')
                 ) v (ItemValue, Number) ON i.[Value] = v.ItemValue
                 WHERE i.MaconomyNumber IS NULL AND i.Deleted = 0;
                 """);

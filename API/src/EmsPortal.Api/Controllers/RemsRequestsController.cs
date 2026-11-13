@@ -354,7 +354,7 @@ public sealed class RemsRequestsController : ControllerBase
         var details = new ClientDetails(
             request.ClientName, request.ClientNameSuffix,
             request.CustomerEmail, request.CustomerMobileNumber,
-            request.ClientFirstName, request.ClientLastName, request.ClientCorporateName);
+            request.ClientFirstName, request.ClientLastName, request.ClientCorporateName, request.ClientMiddleName);
 
         // Allocate the REMS number and stage the row + client + activity + attachment atomically. The client
         // is staged first: the request's FK points at them.
@@ -430,7 +430,7 @@ public sealed class RemsRequestsController : ControllerBase
             request.ExistingClientReferenceId = null;
             request.ClearExistingClientReference = false;
             request.ClientName = request.ClientFirstName = request.ClientLastName = null;
-            request.ClientCorporateName = request.ClientNameSuffix = null;
+            request.ClientCorporateName = request.ClientNameSuffix = request.ClientMiddleName = null;
             request.CustomerEmail = request.CustomerMobileNumber = null;
             // A Maconomy customer is somebody THF already has, whatever the request said before.
             if ((request.Type ?? rems.Type!.Value) == RemsRequestTypes.BrandNewClient)
@@ -478,7 +478,8 @@ public sealed class RemsRequestsController : ControllerBase
             request.CustomerMobileNumber ?? current?.PrimaryPhone,
             request.ClientFirstName ?? current?.Person?.FirstName,
             request.ClientLastName ?? current?.Person?.LastName,
-            request.ClientCorporateName ?? current?.LegalName);
+            request.ClientCorporateName ?? current?.LegalName,
+            request.ClientMiddleName);
 
         // The client this request itself filed, who is not a match for their own name. A client the request
         // was linked to is somebody else's record — including one it is now leaving, who stays as they are.
@@ -1731,7 +1732,9 @@ public sealed class RemsRequestsController : ControllerBase
     /// <summary>A client's submitted details, in the shape the client master stores them.</summary>
     private sealed record ClientShape(
         bool IsOrganisation, string? Corporate, string First, string Last, string? Suffix,
-        string? Email, string? Phone)
+        string? Email, string? Phone,
+        // Null when the request did not send one (leave the record's alone), "" to clear it.
+        string? Middle = null)
     {
         public static ClientShape Of(ClientDetails client)
         {
@@ -1750,7 +1753,8 @@ public sealed class RemsRequestsController : ControllerBase
             return new ClientShape(
                 isOrganisation, corporate, first, last,
                 isOrganisation ? null : Normalize(client.Suffix),
-                Normalize(client.Email), Normalize(client.Phone));
+                Normalize(client.Email), Normalize(client.Phone),
+                isOrganisation ? null : client.MiddleName?.Trim());
         }
 
         /// <summary>Whether this is what the record already says, so that saving it changes nothing.</summary>
@@ -1761,7 +1765,8 @@ public sealed class RemsRequestsController : ControllerBase
                     : client.Person is { } person
                         && person.FirstName.Trim() == First
                         && person.LastName.Trim() == Last
-                        && Normalize(person.Suffix) == Suffix)
+                        && Normalize(person.Suffix) == Suffix
+                        && (Middle is null || (person.MiddleName?.Trim() ?? string.Empty) == Middle))
                 && string.Equals(Normalize(client.PrimaryEmail), Email, StringComparison.OrdinalIgnoreCase)
                 && Normalize(client.PrimaryPhone) == Phone;
 
@@ -1774,6 +1779,10 @@ public sealed class RemsRequestsController : ControllerBase
             person.FirstName = First;
             person.LastName = Last;
             person.Suffix = Suffix;
+            if (Middle is not null)
+            {
+                person.MiddleName = Middle.Length == 0 ? null : Middle;
+            }
             person.DisplayName = string.Join(" ", new[] { First, Last }.Where(p => p.Length > 0));
             person.PrimaryEmail = Email;
             person.MobileNumber = Phone;
@@ -2015,7 +2024,9 @@ public sealed class RemsRequestsController : ControllerBase
         var (ems, submission) = MapFormState(form);
 
         var files = Attachments(rems)
-            .Select(f => new RemsFileRef(f.Id, f.MediaId, f.Media?.OriginalFileName, f.Media?.MimeType, f.Media?.FileSize, f.Media?.PublicUrl))
+            .Select(f => new RemsFileRef(
+                f.Id, f.MediaId, f.Media?.OriginalFileName, f.Media?.MimeType, f.Media?.FileSize, f.Media?.PublicUrl,
+                RemsMaconomyDocumentViews.Of(f, rems)))
             .ToList();
 
         // Asked only where a CSE is actually named: with none, the send-back dialog has one answer anyway
@@ -2044,6 +2055,7 @@ public sealed class RemsRequestsController : ControllerBase
             null,
             ClientNameOf(rems),
             client?.Person?.Suffix,
+            client is { IsOrganisation: false } ? client.Person?.MiddleName : null,
             whole ? null : client!.Person?.FirstName,
             whole ? null : client!.Person?.LastName,
             client is { IsMaconomyClient: false } ? client.LegalName : null,

@@ -404,7 +404,7 @@ public sealed class RemsPublicFormController : ControllerBase
             : string.Join(" ", new[] { first, last }.Where(p => p.Length > 0));
         return new RemsPublicPrefill(
             name, first, last, client.IsOrganisation ? null : person?.Suffix,
-            _lockedEmail, client.ClientPhone);
+            _lockedEmail, client.ClientPhone, client.IsOrganisation ? null : person?.MiddleName);
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -60,8 +60,10 @@ public sealed class RemsMaconomyJobSyncController : ControllerBase
         }
         await _directory.HydrateAsync(request.Client, cancellationToken);
         var context = await _sync.GetContextAsync(tenantId, cancellationToken);
+        // Maconomy's own list of fiscal years, so the confirmation can say whether the year will go.
         var preview = RemsMaconomyJobSyncViews.PreviewFor(
-            request, context, _sync.IsStale(request), canManage: true, await SyncedByNameAsync(request.MaconomyJobSyncedById, cancellationToken));
+            request, context, _sync.IsStale(request), canManage: true, await SyncedByNameAsync(request.MaconomyJobSyncedById, cancellationToken),
+            await _sync.GetLookupsAsync(request, cancellationToken));
         return Ok(ApiResponseFactory.Success(preview, "Maconomy job sync preview retrieved."));
     }
 
@@ -73,7 +75,7 @@ public sealed class RemsMaconomyJobSyncController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsMaconomyJobSyncView>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> SyncNow(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> SyncNow(Guid id, [FromBody] RemsMaconomyJobSyncRequest? body, CancellationToken cancellationToken)
     {
         var (me, tenantId, error) = await CallerAsync(id, cancellationToken);
         if (error is not null)
@@ -82,7 +84,7 @@ public sealed class RemsMaconomyJobSyncController : ControllerBase
         }
         try
         {
-            var request = await _sync.SyncNowAsync(id, tenantId, me, cancellationToken);
+            var request = await _sync.SyncNowAsync(id, tenantId, me, body?.TemplateJobNumber, cancellationToken);
             var context = await _sync.GetContextAsync(tenantId, cancellationToken);
             var view = RemsMaconomyJobSyncViews.For(
                 request, context, _sync.IsStale(request), canManage: true, await SyncedByNameAsync(request.MaconomyJobSyncedById, cancellationToken));
@@ -95,6 +97,33 @@ public sealed class RemsMaconomyJobSyncController : ControllerBase
     }
 
     /// <summary>How a refusal reads to the caller. Shared with the settings page's run endpoint; the kinds are the customer sync's.</summary>
+    /// <summary>Maconomy's template jobs, read live, for the pick when the Service Line named none.</summary>
+    [HttpGet("templates")]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<MaconomyJobTemplateOption>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Templates(Guid id, CancellationToken cancellationToken)
+    {
+        var (_, tenantId, error) = await CallerAsync(id, cancellationToken);
+        if (error is not null)
+        {
+            return error;
+        }
+        try
+        {
+            var templates = await _sync.GetTemplatesAsync(tenantId, cancellationToken);
+            return Ok(ApiResponseFactory.Success(
+                templates.Items.Select(t => new MaconomyJobTemplateOption(t.Value, t.Title)).ToList(), "Maconomy template jobs retrieved."));
+        }
+        catch (MaconomyJobSyncException ex)
+        {
+            return RefusalFor(this, ex);
+        }
+        catch (MaconomyException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiResponseFactory.Error(ApiErrorCodes.MaconomyNotConfigured, "Maconomy's template jobs could not be read.", ex.Message));
+        }
+    }
+
     public static IActionResult RefusalFor(ControllerBase controller, MaconomyJobSyncException ex) => ex.Refusal switch
     {
         MaconomyCustomerSyncRefusal.NotFound => controller.NotFound(ApiResponseFactory.NotFound(ex.Message)),

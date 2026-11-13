@@ -245,13 +245,12 @@ public sealed record RemsApprovalAuditDetailView(
     string? Url,
     DateOnly? ClientFiscalYearEnd);
 
-/// <summary>Tax detail with the due-date schedule deserialized and the form checklist resolved to labels.</summary>
+/// <summary>Tax detail with the due-date schedule deserialized.</summary>
 public sealed record RemsApprovalTaxDetailView(
     Guid Id,
     DateOnly? FiscalYearEnd,
     /// <summary>Derived from the fiscal year end, then whatever was typed over it.</summary>
-    RemsTaxDueDateSet? DueDates,
-    IReadOnlyList<RemsApprovalOptionRef> TaxForms);
+    RemsTaxDueDateSet? DueDates);
 
 /// <summary>
 /// The approval round this task belongs to, with every approver's decision — the approver-side

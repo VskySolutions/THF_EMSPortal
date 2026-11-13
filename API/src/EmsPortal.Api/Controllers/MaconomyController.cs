@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using EmsPortal.Api.RateLimiting;
+using EmsPortal.Application.Integrations.Maconomy;
 using EmsPortal.Application.Integrations.Maconomy.Mapping;
 using EmsPortal.Shared.Configuration;
 using Microsoft.Extensions.Options;
@@ -41,6 +42,7 @@ public sealed class MaconomyController : ControllerBase
     private readonly IUserRepository _users;
     private readonly IMaconomyCustomerSyncService _customerSync;
     private readonly IMaconomyJobSyncService _jobSync;
+    private readonly IMaconomyDocumentSyncService _documents;
     private readonly IMaconomyClientDirectory _directory;
     private readonly IMaconomyNumberMaps _numbers;
     private readonly MaconomyOptions _options;
@@ -53,6 +55,7 @@ public sealed class MaconomyController : ControllerBase
         IUserRepository users,
         IMaconomyCustomerSyncService customerSync,
         IMaconomyJobSyncService jobSync,
+        IMaconomyDocumentSyncService documents,
         IMaconomyClientDirectory directory,
         IMaconomyNumberMaps numbers,
         IOptions<MaconomyOptions> options)
@@ -64,6 +67,7 @@ public sealed class MaconomyController : ControllerBase
         _users = users;
         _customerSync = customerSync;
         _jobSync = jobSync;
+        _documents = documents;
         _directory = directory;
         _numbers = numbers;
         _options = options.Value;
@@ -266,6 +270,7 @@ public sealed class MaconomyController : ControllerBase
         }
 
         var context = await _jobSync.GetContextAsync(tenant, cancellationToken);
+        var documents = await _documents.GetContextAsync(tenant, cancellationToken);
         var requests = await _jobSync.ListApprovedAsync(cancellationToken);
         var names = await _users.GetFullNamesAsync(
             requests.Where(r => r.MaconomyJobSyncedById.HasValue).Select(r => r.MaconomyJobSyncedById!.Value), cancellationToken);
@@ -278,7 +283,8 @@ public sealed class MaconomyController : ControllerBase
             rows.Add(new MaconomyJobSyncRow(
                 r.Id, r.RemsNumber, r.Client?.ClientName ?? string.Empty, r.Client?.MaconomyCustomerNumber,
                 r.ServiceLine?.Label, r.JobType?.Label, r.Department?.Label, r.UpdatedOnUtc,
-                RemsMaconomyJobSyncViews.For(r, context, _jobSync.IsStale(r), canManage: true, syncedBy)));
+                RemsMaconomyJobSyncViews.For(r, context, _jobSync.IsStale(r), canManage: true, syncedBy),
+                RemsMaconomyDocumentViews.Of(MaconomyDocumentSyncRules.Summarise(r, documents, _documents.IsStale))));
         }
         return Ok(ApiResponseFactory.Success<IReadOnlyList<MaconomyJobSyncRow>>(rows, $"{rows.Count} approved request(s)."));
     }
@@ -289,7 +295,7 @@ public sealed class MaconomyController : ControllerBase
     [ProducesResponseType<ApiResponse<RemsMaconomyJobSyncView>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RunJobSync(Guid remsId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RunJobSync(Guid remsId, [FromBody] RemsMaconomyJobSyncRequest? body, CancellationToken cancellationToken)
     {
         var (tenant, error) = OwnTenant();
         if (error is not null)
@@ -303,7 +309,7 @@ public sealed class MaconomyController : ControllerBase
 
         try
         {
-            var request = await _jobSync.SyncNowAsync(remsId, tenant, me, cancellationToken);
+            var request = await _jobSync.SyncNowAsync(remsId, tenant, me, body?.TemplateJobNumber, cancellationToken);
             var context = await _jobSync.GetContextAsync(tenant, cancellationToken);
             var names = await _users.GetFullNamesAsync(new[] { me }, cancellationToken);
             var view = RemsMaconomyJobSyncViews.For(
@@ -351,12 +357,12 @@ public sealed class MaconomyController : ControllerBase
             names.TryGetValue(changedById, out changedBy);
         }
 
-        // Every value of the tenant's REMS Job Type list, and every offered value of its REMS Department
+        // Every value of the tenant's REMS Service Line list, and every offered value of its REMS Department
         // list, with the Maconomy number it carries, so the tab can say how many still lack one. The
         // numbers are edited under Option Sets.
         var numbers = await _numbers.GetAsync(tenant, cancellationToken);
-        var jobTypes = numbers.JobTypes
-            .Select(t => new MaconomyJobTypeRow(t.ItemId, t.Code, t.Label, t.Number))
+        var serviceLines = numbers.ServiceLines
+            .Select(l => new MaconomyServiceLineRow(l.ItemId, l.Code, l.Label, l.Number))
             .ToList();
         var departments = numbers.Departments
             .Where(d => d.IsActive)
@@ -366,7 +372,49 @@ public sealed class MaconomyController : ControllerBase
         return new MaconomyJobSyncOverviewResponse(
             overview.Connected, overview.Enabled, overview.ChangedOnUtc, changedBy,
             overview.ProjectManagerNumber, overview.DefaultTemplateNumber,
-            overview.Synced, overview.Failed, overview.Syncing, overview.Waiting, jobTypes, departments);
+            overview.Synced, overview.Failed, overview.Syncing, overview.Waiting, serviceLines, departments);
+    }
+
+    // ---- The documents ----
+
+    /// <summary>
+    /// Upload documents from the settings page: every file of the request not yet in Maconomy whose
+    /// customer or job is there, inline, in the caller's own tenant. A failed upload is a 200 with the
+    /// failure counted; only "nothing can go" is a refusal.
+    /// </summary>
+    [HttpPost("documents/{remsId:guid}/run")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<RemsMaconomyDocumentsView>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunDocumentSync(Guid remsId, CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        try
+        {
+            var request = await _documents.UploadNowAsync(remsId, tenant, me, cancellationToken);
+            var view = RemsMaconomyDocumentViews.Of(MaconomyDocumentSyncRules.Summarise(
+                request, await _documents.GetContextAsync(tenant, cancellationToken), _documents.IsStale));
+            return Ok(ApiResponseFactory.Success(view, RemsMaconomyDocumentViews.MessageFor(view)));
+        }
+        catch (MaconomyDocumentSyncException ex)
+        {
+            return ex.Refusal switch
+            {
+                MaconomyCustomerSyncRefusal.NotFound => NotFound(ApiResponseFactory.NotFound(ex.Message)),
+                MaconomyCustomerSyncRefusal.NotConnected => Conflict(ApiResponseFactory.Error(ApiErrorCodes.MaconomyNotConfigured, "Maconomy is not connected.", ex.Message)),
+                _ => Conflict(ApiResponseFactory.Error(ApiErrorCodes.MaconomySyncNotEligible, "No document of this request can be uploaded to Maconomy now.", ex.Message)),
+            };
+        }
     }
 
     // ---- The mapping ----

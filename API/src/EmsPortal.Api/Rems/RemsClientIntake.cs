@@ -51,6 +51,7 @@ public sealed class RemsClientIntake
             ClientFirstName = client.IsOrganisation ? null : person?.FirstName,
             ClientLastName = client.IsOrganisation ? null : person?.LastName,
             ClientSuffix = client.IsOrganisation ? null : person?.Suffix,
+            ClientMiddleName = client.IsOrganisation ? null : person?.MiddleName,
             Email = lockedEmail.Length > 0 ? lockedEmail : client.ClientEmail,
             MobileNumber = client.PrimaryPhone,
             ReferralSource = client.ReferralSource?.Value,
@@ -176,6 +177,10 @@ public sealed class RemsClientIntake
             if (Clean(payload.ClientFirstName) is { } first) person.FirstName = first;
             if (Clean(payload.ClientLastName) is { } last) person.LastName = last;
             person.Suffix = Clean(payload.ClientSuffix);
+            if (payload.ClientMiddleName is not null)
+            {
+                person.MiddleName = Clean(payload.ClientMiddleName);
+            }
             person.DisplayName = string.Join(" ", new[] { person.FirstName, person.LastName }.Where(p => !string.IsNullOrWhiteSpace(p)));
             person.LastProfileUpdatedOn = DateTime.UtcNow;
             _persons.Update(person);

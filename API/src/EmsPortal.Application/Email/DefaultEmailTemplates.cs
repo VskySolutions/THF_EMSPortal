@@ -124,7 +124,7 @@ public static class DefaultEmailTemplates
         new Definition(
             EmailTemplateKey.RemsFormLink,
             "REMS Form Link",
-            "Sent to a client with the secure link to complete an COP form for a REMS request.",
+            "Sent to a client with the secure link to complete a COP form for a REMS request.",
             "Action required: complete your form for REMS {{RemsNumber}}",
             """
             <p>Hello {{ClientName}},</p>

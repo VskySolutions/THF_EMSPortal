@@ -1,6 +1,7 @@
 # Job Type on the Engagement Setup — plan
 
-**Status: BUILT on 11 Nov 2026**, the same day it was proposed. The user cut the plan down before it was
+**Status: BUILT on 11 Nov 2026**, the same day it was proposed, and corrected later that day (section 9: the
+template job follows the Service Line, and the Job Type goes to the job card's specification 2). The user cut the plan down before it was
 built (section 0); section 2 keeps the service line table that was proposed and NOT built, for the record;
 section 8 says what was built, where it departs from the plan, and how it was checked.
 
@@ -170,3 +171,30 @@ Checked:
 
 Still to do: the REMS workflow guide and the deployment guide docs (the migration is a data step at the
 next deploy). Nothing on the numbers: the two empty ones are empty by decision.
+
+## 9. Correction, later on 11 Nov 2026
+
+The user: *"Service Line will go as Job Template while creating job in maconomy not Job Type. And Job
+Type value will go as specification2name while creating job."* So:
+
+- **`templatejobnumber` is the Service Line's Maconomy number**, else the configured default. The map is
+  `MaconomyNumberMap.TemplateMap` keyed by Service Line item, `ResolveTemplate` reads `ServiceLineId`, the
+  eligibility message says Service Line, and the Job tab counts service lines. Seeded on thirteen lines from
+  THF's department table where a line had one template: Tax Compliance and Estate Planning → ZZTax
+  Compliance; Client Accounting Services → ZZClient Accounting Services; Consulting → ZZConsulting
+  Engagement; Business Valuation; IT Services → ZZInformation Technology Services; Plan Administration and
+  Employee Benefits → ZZPension Administration and Tax Compliance; Mergers & Acquisitions → ZZMergers and
+  Acquisitions; Peer Review; SOC; Litigation Support → ZZLitigation; Forensic Accounting. Left empty, for the
+  tenant: Assurance Services (six template jobs could apply), Non-Chargeable Internal (sixteen), and the two
+  lines THF added by hand (Outsourced CFO, Internal-IT). Under GCS, Consulting now takes the Consulting
+  Engagement template where the old table gave Governmental Consulting Services — one template per line.
+- **`specification2name` is the Job Type**: the value's label, which is what Maconomy's job type list calls
+  it (the 46 were supplied verbatim), or the item's Maconomy number where a tenant sets one to say it
+  differently (`MaconomyNumberMap.JobTypeValueMap`, `ResolveJobType`). Left out when the request names no
+  Job Type. The sync preview shows it as "Job type (specification 2)".
+- The job type numbers seeded in the morning (31 matched, 13 on ZZTax Compliance) are **cleared**: on a
+  job type the number now means a specification 2 override, and ZZ… is not one. The migration's step 4
+  seeds the service lines instead; the catalog that had already run the first version was brought to the
+  same state by hand.
+- The field name `specification2name` follows the customer card, where the specification popups accepted
+  their `…name` form; it is confirmed by the first live create, like the rest of the job card.

@@ -187,7 +187,6 @@ BEGIN
         ('REMS_PersonnelRate',              (SELECT COUNT(*) FROM dbo.REMS_PersonnelRate   x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMS_StatusHistory',              (SELECT COUNT(*) FROM dbo.REMS_StatusHistory   x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMS_TaxDueDate',                 (SELECT COUNT(*) FROM dbo.REMS_TaxDueDate      x JOIN #Rems r ON r.Id = x.REMSId)),
-        ('REMS_TaxForm',                    (SELECT COUNT(*) FROM dbo.REMS_TaxForm         x JOIN #Rems r ON r.Id = x.REMSId)),
         ('Client',                          (SELECT COUNT(*) FROM #Client)),
         ('Client_Relationship',             (SELECT COUNT(*) FROM dbo.Client_Relationship x
                                              WHERE x.ClientId IN (SELECT Id FROM #Client) OR x.RelatedClientId IN (SELECT Id FROM #Client))),
@@ -273,7 +272,6 @@ BEGIN
         DELETE x FROM dbo.REMS_PersonnelRate   x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS_StatusHistory   x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS_TaxDueDate      x JOIN #Rems r ON r.Id = x.REMSId;
-        DELETE x FROM dbo.REMS_TaxForm         x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS                 x JOIN #Rems r ON r.Id = x.Id;
 
         IF @IncludeClients = 1

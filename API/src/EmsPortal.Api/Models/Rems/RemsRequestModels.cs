@@ -27,6 +27,9 @@ public sealed class CreateRemsRequestRequest
     /// </summary>
     public string? ClientNameSuffix { get; set; }
 
+    /// <summary>An individual client's middle name. Omitted leaves the record's alone; "" clears it.</summary>
+    public string? ClientMiddleName { get; set; }
+
     /// <summary>Request type (option-set <c>REMS.Type</c> code, e.g. <c>brand_new_client</c>).</summary>
     public string Type { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -74,6 +77,9 @@ public sealed class UpdateRemsRequestRequest
 
     /// <summary>The client's generational suffix.</summary>
     public string? ClientNameSuffix { get; set; }
+
+    /// <inheritdoc cref="CreateRemsRequestRequest.ClientMiddleName"/>
+    public string? ClientMiddleName { get; set; }
 
     public string? CustomerEmail { get; set; }
     public string? CustomerMobileNumber { get; set; }
@@ -192,7 +198,9 @@ public sealed record RemsFileRef(
     string? FileName,
     string? MimeType,
     long? FileSize,
-    string? Url);
+    string? Url,
+    /// <summary>Where uploading the file to Maconomy has got to; null while there is nothing to say.</summary>
+    RemsMaconomyDocumentView? Maconomy = null);
 
 /// <summary>Full REMS request detail (WO-111).</summary>
 public sealed record RemsRequestDetail(
@@ -203,6 +211,8 @@ public sealed record RemsRequestDetail(
     string ClientName,
     /// <summary>The generational particle, so a cell can draw it in bold at the end of the name.</summary>
     string? ClientNameSuffix,
+    /// <summary>An individual client's middle name, null when they have none.</summary>
+    string? ClientMiddleName,
     /// <summary>
     /// The name in PARTS, which is how the form asks for it: two boxes for an individual, one for an
     /// organisation.
@@ -342,7 +352,9 @@ public sealed record ClientDetails(
     string? FirstName = null,
     string? LastName = null,
     /// <summary>The legal name, for an ORGANISATION client.</summary>
-    string? CorporateName = null)
+    string? CorporateName = null,
+    /// <summary>An individual's middle name: null leaves the record's alone, "" clears it.</summary>
+    string? MiddleName = null)
 {
     /// <summary>Whether these details describe a company rather than a human.</summary>
     public bool IsOrganisation => !string.IsNullOrWhiteSpace(CorporateName);

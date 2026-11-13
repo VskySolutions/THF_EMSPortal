@@ -26,6 +26,8 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(c => c.MaconomyCustomerNumber).HasMaxLength(64);
         builder.Property(c => c.MaconomySyncStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(c => c.MaconomySyncError).HasMaxLength(1000);
+        builder.Property(c => c.IsMaconomyContactSyncPending).IsRequired();
+        builder.Property(c => c.MaconomyContactCompanyNumber).HasMaxLength(64);
         builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(c => c.TenantId);
         builder.HasOne(c => c.Person).WithMany().HasForeignKey(c => c.PersonId).OnDelete(DeleteBehavior.Restrict);

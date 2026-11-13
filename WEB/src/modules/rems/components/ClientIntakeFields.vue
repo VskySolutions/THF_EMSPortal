@@ -22,6 +22,10 @@
               :error="!!errors.clientFirstName" :error-message="errors.clientFirstName"
             />
             <app-text-field
+              v-if="SHOW_MIDDLE_NAME" v-model="payload.clientMiddleName" label="Middle Name"
+              maxlength="100" class="col-12 col-sm-6"
+            />
+            <app-text-field
               v-model="payload.clientLastName" label="Last Name" required class="col-8 col-sm-4"
               :rules="nameRules('Last Name')"
               :error="!!errors.clientLastName" :error-message="errors.clientLastName"
@@ -347,6 +351,7 @@ import {
 import { nameRules } from "utils/personName";
 import AppTextField from "components/common/AppTextField.vue";
 import AppNameSuffixField from "components/common/AppNameSuffixField.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 import AppSelect from "components/common/AppSelect.vue";
 import AppPhoneInput from "components/common/AppPhoneInput.vue";
 import AppDateField from "components/common/AppDateField.vue";

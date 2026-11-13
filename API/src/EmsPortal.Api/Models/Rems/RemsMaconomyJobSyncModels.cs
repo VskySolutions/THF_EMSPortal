@@ -37,15 +37,46 @@ public sealed record RemsMaconomyJobSyncPreview(
     string? CustomerNumber,
     string? ServiceLine,
     string? JobType,
+    /// <summary>What the job card's specification 2 is given for the Job Type; null while the request names none.</summary>
+    string? JobTypeValue,
     string? TemplateJobNumber,
     string? ProjectManagerNumber,
     string? JobName,
     string? Department,
     /// <summary>The Department's Maconomy location number; null while it carries none, so the template job's location stands.</summary>
     string? LocationNumber,
-    string? PurchaseOrderNumber);
+    string? PurchaseOrderNumber,
+    /// <summary>The purchase order's dates as the card takes them (yyyy-MM-dd); null while the contract names none.</summary>
+    string? PurchaseOrderStartDate = null,
+    string? PurchaseOrderEndDate = null,
+    /// <summary>The chosen marketing methods' labels, joined; null while none is chosen.</summary>
+    string? MarketingMethods = null,
+    string? FiscalYear = null,
+    string? FiscalMonth = null,
+    int JobDocuments = 0,
+    string? AccountManagerNumber = null,
+    string? BillingManagerNumber = null,
+    /// <summary>The commission recipients as sent: "number — share%", in order.</summary>
+    IReadOnlyList<string>? Commission = null,
+    /// <summary>People on the engagement with no Maconomy Number, who are therefore left out.</summary>
+    IReadOnlyList<string>? MissingNumbers = null,
+    /// <summary>No template job could be resolved: the press has to name one.</summary>
+    bool NeedsTemplate = false,
+    /// <summary>The First-Year Fee Estimate, put on the job's budget (task FEE) after the create; null when blank.</summary>
+    decimal? FeeEstimate = null,
+    /// <summary>The job is already in Maconomy: a press only puts the fee estimate on its budget.</summary>
+    bool BudgetOnly = false);
 
-/// <summary>The settings page's Job tab: the switch, the settings, the counts, the job type and department maps.</summary>
+/// <summary>Sync job now's optional body: the template job picked when none could be resolved.</summary>
+public sealed class RemsMaconomyJobSyncRequest
+{
+    public string? TemplateJobNumber { get; set; }
+}
+
+/// <summary>One of Maconomy's template jobs, for the pick.</summary>
+public sealed record MaconomyJobTemplateOption(string Number, string Name);
+
+/// <summary>The settings page's Job tab: the switch, the settings, the counts, the service line and department maps.</summary>
 public sealed record MaconomyJobSyncOverviewResponse(
     bool Connected,
     bool Enabled,
@@ -57,14 +88,14 @@ public sealed record MaconomyJobSyncOverviewResponse(
     int Failed,
     int Syncing,
     int Waiting,
-    IReadOnlyList<MaconomyJobTypeRow> JobTypes,
+    IReadOnlyList<MaconomyServiceLineRow> ServiceLines,
     IReadOnlyList<MaconomyDepartmentRow> Departments);
 
 /// <summary>
-/// One value of the tenant's REMS Job Type list and the Maconomy template job number it carries
+/// One value of the tenant's REMS Service Line list and the Maconomy template job number it carries
 /// (<c>OptionSetItem.MaconomyNumber</c>, edited under Option Sets), blank while unset.
 /// </summary>
-public sealed record MaconomyJobTypeRow(Guid JobTypeId, string Code, string Label, string? TemplateJobNumber);
+public sealed record MaconomyServiceLineRow(Guid ServiceLineId, string Code, string Label, string? TemplateJobNumber);
 
 /// <summary>One offered value of the tenant's REMS Department list and the Maconomy location number it carries, blank while unset.</summary>
 public sealed record MaconomyDepartmentRow(Guid DepartmentId, string Code, string Label, string? LocationNumber);
@@ -79,7 +110,9 @@ public sealed record MaconomyJobSyncRow(
     string? JobType,
     string? Department,
     DateTime UpdatedOnUtc,
-    RemsMaconomyJobSyncView Sync);
+    RemsMaconomyJobSyncView Sync,
+    /// <summary>How the request's files stand with Maconomy: attachments under the customer, the CAF and purchase order under the job.</summary>
+    RemsMaconomyDocumentsView? Documents = null);
 
 public static class RemsMaconomyJobSyncViews
 {
@@ -132,10 +165,18 @@ public static class RemsMaconomyJobSyncViews
             : For(request, context, stale, canManage, syncedByName);
 
     public static RemsMaconomyJobSyncPreview PreviewFor(
-        RemsRequest request, MaconomyJobSyncContext context, bool stale, bool canManage, string? syncedByName)
+        RemsRequest request, MaconomyJobSyncContext context, bool stale, bool canManage, string? syncedByName,
+        MaconomyJobLookups? lookups = null)
     {
         // The mapped write itself, so the confirmation shows exactly what a press sends.
-        var write = MaconomyJobDataMapping.Map(request, context);
+        var write = MaconomyJobDataMapping.Map(request, context, lookups);
+        var template = write.Values.GetValueOrDefault(MaconomyJobDataMapping.TemplateField) ?? write.InitValues?.GetValueOrDefault(MaconomyJobDataMapping.TemplateField);
+        // The share as a person reads it; Maconomy is sent it in hundredths.
+        var recipients = MaconomyJobDataMapping.CommissionRecipientsOf(request);
+        var commission = Enumerable.Range(0, recipients.Count)
+            .Where(i => write.Values.ContainsKey(MaconomyJobDataMapping.CommissionEmployeeFields[i]))
+            .Select(i => $"{write.Values[MaconomyJobDataMapping.CommissionEmployeeFields[i]]} — {recipients[i].CommissionPercentage:0.##}%")
+            .ToList();
         return new RemsMaconomyJobSyncPreview(
             For(request, context, stale, canManage, syncedByName),
             request.RemsNumber,
@@ -143,17 +184,33 @@ public static class RemsMaconomyJobSyncViews
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.CustomerField),
             request.ServiceLine?.Label,
             request.JobType?.Label,
-            write.Values.GetValueOrDefault(MaconomyJobDataMapping.TemplateField) ?? write.InitValues?.GetValueOrDefault(MaconomyJobDataMapping.TemplateField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.JobTypeField),
+            template,
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.ProjectManagerField),
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.NameField),
             request.Department?.Label,
             write.Values.GetValueOrDefault(MaconomyJobDataMapping.LocationField),
-            write.Values.GetValueOrDefault(MaconomyJobDataMapping.PurchaseOrderField));
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.PurchaseOrderField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.PurchaseOrderStartField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.PurchaseOrderEndField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.MarketingMethodsField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.FiscalYearField),
+            MaconomyJobDataMapping.FiscalYearEndOf(request) is { } end && write.Values.ContainsKey(MaconomyJobDataMapping.FiscalMonthField)
+                ? MaconomyJobDataMapping.MonthNameOf(end)
+                : null,
+            request.Files.Count(f => !f.Deleted && MaconomyDocumentMapping.TargetOf(f.Kind) == MaconomyDocumentTarget.Job),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.AccountManagerField),
+            write.Values.GetValueOrDefault(MaconomyJobDataMapping.BillingManagerField),
+            commission,
+            MaconomyJobDataMapping.MissingNumbersOf(request),
+            NeedsTemplate: string.IsNullOrWhiteSpace(template) && !MaconomyJobSyncRules.IsBudgetOwed(request),
+            FeeEstimate: request.FirstYearFeeEstimate,
+            BudgetOnly: MaconomyJobSyncRules.IsBudgetOwed(request));
     }
 
     public static string MessageFor(RemsMaconomyJobSyncView view) => view.Status switch
     {
-        RemsMaconomySyncStatuses.Synced => $"Maconomy job {view.JobNumber} created.",
+        RemsMaconomySyncStatuses.Synced => $"Maconomy job {view.JobNumber} is in place.",
         RemsMaconomySyncStatuses.Failed => $"The job sync failed: {view.FailureReason}",
         _ => "Sync recorded.",
     };

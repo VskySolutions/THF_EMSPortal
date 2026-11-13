@@ -1,6 +1,7 @@
 # Posting a REMS engagement to Maconomy as a job — plan
 
-**Status: BUILT on 31 Oct 2026, not yet run against Maconomy. Approval trigger BUILT 3 Nov 2026 (section 11).**
+**Status: BUILT on 31 Oct 2026. Approval trigger BUILT 3 Nov 2026 (section 11). Field names confirmed against the
+instance's specification on 12 Nov 2026, and a job has been created from the portal on thmasd01 (section 14).**
 The user settled the shape (section 0)
 and the code in section 4 exists on branch `feat/rems-data-model-v2` (migration
 `20261031090743_AddRemsMaconomyJobSync`, applied by the API on its next start). The job card's field names
@@ -102,16 +103,20 @@ place that says what is sent.
 
 | Job card field (default name) | From | Rule |
 | --- | --- | --- |
-| `templatejobnumber` | the request's Job Template → the Job tab's map; else the tab's default template | required; refused when neither resolves |
+| `templatejobnumber` | the request's Service Line → its Maconomy number (Option Sets → REMS Service Line; section 13); else the configured default template | required; refused when neither resolves |
 | `customernumber` | `Client.MaconomyCustomerNumber` | required; refused when blank |
 | `projectmanagernumber` | the Job tab's project manager number | required; 82 by default |
-| `jobname` | "{client name}.{Service Line label}" — a person as "LastName FirstName", an organisation as its name (user, 31 Oct 2026) | refused when the request names no Service Line |
+| `jobname` | "{client name}-{Job Type label}-{Job Description}", the description left off when blank (user, 13 Nov 2026; was "{client name}.{Service Line label}") — a person as "LastName FirstName", an organisation as its name | refused when the request names no Job Type |
 | `jobnumber` | — | sent empty; read back from the reply |
 | `locationname` | the request's Department → its Maconomy number (Option Sets → REMS Department; section 12) | optional; left out when the department carries none, so the template job's location stands |
 | `text3` | `RemsRequest.PurchaseOrderNumber` (section 12) | optional; left out when blank |
+| `specification2name` | the request's Job Type → its label, or its Maconomy number where one is set (section 13) | optional; left out when the request names no Job Type |
+| `date4`, `date5` | the purchase order's start and end dates on the request's contract (section 14) | optional; left out when blank |
+| `text20` | the chosen marketing methods' labels, joined by ", " (section 14) | optional; left out when none is chosen |
+| `popup1` | the engagement's fiscal year, yyyy, as Popup 1's literal (section 14) | optional; left out when the request has none, or the list does not hold the year |
 
 Not sent in this phase: company, job group (the template job fixes them — the probe's dry run shows what
-it derives), dates, fees, billing, personnel rates, tasks, the REMS number (7.3). Each is a later phase
+it derives), the job's own dates, fees, billing, personnel rates, tasks, the REMS number (7.3). Each is a later phase
 (section 8), none blocks the first job. The location was on this list until 7 Nov 2026 (section 12).
 
 ---
@@ -250,6 +255,8 @@ copy.
    client is in Maconomy, so a job exists before approval.)
 2. ~~Job name~~ DECIDED 31 Oct 2026: "{client name}.{Service Line label}", the person as
    "LastName FirstName", the organisation as its name. A request without a Service Line is refused.
+   CHANGED 13 Nov 2026: "{client name}-{Job Type label}-{Job Description}", the description left off when
+   blank; the tax form and fiscal year are no longer part of it (tax forms were dropped the same day).
 3. **The REMS number is not sent** in this phase, matching the customer decision of 22 Oct. Recommended
    for a later cut: a text field on the job (`description1` or whatever the spec names) carrying the REMS
    number, which gives a duplicate check on re-sync and a way to find the portal's job from Maconomy's side.
@@ -468,3 +475,180 @@ Admin-3, GCS-4, CAS-5, Consulting-6]. 2. Purchase Order -> text3."
 ## 13. Job Type in place of Job Template — BUILT 11 Nov 2026
 
 The Job Template is gone from the Engagement Setup: a 46-value **Job Type** (`REMS.JobType`, independent of the department and service line) names the template job instead, through the same `MaconomyNumber` on its option item, the same `TemplateMap` and the same `ResolveTemplate`; the eligibility messages, the Job tab line and the mapping card say Job Type. The probe in section 5 step 2 is answered: the flag is `template = true` (not `templatejob`), THF has 38 template jobs numbered "ZZ" + the job's name, and 44 job types were seeded with theirs (the thirteen tax types all on ZZTax Compliance; Estate Planning and Internal IT empty by decision). Plan, decisions and what was built: `REMS_JOB_TYPE_PLAN.md`.
+
+**Corrected later on 11 Nov 2026.** The template job follows the **Service Line**, not the Job Type: the
+Service Line's Maconomy number is `templatejobnumber` (THF's ZZ template jobs, seeded on thirteen lines
+from THF's department table; Assurance Services and Non-Chargeable Internal left for the tenant), and the
+**Job Type goes to `specification2name`** by its label, or by its Maconomy number where a tenant sets one
+to say it differently. The job type numbers seeded that morning were cleared.
+
+## 14. Purchase order dates, marketing methods, fiscal year, and documents — BUILT 12 Nov 2026
+
+The user's instruction of 12 Nov 2026 ("New Mapping Confirmed For Maconomy Integration"): PO Start Date →
+Date 4, PO End Date → Date 5, Marketing Methods → Text 20, Fiscal Year End → Popup 1, the PO and CAF files
+→ the job's documents, the Client Information attachments → the customer's documents, with what Maconomy
+gives back kept in the portal. The user's answers the same day: Popup 1's values are years (yyyy); the
+marketing string uses a comma and a space.
+
+### The card fields (in `MaconomyJobDataMapping`)
+
+| Portal field | Card field | Rule |
+| --- | --- | --- |
+| PO Start Date | `date4` | `ClientContract.PurchaseOrderStartDate` of the request's contract, as `yyyy-MM-dd`: the client form's Contract Details for a Government client, or the GCS card's PO Beginning Date (the same column) |
+| PO End Date | `date5` | the same, for the end date |
+| Marketing Methods | `text20` | the chosen methods' labels in the list's order, joined by ", "; whole labels only, within Maconomy's 255 characters |
+| Fiscal Year End | `popup1` | the year (yyyy) of the Tax card's Fiscal Year End, else, on an Assurance engagement, of its Fiscal Year End of Client. Sent as Popup 1's literal for that year; left out when the list does not hold it |
+
+All four are optional and left out when blank. `JobSyncGraph` loads the contract, the marketing methods
+and the files; the confirmation before Sync job now shows the new values.
+
+**Popup 1 on thmasd01 holds no years yet** (12 Nov 2026: its only value is "Copy Actuals"). A popup takes
+one of its own literals, so until THF adds the years to that list the fiscal year is left off the job; the
+confirmation says so ("2026 — not on Maconomy's Popup 1 list, so it is left out"). Nothing needs changing
+in the portal once the years are there.
+
+### Documents
+
+In Maconomy a document is a line of a **document archive**, and a customer or a job points at its archive
+by number ("Customer 900004", "Job 10102"). Everything that names a Maconomy container, field or action
+for this is in `MaconomyDocumentMapping`; `MaconomyDocumentWriter` carries it out; `MaconomyDocumentSyncService`
+decides which file goes when.
+
+- **Which file goes where.** Attachments (Client Information tab) → the client's customer. The signed
+  client acceptance form and the purchase order (Engagement Setup) → the engagement's job.
+- **When.** Only for an approved request. Attachments once the client has a customer number — created by
+  the customer sync, linked by email, or picked from Maconomy; job files once the job is created. A
+  Hangfire job (`MaconomyDocumentSyncJob`, one attempt, no retry) is queued by the customer sync when it
+  lands, by the job sync when it lands, and by the final approval when the client is already a customer.
+  One run per request at a time.
+- **The switches.** Customer documents follow the customer sync's Start/Stop, job documents the job
+  sync's. There is no third switch.
+- **Per file** (`REMS_File`, migration `AddRemsFileMaconomyDocument`): `MaconomyDocumentSyncStatus`
+  (NotSynced, Syncing, Synced, Failed), `MaconomyDocumentArchiveNumber`, `MaconomyDocumentName`,
+  `MaconomyDocumentKey` (the document's own key in Maconomy, where it gives one),
+  `MaconomyDocumentSyncedOnUtc`, `MaconomyDocumentSyncError`. A failed upload never touches the customer or
+  the job, which exist by then; it writes `RemsMaconomyDocumentSynced` / `…SyncFailed` to the activity log.
+- **By hand.** Tenant Settings → Maconomy → Job: the Approved requests table has a Documents column
+  ("2 of 3") and an Upload documents action (`POST /api/integrations/maconomy/documents/{remsId}/run`). Each
+  file's row on the request carries a tag: where it sits in Maconomy, "Not in Maconomy", or the failure.
+- **No doubles.** A copy of a request carries its source's files: an attachment already uploaded for the
+  client (the same media) is marked with the same document instead of being sent again. A name the archive
+  already holds is numbered ("scan (2).pdf"), since the name is half of the document's key.
+- **Not done.** A file removed in the portal is not removed in Maconomy. A host without the file store
+  (the Workers host) leaves uploads to the API, where the files are.
+
+**The routes.**
+
+1. The file: `POST /filedrop/{instance}/create` (File Drop 3.0, the `filedrop:create` link of
+   `GET /filedrop/{instance}`), the bytes as the body, the name in `Content-Disposition`. The reply's
+   `Location` is the drop.
+2. Customer: open a `customercard` instance, load the customer (`…/data;customernumber={n}`), then
+   `POST …/data/panes/card/0/action;name=attachdocument` with `Maconomy-File-Callback: <drop>`. Maconomy
+   makes the customer's archive the first time.
+3. Job: no job container has an attach action (jobs, jobcard, jobinformation, joboverview and others were
+   read). The file is added to the job's archive through `documentarchives`: load the archive, or create it
+   as "Job {number}" and point the job's `documentarchivenumber` at it, then "Add Document" on its table
+   (`…/data/panes/table/init`, then `…/data/panes/table` with the file callback).
+
+### What the read-only check of 12 Nov 2026 settled, and what it could not
+
+Read from thmasd01 through the console harness (specifications, pick lists, one customer and one archive
+loaded, card instances opened and deleted; nothing created):
+
+- Every job card field name — the eight in use since October and the four above — is in the `jobs`
+  specification and was accepted on opening an instance. A customer and a job have both been created from
+  the portal on thmasd01 since (customers 900001 and 900005, job 10102).
+- Popup values travel as literals (`country=fl`, `popup1=nil`); dates as `yyyy-MM-dd`; text fields are 255
+  characters; a key that does not exist answers 204 with no body.
+- The file drop, the customer's attach action and the archive's Add Document are where the instance's own
+  links say they are.
+
+**Not yet run against Maconomy:** the upload itself. Three things are unproven until the first file goes:
+that the drop takes the file name from `Content-Disposition`; that `attachdocument` needs nothing but the
+callback; and the whole job route (an archive the portal creates is not one of Maconomy's "standard"
+archives, whose type cannot be set over the API — whether the job's Documents tab shows it is to be seen).
+Whatever Maconomy answers is recorded on the file, and each of the three is one place in
+`MaconomyGateway` or `MaconomyDocumentWriter` to change.
+
+Checked on a scratch copy of the dev database against a stand-in for Maconomy built from the saved
+specifications (36 checks): creates with the new fields, the two refusals, uploads in order, a refused
+upload then a retry, the numbered name, the copy's attachment, the switch.
+
+## 15. People, commission, fiscal month and year, template by name — BUILT 13 Nov 2026
+
+Supersedes the earlier sections where they differ: the fixed project manager (section 11), the fiscal year
+in Popup 1 (section 14) and "a Service Line without a number blocks the sync" (section 13).
+
+| From | Job card field | Rule |
+|---|---|---|
+| Engagement Executive | `projectmanagernumber` | The Maconomy Number on the user record; left out without one |
+| CSE | `accountmanagernumber` | Same |
+| Billing Manager | `employeenumber6` | Same |
+| Commission recipients 1–3 | `employeenumber8`, `9`, `10` | In the order added; same |
+| Commission share 1–3 | `jobheaderextensionamount1var`, `2var`, `3var` (Amount 1–3) | The percentage, in hundredths as Maconomy holds an amount (40% → 4000); goes only with its recipient |
+| Fiscal year end | `popup2` (month) and `theyear` | "December" looked up in `popup_jobpopuptype2`, the year as a number; nothing when the date is blank |
+| Service Line | `templatejobnumber` | See below |
+
+`Maconomy:JobCard:ProjectManagerNumber` and `DefaultTemplateJobNumber` are no longer read by the mapping.
+`MaconomyCardWrite.NumberFields` names the fields the gateway sends as JSON numbers.
+
+**Template job.** In order: the template picked for the request (`REMS.MaconomyTemplateJobNumber`), the
+number on the Service Line under Option Sets, the one Maconomy template job (`template = true` on `jobs`)
+whose name equals the Service Line's label. With none, the attempt fails with "No Maconomy template job is
+named as the Service Line "…"" and nothing is posted. Sync job now then reads Maconomy's templates
+(`GET …/maconomy-job-sync/templates`), asks which to use, and posts the pick with the press
+(`{ templateJobNumber }`); the pick is checked against Maconomy's list and kept on the request. It is not
+remembered for the Service Line (user's decision): an administrator sets the line's number for that.
+A missing template or project manager no longer blocks the button; the sync finds out when it runs.
+
+**A refused job.** When Maconomy refuses the create and people on the engagement have no Maconomy Number,
+the failure reason ends with who they are and where to add the number (Administration → Users).
+
+**Instance facts (thmasd01, read-only, 13 Nov 2026).** `popup_jobpopuptype2` holds January–December;
+`theyear` is an integer; the card's Amount 1–3 are the `jobheaderextensionamount…var` fields; 38 template
+jobs, numbered "ZZ" + their name. Employee fields are checked against employee records the integration user
+can see, and it sees 24 of them, none of the account managers in use: a job naming one of those is refused
+("There is no access to Employee …") until the Maconomy administrator grants access.
+
+**Live on thmasd01, 13 Nov 2026:** job 10108 under test customer 900009, template found by name ("Tax
+Compliance" → ZZTax Compliance), project manager 82, employees 6/8/9/10, `popup2` december, `theyear` 2026.
+Two things it taught: an amount is a whole number of hundredths (35.5 was stored as 35; the shares were
+rewritten as 4000 / 3550 / 2450 and read back so), and `accountmanagernumber` takes only an employee
+Maconomy has set up as an account manager ("Employee no. 101 … is not set up as account manager") — none
+of the 24 employees the integration user sees is one, so that field is unproven.
+
+**Checked** without a database or Maconomy (30 checks): the mapping against the saved job specification,
+template resolution, and the gateway sending the year and the amounts as numbers. Not run: the job sync
+service end to end, and the pick dialog in a browser.
+
+## 16. First-Year Fee Estimate on the job's budget — BUILT 13 Nov 2026
+
+User's mapping: Job → Budget, activity type Amount, line type Outlay, task FEE, quantity 1, billing price =
+First-Year Fee Estimate. Lives in `Mapping/MaconomyJobBudgetDataMapping.cs`.
+
+| From | `jobbudgets` table field | Rule |
+|---|---|---|
+| (fixed) | `linetype` = `outlay`, `taskname` = `FEE` | Finds the line; not written |
+| (fixed) | `numberof` | 1, as a number |
+| First-Year Fee Estimate | `billingpricecurrency` | In hundredths, as a number (12,500.50 → 1250050); nothing is written when the estimate is blank |
+
+**Instance facts (thmasd01, read-only, 13 Nov 2026).** A job created from a template already carries the
+line: job 10108 (template ZZTax Compliance) has one budget line — activity FEE "Fee Estimate", type
+`amount`, line type `outlay`, task `FEE`, quantity 1, billing price 10000. `activitytype` cannot be
+written: Maconomy reads it from the activity. A line is saved in place with POST `…/panes/table/{row}`.
+Adding a line was NOT made to work: the budget table has line number control and `…/table/init`
+answers "A row parameter is required on record initialization" to `?row=end`, `?row=1`, `?row=0` and
+`;row=end` (and 404 to the row in the path).
+
+**So** the sync updates the template's FEE line and never adds one. When the budget has no Outlay line on
+task FEE the attempt fails with a message saying so.
+
+**Flow.** After the job create is recorded, `REMS.IsMaconomyJobBudgetSyncPending` is set when there is an
+estimate, and the line is written. A failure leaves the job number in place, marks the job sync Failed
+with "Job N is in Maconomy, but the First-Year Fee Estimate could not be put on its budget: …", and the
+next Sync job now (or queued run) does only the budget — no second job. The confirmation then reads
+"Finish the Maconomy job / Set budget".
+
+**Checked** without Maconomy (37 checks): the mapping, the gateway saving row 1 of a two-line table with
+only quantity and price as numbers, and nothing written when no line matches. NOT run: the budget write
+against Maconomy, and the sync service end to end.

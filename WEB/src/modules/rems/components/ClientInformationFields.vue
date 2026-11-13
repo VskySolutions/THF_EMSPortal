@@ -164,6 +164,10 @@
           </template>
         </app-text-field>
         <app-text-field
+          v-if="SHOW_MIDDLE_NAME" v-model="model.clientMiddleName" label="Middle Name" maxlength="100"
+          :class="namePartCols" :readonly="nameReadonly"
+        />
+        <app-text-field
           v-model="model.clientLastName" label="Last Name" required
           :class="namePartCols" :readonly="nameReadonly"
           :rules="nameRules('Last Name')"
@@ -345,7 +349,7 @@
       <div class="column q-gutter-xs">
         <app-stored-file-item
           v-for="file in files" :key="file.id"
-          :file="file" :removable="!readonly" :disable="removingId === file.id"
+          :file="file" :tag="maconomyDocumentTag(file.maconomy)" :removable="!readonly" :disable="removingId === file.id"
           @remove="removeFile(file)"
         />
       </div>
@@ -380,6 +384,8 @@ import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppMultiFileUpload from "components/common/AppMultiFileUpload.vue";
 import AppStoredFileItem from "components/common/AppStoredFileItem.vue";
 import SuffixField from "modules/rems/components/SuffixField.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
+import { maconomyDocumentTag } from "modules/rems/maconomySync";
 
 const props = defineProps({
   modelValue: { type: Object, required: true },

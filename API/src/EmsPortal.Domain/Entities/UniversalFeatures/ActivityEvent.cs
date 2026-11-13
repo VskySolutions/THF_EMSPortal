@@ -111,4 +111,8 @@ public static class ActivityEventTypes
     // The job sync: what became of posting the engagement to Maconomy as a job.
     public const string RemsMaconomyJobSynced = "RemsMaconomyJobSynced";
     public const string RemsMaconomyJobSyncFailed = "RemsMaconomyJobSyncFailed";
+
+    // The document upload: what became of filing one of the request's files under its customer or job in Maconomy.
+    public const string RemsMaconomyDocumentSynced = "RemsMaconomyDocumentSynced";
+    public const string RemsMaconomyDocumentSyncFailed = "RemsMaconomyDocumentSyncFailed";
 }

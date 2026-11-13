@@ -3,8 +3,9 @@ namespace EmsPortal.Application.Abstractions.Integrations.Maconomy;
 /// <summary>
 /// The Maconomy numbers a tenant's option items carry (<c>OptionSetItem.MaconomyNumber</c>), read once
 /// per call and kept briefly: the specification 6 number on each REMS Entity Type, the specification 1
-/// number on each REMS Industry, the template job number on each REMS Job Type, the location number
-/// on each REMS Department. Every translation between a portal code and a Maconomy number goes through
+/// number on each REMS Industry, the template job number on each REMS Service Line, the specification 2
+/// value on each REMS Job Type (its label where none is set), the location number on each REMS Department.
+/// Every translation between a portal code and a Maconomy number goes through
 /// the map; nothing holds a table of its own.
 /// </summary>
 public interface IMaconomyNumberMaps
@@ -24,29 +25,42 @@ public sealed record MaconomyNumbered(Guid ItemId, string Code, string Label, st
 public sealed class MaconomyNumberMap
 {
     public static readonly MaconomyNumberMap Empty = new(
-        Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>());
+        Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>(),
+        Array.Empty<MaconomyNumbered>(), Array.Empty<MaconomyNumbered>());
 
     public MaconomyNumberMap(
         IReadOnlyList<MaconomyNumbered> entityTypes,
         IReadOnlyList<MaconomyNumbered> industries,
+        IReadOnlyList<MaconomyNumbered> serviceLines,
         IReadOnlyList<MaconomyNumbered> jobTypes,
         IReadOnlyList<MaconomyNumbered> departments)
     {
         EntityTypes = entityTypes;
         Industries = industries;
+        ServiceLines = serviceLines;
         JobTypes = jobTypes;
         Departments = departments;
-        TemplateMap = ByItem(jobTypes);
+        TemplateMap = ByItem(serviceLines);
         LocationMap = ByItem(departments);
+        JobTypeValueMap = jobTypes.ToDictionary(
+            i => i.ItemId,
+            i => string.IsNullOrWhiteSpace(i.Number) ? i.Label.Trim() : i.Number!.Trim());
     }
 
     public IReadOnlyList<MaconomyNumbered> EntityTypes { get; }
     public IReadOnlyList<MaconomyNumbered> Industries { get; }
+    public IReadOnlyList<MaconomyNumbered> ServiceLines { get; }
     public IReadOnlyList<MaconomyNumbered> JobTypes { get; }
     public IReadOnlyList<MaconomyNumbered> Departments { get; }
 
-    /// <summary>REMS Job Type item id → template job number, for the items that carry one.</summary>
+    /// <summary>REMS Service Line item id → template job number, for the lines that carry one.</summary>
     public IReadOnlyDictionary<Guid, string> TemplateMap { get; }
+
+    /// <summary>
+    /// REMS Job Type item id → what the job card's specification 2 is given: the item's Maconomy number
+    /// where one is set, its label otherwise (the list was supplied as Maconomy names it).
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> JobTypeValueMap { get; }
 
     /// <summary>REMS Department item id → Maconomy location number, for the items that carry one.</summary>
     public IReadOnlyDictionary<Guid, string> LocationMap { get; }

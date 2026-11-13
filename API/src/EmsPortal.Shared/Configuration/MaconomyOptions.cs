@@ -13,6 +13,15 @@ public sealed class MaconomyOptions
     /// <summary>Seconds to wait for Maconomy before a call is given up.</summary>
     public int TimeoutSeconds { get; set; } = 15;
 
+    /// <summary>Seconds to wait for Maconomy to take one uploaded document.</summary>
+    public int UploadTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>Seconds a Maconomy pick list (the country list, a job popup) is kept before it is read again.</summary>
+    public int PickListCacheSeconds { get; set; } = 600;
+
+    /// <summary>Minutes after which a file still marked as uploading is taken to be an attempt the portal lost track of.</summary>
+    public int DocumentSyncStaleMinutes { get; set; } = 10;
+
     /// <summary>
     /// How long Maconomy keeps a reconnect token alive. A token older than this, less
     /// <see cref="TokenRefreshMarginSeconds"/>, is replaced before a call rather than after the 401.
@@ -82,7 +91,7 @@ public sealed class MaconomyJobCardOptions
     /// <summary>The Maconomy employee number every job names as project manager (THF: 82). Null refuses every sync, naming this key.</summary>
     public string? ProjectManagerNumber { get; set; }
 
-    /// <summary>The template job used when a request's Job Type carries no Maconomy number, or the request names none. Null refuses such a request.</summary>
+    /// <summary>The template job used when a request's Service Line carries no Maconomy number, or the request names none. Null refuses such a request.</summary>
     public string? DefaultTemplateJobNumber { get; set; }
 }
 

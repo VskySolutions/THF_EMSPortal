@@ -11,6 +11,8 @@ namespace EmsPortal.Application.Integrations.Maconomy;
 public sealed class MaconomyCustomerWriter : IMaconomyCustomerWriter
 {
     private const int EmailMatchesMax = 50;
+    private const int CompanyNumbersMax = 1_000_000;
+    private const int FreeNumberTries = 25;
 
     private readonly IMaconomySessionManager _session;
     private readonly IMaconomyGateway _gateway;
@@ -49,6 +51,36 @@ public sealed class MaconomyCustomerWriter : IMaconomyCustomerWriter
                 Optional(r, MaconomyCustomerDataMapping.EmailField), Optional(r, MaconomyCustomerDataMapping.PhoneField)))
             .Where(c => c.Number.Length > 0 && string.Equals(c.Email?.Trim(), term, StringComparison.OrdinalIgnoreCase))
             .ToList();
+    }
+
+    public async Task<string> NextContactCompanyNumberAsync(MaconomyConnection connection, CancellationToken cancellationToken = default)
+    {
+        var endpoint = new MaconomyEndpoint(connection.BaseUrl, connection.InstanceCode);
+        // Every company number in one read: the filter compares numbers as text, so the highest cannot be asked for.
+        var companies = await _session.InvokeAsync(
+            connection,
+            (token, ct) => _gateway.FilterAsync(
+                endpoint, token, MaconomyContactCompanyDataMapping.Container,
+                new MaconomyFilterRequest(string.Empty, new[] { MaconomyContactCompanyDataMapping.NumberField }, CompanyNumbersMax), ct),
+            cancellationToken);
+        var next = MaconomyContactCompanyDataMapping.NextNumber(
+            companies.Records.Select(r => r.GetValueOrDefault(MaconomyContactCompanyDataMapping.NumberField)));
+        for (var tries = 0; tries < FreeNumberTries; tries++, next++)
+        {
+            var number = next.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var held = await _session.InvokeAsync(
+                connection,
+                (token, ct) => _gateway.FilterAsync(
+                    endpoint, token, MaconomyCustomerService.CustomerContainer,
+                    new MaconomyFilterRequest($"{MaconomyCustomerDataMapping.NumberField} = '{number}'", new[] { MaconomyCustomerDataMapping.NumberField }, 1), ct),
+                cancellationToken);
+            if (held.Records.Count == 0)
+            {
+                return number;
+            }
+        }
+        throw new MaconomyException(
+            MaconomyFailure.Rejected, $"No free number was found for a new contact company near {next}. Ask your Maconomy administrator which number to use next.");
     }
 
     private static string Value(IReadOnlyDictionary<string, string?> record, string field)

@@ -23,6 +23,9 @@ public sealed class RemsFormPayloadV1
     /// </summary>
     public string? ClientSuffix { get; set; }
 
+    /// <summary>An individual client's middle name. Omitted leaves the record's alone; "" clears it.</summary>
+    public string? ClientMiddleName { get; set; }
+
     /// <summary>
     /// The courtesy title an individual client was once asked for — Mr., Mrs., Ms., Dr. RETIRED from
     /// the form.
@@ -536,7 +539,8 @@ public sealed record RemsPublicPrefill(
     string? ClientLastName,
     string? ClientSuffix,
     string Email,
-    string? MobileNumber);
+    string? MobileNumber,
+    string? ClientMiddleName = null);
 
 /// <summary>Draft auto-save acknowledgement (WO-113 PUT draft).</summary>
 public sealed record RemsDraftSavedResponse(DateTime LastSavedOnUtc);

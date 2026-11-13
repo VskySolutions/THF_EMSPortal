@@ -19,6 +19,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsActive).IsRequired();
         builder.Property(u => u.MustChangePassword).IsRequired();
         builder.Property(u => u.TokenVersion).IsRequired();
+        builder.Property(u => u.MaconomyNumber).HasMaxLength(64);
         builder.Property(u => u.CreatedDate).IsRequired();
 
         builder.HasIndex(u => u.Email).IsUnique().HasFilter("[Deleted] = 0");

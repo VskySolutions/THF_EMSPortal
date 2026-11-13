@@ -423,8 +423,6 @@
                   :dept-options="departmentOptions"
                   :service-line-options="serviceLineOptions"
                   :job-type-options="jobTypeOptions"
-                  :tax-form-options="taxFormOptions"
-                  :tax-form-unavailable="taxFormUnavailable"
                   :department-directors="workspace?.departmentDirectors || []"
                   :executive-options="executiveChoices"
                   :billing-manager-options="billingManagerChoices"
@@ -511,6 +509,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
+import { SHOW_MIDDLE_NAME, SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 import { useNotify } from "composables/useNotify";
 import { formatDateOnly, useDateFormat } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
@@ -557,7 +556,7 @@ const { entityTypeOptions, load: loadEntityTypes } = useRemsEntityTypes();
 const {
   departmentOptions, serviceLineOptions, jobTypeOptions, industryOptions,
   marketingGroups, marketingUnavailable,
-  taxFormOptions, taxFormUnavailable, billingPeriodOptions, personnelLevelOptions,
+  billingPeriodOptions, personnelLevelOptions,
   load: loadEngagementOptions
 } = useRemsEngagementOptionSets();
 
@@ -624,6 +623,8 @@ const blankClient = () => ({
   clientCorporateName: "",
   // The generational suffix, kept apart from the name — see ClientInformationFields for why.
   clientNameSuffix: "",
+  // Hidden for now (remsFeatureFlags).
+  clientMiddleName: "",
   customerEmail: "",
   customerMobileNumber: "",
   type: "",
@@ -1261,21 +1262,21 @@ const setupRows = computed(() => {
         { label: "Purchase Order", value: e.government?.purchaseOrderMediaId ? "On file" : "Not yet provided" },
         // The rate card, one "level: rate" per entry. Read by the label the API resolved off the same list
         // the picker uses, so a level since retired from it still has a name.
-        {
-          label: "Bill Rate by Personnel Level",
-          value: withheld || (e.government?.personnelRates || []).map((r) =>
-            `${r.personnelLevelLabel || labelOf(personnelLevelOptions.value, r.personnelLevel)}: ${currency(r.billRatePerHour)}/hr`),
-          wide: true
-        }
+        ...(SHOW_BILL_RATES
+          ? [{
+            label: "Bill Rate by Personnel Level",
+            value: withheld || (e.government?.personnelRates || []).map((r) =>
+              `${r.personnelLevelLabel || labelOf(personnelLevelOptions.value, r.personnelLevel)}: ${currency(r.billRatePerHour)}/hr`),
+            wide: true
+          }]
+          : [])
       ]
       : []),
     ...(isTaxDepartment(e.department)
       ? [
         { label: "Fiscal Year End", value: dateOnly(e.tax?.fiscalYearEnd) },
         { label: "Original Due Date", value: dateOnly(e.tax?.originalDueDate) },
-        { label: "First Extension Due Date", value: dateOnly(e.tax?.firstExtensionDueDate) },
-        // One per REMS; the list the API carries holds at most one.
-        { label: "Tax Form", value: labelOf(taxFormOptions.value, e.tax?.taxFormIds?.[0]) }
+        { label: "First Extension Due Date", value: dateOnly(e.tax?.firstExtensionDueDate) }
       ]
       : []),
     // The remaining conditional blocks say nothing when they do not apply, so they are hidden rather than
@@ -1363,6 +1364,7 @@ const seedForms = (detail, ws) => {
   clientForm.clientLastName = detail.clientLastName || "";
   clientForm.clientCorporateName = detail.clientCorporateName || "";
   clientForm.clientNameSuffix = detail.clientNameSuffix || "";
+  clientForm.clientMiddleName = detail.clientMiddleName || "";
   clientForm.customerEmail = detail.customerEmail || "";
   clientForm.customerMobileNumber = detail.customerMobileNumber || "";
   clientForm.type = detail.type || "";
@@ -1462,6 +1464,8 @@ const typedClientPayload = () => ({
   clientLastName: clientForm.clientLastName || "",
   clientCorporateName: clientForm.clientCorporateName || "",
   clientNameSuffix: clientForm.clientNameSuffix || "",
+  // Not sent while the box is hidden: an omitted middle name leaves the record's alone.
+  ...(SHOW_MIDDLE_NAME ? { clientMiddleName: (clientForm.clientMiddleName || "").trim() } : {}),
   customerEmail: clientForm.customerEmail || null,
   customerMobileNumber: clientForm.customerMobileNumber || null,
   existingClientReferenceId: clientForm.existingClientReferenceId || null
@@ -1894,8 +1898,8 @@ const copyRequest = async () => {
   const ok = await confirm({
     title: "Copy this request",
     message: `A new draft for ${request.value?.clientName || "the same client"} with this engagement setup ` +
-      "carried over — team, fees, marketing tags, commission and files. Its fiscal year end, due dates and " +
-      "tax form start blank. Continue?",
+      "carried over — team, fees, marketing tags, commission and files. Its fiscal year end and due dates " +
+      "start blank. Continue?",
     confirmLabel: "Copy"
   });
   if (!ok) return;

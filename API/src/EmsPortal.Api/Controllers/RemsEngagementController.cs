@@ -40,12 +40,10 @@ public sealed class RemsEngagementController : ControllerBase
 {
     private const string CodeEngagementLocked = "REMS_ENGAGEMENT_LOCKED";
     private const string CodeIntakeReadOnly = "REMS_INTAKE_READ_ONLY";
-    private const string CodeTaxFormTaken = "REMS_TAX_FORM_TAKEN";
     // STATIC-APPROVAL-POLICY
     private const string CodeCommissionReserved = "REMS_COMMISSION_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
-    private const string TaxFormSetKey = "REMS.TaxForm";
     private const string PrimaryContactCode = "primary_client_contact";
 
     private readonly IRemsRequestRepository _requests;
@@ -938,8 +936,9 @@ public sealed class RemsEngagementController : ControllerBase
 
         // The rate card's levels are codes off the REMS.PersonnelLevel list, resolved before anything is
         // written: a code the list does not carry is refused, not dropped on the floor.
+        // No rate card in the request leaves the stored one alone: the card is hidden on the form.
         var desiredRates = new Dictionary<Guid, decimal>();
-        foreach (var rate in request.PersonnelRates)
+        foreach (var rate in request.PersonnelRates ?? new())
         {
             // A level without a rate is a level the engagement is not staffed at.
             if (rate.BillRatePerHour is not { } billRate)
@@ -967,7 +966,7 @@ public sealed class RemsEngagementController : ControllerBase
         // Reconcile the rate card by level: a level the request no longer prices comes off, one it newly
         // prices goes on, and the rest just take the rate they were sent.
         var existingRates = rems.PersonnelRates.Where(r => !r.Deleted).ToList();
-        foreach (var rate in existingRates.Where(r => !desiredRates.ContainsKey(r.PersonnelLevelId)))
+        foreach (var rate in existingRates.Where(r => request.PersonnelRates is not null && !desiredRates.ContainsKey(r.PersonnelLevelId)))
         {
             rems.PersonnelRates.Remove(rate);
             _requests.RemovePersonnelRate(rate);
@@ -1112,8 +1111,8 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// Set the tax engagement detail (AC-REMS-014.14): the fiscal year end (which recomputes the
-    /// due-date schedule) and the tax-form checklist.
+    /// Set the tax engagement detail (AC-REMS-014.14): the fiscal year end, which recomputes the
+    /// due-date schedule.
     /// </summary>
     [HttpPut("engagements/{id:guid}/tax")]
     [RequireAnyPermission(Permissions.RemsEngagementsManage, Permissions.RemsRequestsUpdate)]
@@ -1126,18 +1125,6 @@ public sealed class RemsEngagementController : ControllerBase
             return refusal!;
         }
 
-        // Validate the tax-form ids against the REMS.TaxForm option set.
-        if (request.TaxFormIds.Count > 0)
-        {
-            var valid = await ResolveOptionItemIdsAsync(TaxFormSetKey, cancellationToken);
-            var unknown = request.TaxFormIds.Where(f => !valid.Contains(f)).ToList();
-            if (unknown.Count > 0)
-            {
-                return BadRequest(ApiResponseFactory.Error(
-                    ApiErrorCodes.ValidationFailed, "Validation failed.", "One or more taxFormIds are not valid REMS tax forms."));
-            }
-        }
-
         // The year end is the engagement's: a client with a return a year holds several. The client's own
         // year end, Assurance's question, is filled from it only while it is still empty.
         rems.FiscalYearEnd = request.FiscalYearEnd;
@@ -1147,94 +1134,16 @@ public sealed class RemsEngagementController : ControllerBase
             client.FiscalYearEnd = request.FiscalYearEnd;
             _clients.Update(client);
         }
-        if (await TaxFormTakenAsync(rems, request.FiscalYearEnd, request.TaxFormIds, cancellationToken) is { } taken)
-        {
-            return taken;
-        }
 
         // Every date is a row: the rule fills in what was left blank and steps aside for what was typed,
         // and a typed date is remembered as an override by whoever typed it.
         await WriteTaxDueDatesAsync(rems, request, User.GetUserId(), cancellationToken);
-
-        // Reconcile the tax-form checklist rows by TaxFormId.
-        var existingForms = rems.TaxForms.Where(f => !f.Deleted).ToList();
-        var desiredForms = request.TaxFormIds.Distinct().ToList();
-        foreach (var form in existingForms.Where(f => !desiredForms.Contains(f.TaxFormId)))
-        {
-            rems.TaxForms.Remove(form);
-            _requests.RemoveTaxForm(form);
-        }
-        foreach (var formId in desiredForms.Where(f => existingForms.All(x => x.TaxFormId != f)))
-        {
-            var created = new RemsTaxForm
-            {
-                Id = Guid.NewGuid(),
-                TenantId = rems.TenantId,
-                REMSId = rems.Id,
-                TaxFormId = formId,
-            };
-            rems.TaxForms.Add(created);
-            await _requests.AddTaxFormAsync(created, cancellationToken);
-        }
 
         await LogEngagementUpdatedAsync(rems.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var view = await BuildEngagementViewAsync(id, cancellationToken);
         return Ok(ApiResponseFactory.Success(view!, "Tax engagement detail updated."));
-    }
-
-    /// <summary>
-    /// The forms the client's other requests hold for a fiscal year end, so the picker can grey each with
-    /// the request holding it. Empty without a year end: the rule is per year.
-    /// </summary>
-    [HttpGet("engagements/{id:guid}/tax/taken-forms")]
-    [Authorize]
-    [ProducesResponseType<ApiResponse<IEnumerable<RemsTakenTaxFormView>>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> TakenTaxForms(Guid id, [FromQuery] DateOnly? fiscalYearEnd, CancellationToken cancellationToken)
-    {
-        var rems = await _requests.GetByIdAsync(id, cancellationToken);
-        if (rems is null)
-        {
-            return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-        if (GuardCanRead(rems) is { } notAllowed)
-        {
-            return notAllowed;
-        }
-
-        IReadOnlyList<RemsTaxFormHolder> holders = fiscalYearEnd is { } fye
-            ? await _requests.ListTaxFormHoldersAsync(rems.ClientId, fye, rems.Id, cancellationToken)
-            : Array.Empty<RemsTaxFormHolder>();
-        var rows = holders.Select(h => new RemsTakenTaxFormView(h.TaxFormId, h.RemsId, h.RemsNumber, h.Status)).ToList();
-        return Ok(ApiResponseFactory.Success(rows, "Taken tax forms retrieved."));
-    }
-
-    /// <summary>
-    /// The refusal for a form another request of the client already holds for the same year end, or null.
-    /// A client holds each form once a year; the two tables that say so cannot be tied by an index.
-    /// </summary>
-    private async Task<IActionResult?> TaxFormTakenAsync(
-        RemsRequest rems, DateOnly? fiscalYearEnd, IReadOnlyCollection<Guid> formIds, CancellationToken cancellationToken)
-    {
-        if (fiscalYearEnd is not { } fye || formIds.Count == 0)
-        {
-            return null;
-        }
-        var holders = await _requests.ListTaxFormHoldersAsync(rems.ClientId, fye, rems.Id, cancellationToken);
-        if (holders.FirstOrDefault(h => formIds.Contains(h.TaxFormId)) is not { } clash)
-        {
-            return null;
-        }
-        var label = await TaxFormLabelAsync(clash.TaxFormId, cancellationToken) ?? "That form";
-        var message = $"{label} is already on {clash.RemsNumber} for the fiscal year ending {fye:d MMM yyyy}. A client holds each form once a year.";
-        return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(CodeTaxFormTaken, message, message));
-    }
-
-    private async Task<string?> TaxFormLabelAsync(Guid formId, CancellationToken cancellationToken)
-    {
-        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), EntityType.Rems, TaxFormSetKey, cancellationToken);
-        return set?.Items.FirstOrDefault(i => i.Id == formId)?.Label;
     }
 
     private async Task WriteTaxDueDatesAsync(RemsRequest rems, UpdateRemsTaxDetailRequest request, Guid? me, CancellationToken cancellationToken)
@@ -1343,7 +1252,7 @@ public sealed class RemsEngagementController : ControllerBase
     }
 
     /// <summary>
-    /// Set the engagement commission splits (AC-REMS-016): up to ten recipients, each &gt; 0 and &lt;=
+    /// Set the engagement commission splits (AC-REMS-016): up to three recipients, each &gt; 0 and &lt;=
     /// 100, allocating no more than 100% in total.
     /// </summary>
     [HttpPut("engagements/{id:guid}/commission")]
