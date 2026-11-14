@@ -58,4 +58,10 @@ public enum EmailTemplateKey
     /// Sent to the developer addresses named on the tenant, never to its users. On the email allowlist.
     /// </summary>
     MaconomyConnectionDisabled = 17,
+
+    /// <summary>
+    /// REMS external email to the client, confirming the COP form they have just submitted was received.
+    /// Sent only when the client submits it themselves. On the email allowlist.
+    /// </summary>
+    RemsFormReceived = 18,
 }

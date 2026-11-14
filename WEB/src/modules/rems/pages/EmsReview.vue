@@ -4,7 +4,7 @@
       :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'COP Review' }]"
       :search="search"
       show-search
-      search-placeholder="Search REMS number or client"
+      :search-placeholder="`Search ${siteName} number or client`"
       show-filters
       :filter-count="filterChips.length"
       show-back
@@ -233,6 +233,7 @@ import { useRouter } from "vue-router";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useRowPersonalisation, MAX_PINS_PER_TYPE } from "composables/uf/useRowPersonalisation";
@@ -261,6 +262,7 @@ import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySy
 import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
 
 const notify = useNotify();
+const siteName = useSiteName();
 // Only for Copy: the new draft opens for editing at once.
 const router = useRouter();
 const { confirm } = useConfirm();

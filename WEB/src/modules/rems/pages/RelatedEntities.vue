@@ -4,7 +4,7 @@
       :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'Related Entities' }]"
       :search="search"
       show-search
-      search-placeholder="Search REMS number, client or related client"
+      :search-placeholder="`Search ${siteName} number, client or related client`"
       show-filters
       :filter-count="allChips.length"
       show-back
@@ -194,6 +194,7 @@ import { ref, reactive, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
 import { useFilterMemory } from "composables/useFilterMemory";
@@ -219,6 +220,7 @@ import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 import RelatedClientsCell from "modules/rems/components/RelatedClientsCell.vue";
 
 const notify = useNotify();
+const siteName = useSiteName();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const {
@@ -244,7 +246,7 @@ onMounted(async () => {
 // box; the client is a dropdown of the clients on the list, every date column filters as a From/To range,
 // and Related Clients is a count with no filter worth offering.
 const columns = computed(() => [
-  { name: "remsNumber", label: "REMS ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
+  { name: "remsNumber", label: `${siteName.value} ID`, field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "clientName", label: "Client Name", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: true, filterOptions: entityTypeOptions.value },
   { name: "submittedOnUtc", label: "Submitted On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },

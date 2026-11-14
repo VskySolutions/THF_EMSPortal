@@ -122,6 +122,13 @@ export function remsServiceLineOptions (options, department, selected = null) {
 export const remsServiceLineFitsDepartment = (department, serviceLine) =>
   fitsUnder(REMS_SERVICE_LINES_BY_DEPARTMENT[department], CLAIMED_SERVICE_LINE_CODES, serviceLine);
 
+// Not offered on Engagement Setup (user, 13 Nov 2026). Still on the option lists, and a request already
+// filed under either keeps showing it.
+export const REMS_HIDDEN_DEPARTMENTS = Object.freeze(["admin"]);
+export const REMS_HIDDEN_SERVICE_LINES = Object.freeze(["non_chargeable_internal"]);
+export const remsWithoutHidden = (options, hidden, selected = null) =>
+  options.filter((o) => !hidden.includes(o.value) || o.value === selected);
+
 // ---------------------------------------------------------------------------------------------------
 // THERE ARE NO LABEL, COLOUR OR DESCRIPTION MAPS IN THIS FILE. Every word, colour and icon a REMS value is
 // rendered with comes from its OPTION SET — the tenant's own copy.

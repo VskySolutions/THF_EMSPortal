@@ -1,4 +1,5 @@
 import { EntityType } from "services/api";
+import { useBrandingStore } from "stores/branding";
 
 // Display metadata + permalink routing for each Universal Features entity type.
 // Used by cross-entity surfaces (Pinned Records, Mention Inbox, Activity, permalinks).
@@ -20,7 +21,7 @@ const META = {
   },
   // REMS request/approval.
   [EntityType.Rems]: {
-    label: "REMS",
+    get label () { return useBrandingStore().appName; },
     icon: "o_assignment",
     route: (id) => ({ name: "rems_request", params: { id } })
   }

@@ -21,6 +21,9 @@ public interface IRemsEmailNotifier
 
     /// <summary>Queues the "form submitted" email to the assigned Admin + CSE for a REMS request.</summary>
     void SendFormSubmitted(Guid tenantId, string toEmail, RemsFormSubmittedEmail model);
+
+    /// <summary>Queues the "we have received your form" confirmation to the client who submitted it.</summary>
+    void SendFormReceived(Guid tenantId, string toEmail, RemsFormReceivedEmail model);
 }
 
 /// <summary>Placeholder values for <see cref="EmailTemplateKey.RemsFormLink"/>.</summary>
@@ -28,3 +31,6 @@ public sealed record RemsFormLinkEmail(string ClientName, string FormLink, strin
 
 /// <summary>Placeholder values for <see cref="EmailTemplateKey.RemsFormSubmitted"/>.</summary>
 public sealed record RemsFormSubmittedEmail(string ClientName, string RemsNumber, string RequestLink, string SubmittedOn);
+
+/// <summary>Placeholder values for <see cref="EmailTemplateKey.RemsFormReceived"/>.</summary>
+public sealed record RemsFormReceivedEmail(string ClientName, string RemsNumber);

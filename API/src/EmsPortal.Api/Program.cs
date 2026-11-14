@@ -42,6 +42,8 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<ValidationActionFilter>();
     // Every page and limit query value lands inside Limits:Paging before any action reads it.
     options.Filters.Add<PagingClampFilter>();
+    // "REMS" in a response message is said as the tenant's site name.
+    options.Filters.Add<SiteWordingResultFilter>();
 });
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(
     options => options.SuppressModelStateInvalidFilter = true);

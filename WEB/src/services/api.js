@@ -347,6 +347,14 @@ export const emailTemplateApi = {
   preview: (key, payload, params) => api.post(`/api/admin/email-templates/${key}/preview`, payload, { params }).then(unwrap)
 };
 
+// Every email the tenant's site tried to send, read-only (email.manage).
+export const emailLogApi = {
+  // params: { page, limit, search, status, templateKey, opened, from, to }
+  list: (params) => api.get("/api/admin/email-logs", { params }).then(envelope),
+  // → { email, body }
+  get: (id) => api.get(`/api/admin/email-logs/${id}`).then(unwrap)
+};
+
 // How an option list orders its items. Mirrors EmsPortal.Domain.Enums.OptionItemSortMode.
 export const OptionItemSortMode = Object.freeze({
   AlphabeticalAsc: "AlphabeticalAsc",

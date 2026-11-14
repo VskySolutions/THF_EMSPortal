@@ -1,10 +1,10 @@
 <template>
   <q-page padding>
     <app-list-header
-      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'REMS Approvals' }]"
+      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: `${siteName} Approvals` }]"
       :search="search"
       show-search
-      search-placeholder="Search REMS number or client"
+      :search-placeholder="`Search ${siteName} number or client`"
       show-filters
       :filter-count="filterChips.length"
       show-back
@@ -14,7 +14,7 @@
     >
       <template #note>
         <template v-if="seesTenant">
-          Every request of <strong>{{ tenantName }}</strong> that has been sent for approval — one row each,
+          Every request of <strong>{{ siteName }}</strong> that has been sent for approval — one row each,
           on the round it is on now, and nothing from any other tenant.
           <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
           every approver has signed; <strong>Approvers</strong> shows where each of them stands.
@@ -227,7 +227,7 @@ import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useRemsMeta, REMS_ROUND_PARTIALLY_APPROVED } from "modules/rems/useRemsMeta";
 import { useAuthStore } from "stores/auth";
-import { useTenantStore } from "stores/tenant";
+import { useSiteName } from "composables/useSiteName";
 import { useTenantScope } from "composables/useTenantScope";
 
 import AppListHeader from "components/common/AppListHeader.vue";
@@ -257,11 +257,10 @@ const {
 const seesTenant = computed(() => auth.roles.includes("SuperAdmin") || auth.roles.includes("TenantAdmin"));
 // The tenant the rows belong to, named in the title so the scope is never in doubt: a Tenant Admin's own
 // tenant, or the one a Super Admin has picked in the tenant selector (the API follows the same pick).
-const tenantStore = useTenantStore();
-const { canScopeTenant, isScoped, scopedTenantName } = useTenantScope();
-const tenantName = computed(() =>
-  (isScoped.value && scopedTenantName.value) || tenantStore.activeTenant?.name || "your tenant");
-const title = computed(() => (seesTenant.value ? `Approvals · ${tenantName.value}` : "My Approvals"));
+// Named as the site is (the branding's name, else the tenant's); the branding reloads with that pick.
+const { canScopeTenant } = useTenantScope();
+const siteName = useSiteName();
+const title = computed(() => (seesTenant.value ? `Approvals · ${siteName.value}` : "My Approvals"));
 // The two views keep separate column and page-size preferences: a column list saved on the personal inbox
 // would otherwise hide the Approver column the tenant-wide one adds.
 const pageKey = seesTenant.value ? "rems-approvals-tenant" : "rems-approvals";

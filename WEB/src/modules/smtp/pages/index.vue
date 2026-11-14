@@ -31,10 +31,10 @@
           <div class="text-subtitle2">Email notifications</div>
           <div class="text-caption text-grey-8">
             <template v-if="settings.notificationsEnabled">
-              Invitations, password resets, REMS form links and reminders are emailed through the active account below.
+              Invitations, password resets, {{ siteName }} form links and reminders are emailed through the active account below.
             </template>
             <template v-else>
-              Turned off{{ switchedBy }}. Nothing is emailed from this tenant: invitations, password resets, REMS form
+              Turned off{{ switchedBy }}. Nothing is emailed from this tenant: invitations, password resets, {{ siteName }} form
               links and reminders are all held back. Test emails from this page still send.
             </template>
           </div>
@@ -144,6 +144,7 @@ import { useTenantScope } from "composables/useTenantScope";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useDateFormat } from "composables/useDateFormat";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useConfirm } from "composables/useConfirm";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
@@ -162,6 +163,7 @@ import TestEmailDialog from "modules/smtp/components/TestEmailDialog.vue";
 const auditColumns = useAuditColumns();
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
+const siteName = useSiteName();
 const { confirm } = useConfirm();
 const { encryptionLabel } = useSmtpOptions();
 const { canChooseTenant } = useTenantOptions();
@@ -242,7 +244,7 @@ const setNotifications = async (enabled) => {
   if (!enabled) {
     const ok = await confirm({
       title: "Turn off email notifications",
-      message: "Stop every notification email from this tenant? Invitations, password resets, REMS form links and " +
+      message: `Stop every notification email from this tenant? Invitations, password resets, ${siteName.value} form links and ` +
         "reminders are all held back until it is turned on again. Test emails from this page still send.",
       confirmLabel: "Turn off",
       type: "danger"

@@ -10,7 +10,7 @@ export default [
         path: "partner",
         name: "rems_partner",
         component: () => import("modules/rems/pages/PartnerDashboard.vue"),
-        meta: { requiresAuth: true, title: "My REMS Requests" }
+        meta: { requiresAuth: true, title: (site) => `My ${site} Requests` }
       },
       {
         // The Admin's only surface: requests whose clients have answered, opened for review of BOTH the
@@ -36,20 +36,20 @@ export default [
         path: "requests/new",
         name: "rems_request_new",
         component: () => import("modules/rems/pages/RemsRequestForm.vue"),
-        meta: { requiresAuth: true, permissions: ["rems.requests.create"], title: "New REMS Request" }
+        meta: { requiresAuth: true, permissions: ["rems.requests.create"], title: (site) => `New ${site} Request` }
       },
       {
         path: "requests/edit/:id",
         name: "rems_request_edit",
         component: () => import("modules/rems/pages/RemsRequestForm.vue"),
-        meta: { requiresAuth: true, title: "REMS Request" }
+        meta: { requiresAuth: true, title: (site) => `${site} Request` }
       },
       {
         // The read-only request detail.
         path: "requests/:id",
         name: "rems_request",
         component: () => import("modules/rems/pages/RemsRequestForm.vue"),
-        meta: { requiresAuth: true, title: "REMS Request" }
+        meta: { requiresAuth: true, title: (site) => `${site} Request` }
       },
       // Links minted before the split: /rems/requests/:id/form, with ?mode=edit deciding which of the two
       // it meant.
@@ -68,7 +68,7 @@ export default [
         path: "approvals",
         name: "rems_approvals",
         component: () => import("modules/rems/pages/ApprovalInbox.vue"),
-        meta: { requiresAuth: true, title: "REMS Approvals" }
+        meta: { requiresAuth: true, title: (site) => `${site} Approvals` }
       },
       {
         // The approval-task review packet, the caller's checklist, and the checklist-gated Approve /

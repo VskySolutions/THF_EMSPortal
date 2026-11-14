@@ -21,6 +21,9 @@ public static class DependencyInjection
         // registered here so every host that composes this layer has it, not only the API.
         services.AddMemoryCache();
 
+        // The name a tenant's site goes by, for wording and request numbers.
+        services.AddScoped<Abstractions.Branding.ISiteNameProvider, Branding.SiteNameProvider>();
+
         // Maconomy: the tenant's connection, the token that keeps it alive, and the customer lookup.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyConnectionService, Integrations.Maconomy.MaconomyConnectionService>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomySessionManager, Integrations.Maconomy.MaconomySessionManager>();

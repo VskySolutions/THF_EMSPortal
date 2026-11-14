@@ -101,6 +101,7 @@ import { useRouter } from "vue-router";
 import { personApi, getApiErrorMessage, EntityType } from "services/api";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useConfirm } from "composables/useConfirm";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
@@ -119,6 +120,7 @@ import { blankPersonForm } from "composables/personForm";
 import { useTenantOptions } from "composables/useTenantOptions";
 
 const router = useRouter();
+const siteName = useSiteName();
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
 const { confirm } = useConfirm();
@@ -135,12 +137,12 @@ const tenantFilterOptions = computed(() =>
   (canChooseTenant.value && tenantOptions.value.length ? tenantOptions.value : null));
 
 // Filterable columns are server-side; text/date columns are covered by the search box.
-const SOURCE_LABELS = {
+const sourceLabels = computed(() => ({
   Person: "Added manually",
-  Rems: "REMS request",
+  Rems: `${siteName.value} request`,
   User: "User account"
-};
-const sourceLabel = (value) => (value ? (SOURCE_LABELS[value] || value) : "—");
+}));
+const sourceLabel = (value) => (value ? (sourceLabels.value[value] || value) : "—");
 
 const columns = computed(() => [
   {

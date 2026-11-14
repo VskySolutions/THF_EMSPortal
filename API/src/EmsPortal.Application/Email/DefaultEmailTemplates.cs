@@ -119,18 +119,24 @@ public static class DefaultEmailTemplates
             """,
             new[] { "FullName", "Title", "Body", "TenantName", "LoginUrl" }),
 
-        // ---- REMS external emails (WO-124) ----
+        // ---- COP form emails (WO-124) ----
 
         new Definition(
             EmailTemplateKey.RemsFormLink,
-            "REMS Form Link",
-            "Sent to a client with the secure link to complete a COP form for a REMS request.",
-            "Action required: complete your form for REMS {{RemsNumber}}",
+            "COP Form Link",
+            "Sent to a client with the secure link to complete a COP form for a request.",
+            "Welcome to THF | Complete Your Client Set-up",
             """
             <p>Hello {{ClientName}},</p>
-            <p>You have been asked to complete a form for REMS request <strong>{{RemsNumber}}</strong>.</p>
-            <p><a href="{{FormLink}}">Open and complete the form</a></p>
-            <p>If you were not expecting this, please contact your {{TenantName}} representative.</p>
+            <p>Welcome to THF! We're excited for the opportunity to work with you.</p>
+            <p>As a first step, please complete our online Client Set-Up Form. This will provide our team with the information needed to establish your client account.</p>
+            <p>A few things to know before you begin:</p>
+            <ul>
+              <li>Time required: Approximately 5&ndash;10 minutes.</li>
+              <li>Deadline: Please complete the form within five (5) business days.</li>
+              <li>Important: The form must be completed in one sitting. It cannot be started by one person and finished by another, so please ensure the appropriate person in your organization is available to complete it.</li>
+            </ul>
+            <p><a href="{{FormLink}}" style="display:inline-block;padding:10px 20px;background-color:#1f4e79;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:4px;">COMPLETE CLIENT SET-UP FORM</a></p>
             """,
             new[] { "ClientName", "RemsNumber", "FormLink", "TenantName" }),
 
@@ -139,31 +145,49 @@ public static class DefaultEmailTemplates
         // first email — that is the whole point of it being a separate template.
         new Definition(
             EmailTemplateKey.RemsFormReminder,
-            "REMS Form Reminder",
+            "COP Form Reminder",
             "Sent to a client who has been emailed their COP form link but has not submitted it yet.",
-            "Reminder: your form for REMS {{RemsNumber}} is still outstanding",
+            "A Quick Reminder | Your THF Client Set-up",
             """
             <p>Hello {{ClientName}},</p>
-            <p>This is a friendly reminder that we are still waiting on your form for REMS request
-               <strong>{{RemsNumber}}</strong>.</p>
-            <p><a href="{{FormLink}}">Open and complete the form</a></p>
-            <p>Your progress is saved as you go, so you can finish it in more than one sitting. If you have
-               already completed it, please ignore this message.</p>
-            <p>If you were not expecting this, please contact your {{TenantName}} representative.</p>
+            <p>We're looking forward to working with you! As a reminder, your THF Client Set-Up Form is still awaiting completion.</p>
+            <p>The form takes just 5&ndash;10 minutes and provides the information we need to establish your account.</p>
+            <p>Please complete it within five business days of your original invitation.</p>
+            <p><a href="{{FormLink}}" style="display:inline-block;padding:10px 20px;background-color:#1f4e79;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:4px;">COMPLETE CLIENT SET-UP FORM</a></p>
+            <p>Before you begin: The form must be completed in one sitting by the same person.</p>
+            <p>If you have any questions or need assistance, please contact your THF representative.</p>
+            <p>Thank you!</p>
             """,
             new[] { "ClientName", "RemsNumber", "FormLink", "TenantName" }),
 
         new Definition(
             EmailTemplateKey.RemsFormSubmitted,
-            "REMS Form Submitted",
-            "Sent to the assigned Admin and CSE when a client submits their COP form for a REMS request.",
-            "Form submitted for REMS {{RemsNumber}}",
+            "COP Form Submitted",
+            "Sent to the assigned Admin and CSE when a client submits their COP form for a request.",
+            "COP form submitted for {{RemsNumber}}",
             """
-            <p>{{ClientName}} has submitted their form for REMS request <strong>{{RemsNumber}}</strong>.</p>
+            <p>{{ClientName}} has submitted their COP form for request <strong>{{RemsNumber}}</strong>.</p>
             <p><strong>Submitted on:</strong> {{SubmittedOn}}</p>
             <p><a href="{{RequestLink}}">Open the request</a></p>
             """,
             new[] { "ClientName", "RemsNumber", "SubmittedOn", "RequestLink" }),
+
+        new Definition(
+            EmailTemplateKey.RemsFormReceived,
+            "COP Form Received",
+            "Sent to the client as soon as they submit their COP form, confirming it has been received.",
+            "Confirmed | Your THF Client Set-up Form Has Been Received",
+            """
+            <p>Hello {{ClientName}},</p>
+            <p>Thank you!</p>
+            <p>Your THF Client Set-Up Form has been successfully submitted. No further action is needed on this form.</p>
+            <p><strong>What happens next?</strong></p>
+            <p>Our team will review your information and complete the necessary steps to establish your client account.</p>
+            <p>If we need additional information or clarification, a THF team member will reach out to you directly.</p>
+            <p>Depending on the services you'll be receiving, you may also receive communications regarding engagement documents, tax organizers, client portal access, or other next steps.</p>
+            <p>We appreciate your time and look forward to working with you.</p>
+            """,
+            new[] { "ClientName", "RemsNumber", "TenantName" }),
 
         new Definition(
             EmailTemplateKey.MaconomyConnectionDisabled,

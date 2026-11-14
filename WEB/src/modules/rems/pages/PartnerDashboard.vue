@@ -10,7 +10,7 @@
       show-filters
       :filter-count="allChips.length"
       :show-add="canCreate"
-      add-label="New REMS Request"
+      :add-label="`New ${siteName} Request`"
       show-back
       @update:search="search = $event"
       @filters="filterOpen = true"
@@ -34,7 +34,7 @@
     <app-data-table
       page-key="rems-partner"
       row-key="id"
-      title="My REMS requests"
+      :title="`My ${siteName} requests`"
       :rows="rows"
       :columns="columns"
       :loading="loading"
@@ -182,13 +182,13 @@
       <template #no-data>
         <div class="full-width column flex-center q-pa-xl text-grey-6">
           <q-icon name="o_assignment" size="40px" class="q-mb-sm" />
-          <div class="text-subtitle1 q-mb-xs">No REMS requests yet</div>
+          <div class="text-subtitle1 q-mb-xs">No {{ siteName }} requests yet</div>
           <div class="q-mb-md">
             {{ isRemsAdmin && ownership === "mine"
               ? "Create your first request, or switch to All to see everybody else's."
               : "Create your first request to start onboarding a client." }}
           </div>
-          <q-btn v-if="canCreate" unelevated no-caps color="primary" icon="o_add" label="New REMS Request" @click="openCreate" />
+          <q-btn v-if="canCreate" unelevated no-caps color="primary" icon="o_add" :label="`New ${siteName} Request`" @click="openCreate" />
         </div>
       </template>
     </app-data-table>
@@ -211,6 +211,7 @@ import { debounce } from "quasar";
 import { useRouter } from "vue-router";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useAuthStore } from "stores/auth";
+import { useSiteName } from "composables/useSiteName";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useConfirm } from "composables/useConfirm";
 import { useNotify } from "composables/useNotify";
@@ -243,6 +244,7 @@ import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 
 const router = useRouter();
+const siteName = useSiteName();
 const auth = useAuthStore();
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();

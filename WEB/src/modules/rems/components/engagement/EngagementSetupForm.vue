@@ -7,7 +7,7 @@
         <!-- In this order because each narrows the next: the department decides which service lines are
              offered, and the department and line together which job types. -->
         <app-select
-          :model-value="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-6"
+          :model-value="core.department" :options="offeredDepartments" label="Department" required class="col-12 col-sm-6"
           :readonly="!editable" :rules="[requiredRule('a Department')]"
           info="From the REMS Department option list (Administration → Option Sets). The choice decides what else this form asks — CAS is asked how it is billed, Audit needs a signed CAF, Tax a fiscal year end — and which service lines are offered."
           @update:model-value="onDepartmentPicked"
@@ -325,7 +325,8 @@ import { MAX_UPLOAD_MB } from "composables/useFileDrop";
 import {
   useRemsMeta, isTaxDepartment, isGovernmentAudit, isCasDepartment, isAssuranceDepartment,
   isGcsDepartment, requiresClientAcceptanceForm,
-  remsServiceLineOptions, remsServiceLineFitsDepartment
+  remsServiceLineOptions, remsServiceLineFitsDepartment,
+  REMS_HIDDEN_DEPARTMENTS, REMS_HIDDEN_SERVICE_LINES, remsWithoutHidden
 } from "modules/rems/useRemsMeta";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -475,8 +476,11 @@ watch(() => tax.value.fiscalYearEnd, (fye, previous) => {
 // The department decides which lines are offered (REMS_SERVICE_LINES_BY_DEPARTMENT). The labels are for
 // the note below. The Job Type is independent of both and is never narrowed or cleared.
 const { departmentLabel, serviceLineLabel } = useRemsMeta();
-const offeredServiceLines = computed(() =>
-  remsServiceLineOptions(props.serviceLineOptions, core.value.department, core.value.serviceLine));
+const offeredDepartments = computed(() =>
+  remsWithoutHidden(props.deptOptions, REMS_HIDDEN_DEPARTMENTS, core.value.department));
+const offeredServiceLines = computed(() => remsWithoutHidden(
+  remsServiceLineOptions(props.serviceLineOptions, core.value.department, core.value.serviceLine),
+  REMS_HIDDEN_SERVICE_LINES, core.value.serviceLine));
 
 // The cleared note when there is one, otherwise the reason an empty picker is empty.
 const serviceLineHint = computed(() =>

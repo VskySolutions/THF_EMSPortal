@@ -108,6 +108,7 @@ import { computed, reactive, ref, onBeforeUnmount } from "vue";
 import { LocalStorage } from "quasar";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
+import { useSiteName } from "composables/useSiteName";
 import { Permissions } from "composables/usePermissions";
 import { STICKY_NOTES_ENABLED } from "shared/features";
 
@@ -118,6 +119,7 @@ defineProps({
 
 const authStore = useAuthStore();
 const router = useRouter();
+const siteName = useSiteName();
 
 // Which group is showing its children beside the rail. One at a time — they would overlap otherwise.
 const flyoutKey = ref(null);
@@ -160,7 +162,7 @@ const sections = [
   {
     // REMS (Phase 15).
     key: "rems",
-    label: "REMS",
+    label: () => siteName.value,
     icon: "o_business_center",
     // Three lists, one per role, plus the shared Related Entities board.
     items: [
@@ -205,6 +207,7 @@ const sections = [
     items: [
       { label: "Email Accounts", icon: "o_mail", to: "/smtp-accounts", permissions: [Permissions.EmailManage] },
       { label: "Email Templates", icon: "o_drafts", to: "/email-templates", permissions: [Permissions.EmailManage] },
+      { label: "Email Log", icon: "o_mark_email_read", to: "/email-log", permissions: [Permissions.EmailManage] },
       { label: "Branding", icon: "o_palette", to: "/settings/branding", permissions: [Permissions.BrandingManage] },
       { label: "Maconomy", icon: "o_hub", to: "/settings/maconomy", permissions: [Permissions.IntegrationsMaconomyManage] },
       // Gated on MANAGE, not read: Partner and REMS Admin hold optionSets.read so their dropdowns resolve,
@@ -242,7 +245,11 @@ const canSee = (permissions) => !permissions || authStore.hasAnyPermission(permi
 
 const visibleSections = computed(() =>
   sections
-    .map((section) => ({ ...section, items: section.items.filter((item) => !item.hidden && canSee(item.permissions)) }))
+    .map((section) => ({
+      ...section,
+      label: typeof section.label === "function" ? section.label() : section.label,
+      items: section.items.filter((item) => !item.hidden && canSee(item.permissions))
+    }))
     .filter((section) => section.items.length));
 
 // Per-group collapse state, persisted to LocalStorage so the user's expand/collapse choices survive a

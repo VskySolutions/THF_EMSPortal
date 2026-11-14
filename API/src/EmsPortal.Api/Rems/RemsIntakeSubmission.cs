@@ -1,3 +1,4 @@
+using EmsPortal.Application.Abstractions.Branding;
 using System.Globalization;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Application.Abstractions.Email;
@@ -27,6 +28,7 @@ public sealed class RemsIntakeSubmission
     private readonly IActivityEventWriter _activity;
     private readonly INotificationDispatcher _notifications;
     private readonly IRemsEmailNotifier _emailNotifier;
+    private readonly ISiteNameProvider _siteName;
     private readonly IOptionCodeResolver _codes;
     private readonly ILogger<RemsIntakeSubmission> _logger;
     private readonly string _baseUrl;
@@ -40,6 +42,7 @@ public sealed class RemsIntakeSubmission
         IActivityEventWriter activity,
         INotificationDispatcher notifications,
         IRemsEmailNotifier emailNotifier,
+        ISiteNameProvider siteName,
         IOptionCodeResolver codes,
         IOptions<AppOptions> appOptions,
         ILogger<RemsIntakeSubmission> logger)
@@ -52,6 +55,7 @@ public sealed class RemsIntakeSubmission
         _activity = activity;
         _notifications = notifications;
         _emailNotifier = emailNotifier;
+        _siteName = siteName;
         _codes = codes;
         _logger = logger;
         _baseUrl = appOptions.Value.BaseUrl;
@@ -122,6 +126,9 @@ public sealed class RemsIntakeSubmission
             .Distinct()
             .ToList();
 
+        // The client's own submit runs with no tenant resolved, so the site is named here.
+        var site = await _siteName.GetAsync(request.TenantId, cancellationToken);
+
         try
         {
             foreach (var userId in recipients)
@@ -129,7 +136,7 @@ public sealed class RemsIntakeSubmission
                 await _notifications.DispatchAsync(new CreateNotificationDto(
                     userId,
                     NotificationType.RemsFormSubmitted,
-                    byUserId is null ? "A REMS onboarding form was submitted" : "A REMS onboarding form was completed for the client",
+                    byUserId is null ? $"A {site} onboarding form was submitted" : $"A {site} onboarding form was completed for the client",
                     $"{request.RemsNumber} — {name}",
                     EntityType.Rems,
                     request.Id), cancellationToken);
@@ -145,7 +152,7 @@ public sealed class RemsIntakeSubmission
                     await _notifications.DispatchAsync(new CreateNotificationDto(
                         admin.Id,
                         NotificationType.RemsRequestAssigned,
-                        "A REMS request is waiting for pickup",
+                        $"A {site} request is waiting for pickup",
                         $"{request.RemsNumber} — {name}",
                         EntityType.Rems,
                         request.Id), cancellationToken);
@@ -172,6 +179,13 @@ public sealed class RemsIntakeSubmission
                 {
                     _emailNotifier.SendFormSubmitted(request.TenantId, user!.Email, model);
                 }
+            }
+
+            // The client's own confirmation: only when they submitted it themselves.
+            var clientEmail = request.Client?.ClientEmail?.Trim();
+            if (byUserId is null && !string.IsNullOrEmpty(clientEmail))
+            {
+                _emailNotifier.SendFormReceived(request.TenantId, clientEmail, new RemsFormReceivedEmail(name, request.RemsNumber));
             }
         }
         catch (Exception ex)

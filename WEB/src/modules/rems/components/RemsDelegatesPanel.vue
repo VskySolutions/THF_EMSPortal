@@ -90,6 +90,7 @@
 import { ref, reactive, computed, onMounted } from "vue";
 import { remsApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useConfirm } from "composables/useConfirm";
 import AppSelect from "components/common/AppSelect.vue";
 import AppDateField from "components/common/AppDateField.vue";
@@ -103,15 +104,16 @@ const props = defineProps({
 });
 
 const notify = useNotify();
+const siteName = useSiteName();
 const { confirm } = useConfirm();
 
 const forSomeoneElse = computed(() => !!props.principalUserId);
 
-const heading = computed(() => (forSomeoneElse.value ? "REMS delegates" : "My REMS delegates"));
+const heading = computed(() => (forSomeoneElse.value ? `${siteName.value} delegates` : `My ${siteName.value} delegates`));
 const blurb = computed(() => forSomeoneElse.value
-  ? `People who may work ${props.principalName}'s REMS requests. Everything they do stays attributed to ` +
+  ? `People who may work ${props.principalName}'s ${siteName.value} requests. Everything they do stays attributed to ` +
     "both of them. Delegation never covers approving."
-  : "People who may work your REMS requests for you. Everything they do stays attributed to both of you. " +
+  : `People who may work your ${siteName.value} requests for you. Everything they do stays attributed to both of you. ` +
     "Delegation never covers approving.");
 const emptyText = computed(() => forSomeoneElse.value
   ? `${props.principalName} has nobody named. Add a delegate to let someone prepare their requests.`
@@ -192,7 +194,7 @@ const remove = async (d) => {
   const ok = await confirm({
     title: "Withdraw delegation",
     message: `${d.delegateName} will no longer be able to work ${forSomeoneElse.value ? `${props.principalName}'s` : "your"} ` +
-      "REMS requests. Anything they already prepared stays as it is.",
+      `${siteName.value} requests. Anything they already prepared stays as it is.`,
     confirmLabel: "Withdraw",
     type: "danger"
   });

@@ -94,6 +94,7 @@ public static class DependencyInjection
         services.AddScoped<IMaconomyConnectionRepository, MaconomyConnectionRepository>();
         services.AddScoped<ITenantBrandingRepository, TenantBrandingRepository>();
         services.AddScoped<ITenantEmailSettingsRepository, TenantEmailSettingsRepository>();
+        services.AddScoped<IEmailLogRepository, EmailLogRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
         services.AddScoped<IOptionSetRepository, OptionSetRepository>();
 
