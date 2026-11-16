@@ -122,7 +122,7 @@ watch(password, () => { passwordError.value = ""; });
 // The second sheet is this tenant's roles and departments as they stand now.
 const downloadTemplate = async () => {
   try {
-    downloadUserImportTemplate(await userApi.importOptions());
+    await downloadUserImportTemplate(await userApi.importOptions());
   } catch (err) {
     notify.error(getApiErrorMessage(err));
   }
