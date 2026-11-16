@@ -48,6 +48,22 @@ internal sealed class UserRepository : IUserRepository
     public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default)
         => _dbContext.Users.AnyAsync(u => u.Email == email, cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListEmailsInUseAsync(
+        IReadOnlyCollection<string> emails, CancellationToken cancellationToken = default)
+        => emails.Count == 0
+            ? Array.Empty<string>()
+            : await _dbContext.Users.Where(u => emails.Contains(u.Email)).Select(u => u.Email).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ListMaconomyNumbersInUseAsync(
+        Guid tenantId, IReadOnlyCollection<string> numbers, CancellationToken cancellationToken = default)
+        => numbers.Count == 0
+            ? Array.Empty<string>()
+            : await _dbContext.Users
+                .Where(u => u.MaconomyNumber != null && numbers.Contains(u.MaconomyNumber)
+                    && u.TenantRoles.Any(r => r.TenantId == tenantId))
+                .Select(u => u.MaconomyNumber!)
+                .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetFullNamesAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default)
     {
         var ids = userIds.Distinct().ToList();

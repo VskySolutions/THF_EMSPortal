@@ -131,6 +131,15 @@ export const userApi = {
   departments: () => api.get("/api/admin/users/departments").then(unwrap),
   // payload: { department: code|null, isHead } — a null department unassigns the user.
   setDepartment: (id, payload) => api.put(`/api/admin/users/${id}/department`, payload).then(unwrap),
+  // Bulk import from CSV text. payload: { fileName, content, temporaryPassword }. A check writes nothing
+  // and answers { totalCount, readyCount, errorCount, rows }; an import answers { import, rows }.
+  // → { roles: [name], departments: [label] } — what a file's Role and Department cells may hold.
+  importOptions: () => api.get("/api/admin/users/import/options").then(unwrap),
+  checkImport: (payload) => api.post("/api/admin/users/import/check", payload).then(unwrap),
+  import: (payload) => api.post("/api/admin/users/import", payload).then(unwrap),
+  // params: { page, limit } — the tenant's imports, newest first.
+  imports: (params) => api.get("/api/admin/users/imports", { params }).then(envelope),
+  getImport: (id) => api.get(`/api/admin/users/imports/${id}`).then(unwrap),
 };
 
 // Tenant-scoped user groups (segmentation/tagging, independent of RBAC roles).

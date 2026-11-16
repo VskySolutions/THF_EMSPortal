@@ -39,6 +39,7 @@
     "powerbi-client": "^2.23.10",
     "qs": "^6.15.0",
     "quasar": "^2.19.3",
+    "read-excel-file": "^9.3.17",
     "validator": "^13.15.35",
     "vue": "^3.5.32",
     "vue-advanced-cropper": "^2.8.9",
@@ -46,7 +47,8 @@
     "vue-i18n": "^11.3.1",
     "vue-recaptcha": "^3.0.0-alpha.6",
     "vue-router": "^5.0.4",
-    "vuedraggable": "^2.24.3"
+    "vuedraggable": "^2.24.3",
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

@@ -4135,6 +4135,136 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.ToTable("UserGroupMembers", (string)null);
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.UserImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CreatedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeletedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("TotalCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CreatedOnUtc");
+
+                    b.ToTable("UserImports", (string)null);
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.UserImportRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeletedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Department")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FirstName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("MaconomyNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Roles")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("RowNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UserImportId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedUserId");
+
+                    b.HasIndex("UserImportId", "RowNumber");
+
+                    b.ToTable("UserImportRows", (string)null);
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.UserStickyNoteState", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5227,6 +5357,29 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Navigation("UserGroup");
                 });
 
+            modelBuilder.Entity("EmsPortal.Domain.Entities.UserImport", b =>
+                {
+                    b.HasOne("EmsPortal.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.UserImportRow", b =>
+                {
+                    b.HasOne("EmsPortal.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EmsPortal.Domain.Entities.UserImport", null)
+                        .WithMany("Rows")
+                        .HasForeignKey("UserImportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("EmsPortal.Domain.Entities.UserStickyNoteState", b =>
                 {
                     b.HasOne("EmsPortal.Domain.Entities.StickyNote", "StickyNote")
@@ -5357,6 +5510,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("EmsPortal.Domain.Entities.UserGroup", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.UserImport", b =>
+                {
+                    b.Navigation("Rows");
                 });
 #pragma warning restore 612, 618
         }

@@ -15,6 +15,13 @@ public interface IUserRepository
 
     Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default);
 
+    /// <summary>Which of these emails already belong to a user, in any tenant.</summary>
+    Task<IReadOnlyList<string>> ListEmailsInUseAsync(IReadOnlyCollection<string> emails, CancellationToken cancellationToken = default);
+
+    /// <summary>Which of these Maconomy numbers are already on a user assigned to the tenant.</summary>
+    Task<IReadOnlyList<string>> ListMaconomyNumbersInUseAsync(
+        Guid tenantId, IReadOnlyCollection<string> numbers, CancellationToken cancellationToken = default);
+
     /// <summary>Resolves user ids to display full names (FirstName + LastName), for Created/Updated By columns.</summary>
     Task<IReadOnlyDictionary<Guid, string>> GetFullNamesAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default);
 

@@ -11,6 +11,9 @@ public interface IUnitOfWork
     /// <summary>Persists all staged changes in one transaction.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Drops everything staged but not saved, so a failed save is not retried by the next one.</summary>
+    void DiscardChanges();
+
     /// <summary>
     /// Runs <paramref name="operation"/> inside an explicit database transaction and commits it on
     /// success (rolling back on failure). Use when an invariant requires multiple ordered
