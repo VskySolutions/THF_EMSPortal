@@ -365,19 +365,18 @@ export const OptionItemSortMode = Object.freeze({
 // Tenant-configurable input value lists (e.g. Payment Terms). Reads require optionSets.read; writes require
 // optionSets.manage. Standard (seeded) lists are returned read-only.
 export const optionSetApi = {
-  // params: { entityType? } — EntityType enum value.
   list: (params) => api.get("/api/option-sets", { params }).then(unwrap),
   get: (id) => api.get(`/api/option-sets/${id}`).then(unwrap),
-  // Effective active values for a key: { entityType, key, parentItemId? }.
+  // Effective active values for a key: { key, parentItemId? }.
   resolve: (params) => api.get("/api/option-sets/resolve", { params }).then(unwrap),
-  // payload: { entityType, key, name, parentSetId?, itemSortMode }
+  // payload: { key, name, parentSetId?, itemSortMode }
   create: (payload) => api.post("/api/option-sets", payload).then(unwrap),
-  // payload: { name, itemSortMode, isActive }
+  // payload: { name, itemSortMode, isActive, parentSetId } — parentSetId is always sent; null clears the dependency
   update: (id, payload) => api.put(`/api/option-sets/${id}`, payload).then(unwrap),
   remove: (id) => api.delete(`/api/option-sets/${id}`).then(unwrap),
-  // payload: { value, label, parentItemId?, isDefault, backgroundColor?, textColor?, metadataJson? }
+  // payload: { value, label, parentItemIds?, isDefault, backgroundColor?, textColor?, metadataJson? }
   createItem: (setId, payload) => api.post(`/api/option-sets/${setId}/items`, payload).then(unwrap),
-  // payload: { value, label, parentItemId?, isDefault, isActive, backgroundColor?, textColor?, metadataJson? }
+  // payload: { value, label, parentItemIds?, isDefault, isActive, backgroundColor?, textColor?, metadataJson? }
   updateItem: (setId, itemId, payload) => api.put(`/api/option-sets/${setId}/items/${itemId}`, payload).then(unwrap),
   removeItem: (setId, itemId) => api.delete(`/api/option-sets/${setId}/items/${itemId}`).then(unwrap),
   // payload: itemIds in the desired order.

@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { optionSetApi, EntityType } from "services/api";
+import { optionSetApi } from "services/api";
 
 // The tenant-configurable REMS option lists, resolved once and shared by every screen.
 
@@ -39,7 +39,7 @@ const ALL_KEYS = Object.keys(SET_KEYS);
 
 const resolveOne = async (name) => {
   try {
-    const items = await optionSetApi.resolve({ entityType: EntityType.Rems, key: SET_KEYS[name] });
+    const items = await optionSetApi.resolve({ key: SET_KEYS[name] });
     // An empty set means the tenant emptied the list, not that resolution failed. Assigned either way:
     // an emptied list IS the tenant's answer, and there is no longer a local copy to prefer over it.
     if (items) {
@@ -48,6 +48,9 @@ const resolveOne = async (name) => {
       catalog[name] = items.map((i) => ({
         label: i.label,
         value: i.value,
+        // For the dependent dropdowns: this value's id, and the parent values it is valid under.
+        id: i.id,
+        parentIds: i.parentItemIds || [],
         description: i.description || "",
         backgroundColor: i.backgroundColor || "",
         textColor: i.textColor || "",

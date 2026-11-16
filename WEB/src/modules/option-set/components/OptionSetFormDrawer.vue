@@ -8,16 +8,7 @@
     @cancel="resetForm"
   >
     <q-form ref="formRef" greedy class="column q-gutter-md">
-      <!-- Entity + key are immutable after creation (they identify the list). -->
-      <app-select
-        v-model="form.entityType"
-        :options="entityOptions"
-        label="Applies to *"
-        :readonly="!!setId"
-        :clearable="false"
-        :rules="[(v) => v != null || 'Select an entity']"
-      />
-
+      <!-- The key is immutable after creation: it identifies the list. -->
       <app-text-field
         v-if="!setId"
         v-model="form.key"
@@ -42,13 +33,13 @@
         :clearable="false"
       />
 
-      <!-- Optional dependency: this list's values are driven by a parent list (cascading). -->
+      <!-- Optional dependency: this list's values are offered by the value picked on a parent list. -->
       <app-select
-        v-if="!setId"
         v-model="form.parentSetId"
         :options="parentSetOptions"
         label="Depends on (optional)"
         clearable
+        :hint="parentChanged ? 'Changing this clears which parent values each value is valid under.' : ''"
       />
 
       <q-toggle v-if="setId" v-model="form.isActive" label="Active" />
@@ -60,7 +51,6 @@
 import { ref, reactive, computed, watch } from "vue";
 import { optionSetApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes, OptionItemSortMode } from "services/api";
 import { useNotify } from "composables/useNotify";
-import { useEntityTypeOptions } from "composables/useOptionSet";
 import AppFormDrawer from "components/common/AppFormDrawer.vue";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -69,13 +59,12 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   // Null = create; otherwise the set being edited.
   set: { type: Object, default: null },
-  // The already-loaded sets, used to offer parent (dependency) lists for the same entity.
+  // The already-loaded sets, used to offer parent (dependency) lists.
   sets: { type: Array, default: () => [] }
 });
 const emit = defineEmits(["update:modelValue", "saved"]);
 
 const notify = useNotify();
-const { options: entityOptions } = useEntityTypeOptions();
 
 const sortModeOptions = [
   { label: "Alphabetical (A → Z)", value: OptionItemSortMode.AlphabeticalAsc },
@@ -88,10 +77,9 @@ const saving = ref(false);
 const keyError = ref("");
 
 const blankForm = () => ({
-  entityType: null,
   key: "",
   name: "",
-  itemSortMode: OptionItemSortMode.Custom,
+  itemSortMode: OptionItemSortMode.AlphabeticalAsc,
   parentSetId: null,
   isActive: true
 });
@@ -104,11 +92,14 @@ const open = computed({
   set: (v) => emit("update:modelValue", v)
 });
 
-// Parent options: other editable lists for the same entity (a list can't depend on itself).
+// Parent options: every other list (a list can't depend on itself).
 const parentSetOptions = computed(() =>
   props.sets
-    .filter((s) => s.entityType === form.entityType && s.id !== setId.value)
+    .filter((s) => s.id !== setId.value)
     .map((s) => ({ label: s.name, value: s.id })));
+
+const parentChanged = computed(() =>
+  !!setId.value && !!props.set?.parentSetId && form.parentSetId !== props.set.parentSetId);
 
 const resetForm = () => {
   Object.assign(form, blankForm());
@@ -122,7 +113,6 @@ watch(
     if (!isOpen) return;
     if (props.set) {
       Object.assign(form, blankForm(), {
-        entityType: props.set.entityType,
         name: props.set.name,
         itemSortMode: props.set.itemSortMode,
         parentSetId: props.set.parentSetId,
@@ -142,12 +132,12 @@ const onSubmit = async () => {
       await optionSetApi.update(setId.value, {
         name: form.name.trim(),
         itemSortMode: form.itemSortMode,
-        isActive: form.isActive
+        isActive: form.isActive,
+        parentSetId: form.parentSetId || null
       });
       notify.success("Option list updated.");
     } else {
       await optionSetApi.create({
-        entityType: form.entityType,
         key: form.key.trim(),
         name: form.name.trim(),
         parentSetId: form.parentSetId || null,
@@ -159,7 +149,7 @@ const onSubmit = async () => {
     emit("saved");
   } catch (err) {
     if (getApiErrorCode(err) === ApiErrorCodes.DuplicateIdentifier) {
-      keyError.value = "A list with this key already exists for this entity.";
+      keyError.value = "A list with this key already exists.";
     } else {
       notify.error(getApiErrorMessage(err));
     }

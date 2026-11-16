@@ -13,16 +13,6 @@
       @back="$router.back()"
     >
       <template #actions>
-        <!-- No label above the control: it would make this header taller than every other list's. The
-             options name the entity for themselves. -->
-        <app-select
-          v-model="entityFilter"
-          :options="entityFilterOptions"
-          aria-label="Entity"
-          style="min-width: 200px;"
-          :clearable="false"
-          @update:model-value="load"
-        />
         <q-toggle v-if="canManageDeleted" v-model="showDeleted" label="Show deleted?" dense />
       </template>
     </app-list-header>
@@ -48,11 +38,8 @@
           <div class="fs-12 text-grey-6">{{ cell.row.key }}</div>
         </q-td>
       </template>
-      <template #body-cell-entityType="cell">
-        <q-td :props="cell">
-          <q-icon :name="iconFor(cell.row.entityType)" color="primary" class="q-mr-xs" />
-          {{ labelFor(cell.row.entityType) }}
-        </q-td>
+      <template #body-cell-dependsOn="cell">
+        <q-td :props="cell">{{ parentNameOf(cell.row) }}</q-td>
       </template>
       <template #body-cell-itemSortMode="cell">
         <q-td :props="cell">{{ sortModeLabel(cell.row.itemSortMode) }}</q-td>
@@ -88,7 +75,7 @@
       <template #no-data>
         <div class="full-width column flex-center q-pa-xl text-grey-6">
           <q-icon name="o_list_alt" size="40px" class="q-mb-sm" />
-          <div class="text-subtitle1 q-mb-xs">No option lists for this entity</div>
+          <div class="text-subtitle1 q-mb-xs">No option lists yet</div>
           <div v-if="canManage" class="q-mb-md">Create a list to offer standard input values like Payment Terms.</div>
           <q-btn v-if="canManage" unelevated no-caps color="primary" icon="o_add" label="New List" @click="openCreate" />
         </div>
@@ -112,12 +99,9 @@ import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useListTable } from "composables/useListTable";
-import { useEntityMeta } from "composables/uf/useEntityMeta";
-import { useEntityTypeOptions } from "composables/useOptionSet";
 import AppListHeader from "components/common/AppListHeader.vue";
 import AppDataTable from "components/common/AppDataTable.vue";
 import DeletedRecordsPanel from "components/universal/DeletedRecordsPanel.vue";
-import AppSelect from "components/common/AppSelect.vue";
 import OptionSetFormDrawer from "modules/option-set/components/OptionSetFormDrawer.vue";
 
 const auditColumns = useAuditColumns();
@@ -125,27 +109,22 @@ const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
 const { confirm } = useConfirm();
 const { has } = usePermissions();
-const { labelFor, iconFor } = useEntityMeta();
-const { options: entityTypeOptions } = useEntityTypeOptions();
 
 const canManage = has(Permissions.OptionSetsManage);
-
-const entityFilterOptions = [{ label: "All entities", value: null }, ...entityTypeOptions];
-const entityFilter = ref(null);
 
 // Ordering is the server's, like every other list — a header click re-asks for the whole set in the
 // order it was asked for, rather than rearranging the rows already on screen.
 const { rows, loading, totalRecords, pagination, load, onRequest } = useListTable({
   pageKey: "option_sets",
   fetcher: ({ sortBy, descending }) =>
-    optionSetApi.list({ entityType: entityFilter.value ?? undefined, sortBy, descending })
+    optionSetApi.list({ sortBy, descending })
       .then((r) => ({ data: r || [], total: (r || []).length })),
   onError: (err) => notify.error(getApiErrorMessage(err))
 });
 
 const columns = [
   { name: "name", label: "Name", field: "name", align: "left", sortable: true, default: true },
-  { name: "entityType", label: "Entity", field: "entityType", align: "left", sortable: true, default: true },
+  { name: "dependsOn", label: "Depends on", field: "parentSetId", align: "left", default: true },
   { name: "itemCount", label: "Values", field: "itemCount", align: "left", sortable: true, default: true },
   { name: "itemSortMode", label: "Order", field: "itemSortMode", align: "left", sortable: true, default: true },
   { name: "origin", label: "Type", field: "isSystem", align: "left", sortable: true, default: true },
@@ -153,6 +132,9 @@ const columns = [
   ...auditColumns(),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ];
+
+// The parent list's name, off the rows already loaded.
+const parentNameOf = (row) => rows.value.find((r) => r.id === row.parentSetId)?.name || "";
 
 const sortModeLabel = (mode) => ({
   [OptionItemSortMode.AlphabeticalAsc]: "Alphabetical (A → Z)",

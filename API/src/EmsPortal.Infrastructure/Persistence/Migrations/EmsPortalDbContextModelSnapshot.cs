@@ -1639,9 +1639,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedOnUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("EntityType")
-                        .HasColumnType("int");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -1682,7 +1679,7 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ParentSetId");
 
-                    b.HasIndex("TenantId", "EntityType", "Key")
+                    b.HasIndex("TenantId", "Key")
                         .IsUnique()
                         .HasFilter("[Deleted] = 0");
 
@@ -1743,9 +1740,6 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OptionSetId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("ParentItemId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
@@ -1769,13 +1763,26 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParentItemId");
-
                     b.HasIndex("OptionSetId", "TenantId", "Value")
                         .IsUnique()
                         .HasFilter("[Deleted] = 0");
 
                     b.ToTable("OptionSetItems", (string)null);
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.OptionSetItemParent", b =>
+                {
+                    b.Property<Guid>("OptionSetItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ParentOptionSetItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("OptionSetItemId", "ParentOptionSetItemId");
+
+                    b.HasIndex("ParentOptionSetItemId");
+
+                    b.ToTable("OptionSetItemParents", (string)null);
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.PasswordResetToken", b =>
@@ -4526,12 +4533,22 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("OptionSet");
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.OptionSetItemParent", b =>
+                {
+                    b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", null)
+                        .WithMany("Parents")
+                        .HasForeignKey("OptionSetItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("EmsPortal.Domain.Entities.OptionSetItem", null)
                         .WithMany()
-                        .HasForeignKey("ParentItemId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("OptionSet");
+                        .HasForeignKey("ParentOptionSetItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.PasswordResetToken", b =>
@@ -5266,6 +5283,11 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("EmsPortal.Domain.Entities.OptionSet", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("EmsPortal.Domain.Entities.OptionSetItem", b =>
+                {
+                    b.Navigation("Parents");
                 });
 
             modelBuilder.Entity("EmsPortal.Domain.Entities.PermissionGroup", b =>

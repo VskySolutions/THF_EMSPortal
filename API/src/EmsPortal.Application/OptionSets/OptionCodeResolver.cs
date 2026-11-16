@@ -45,27 +45,27 @@ public sealed class OptionCodeResolver : IOptionCodeResolver
     private Guid? ScopeTenantId => _tenantContext.IsResolved ? _tenantContext.TenantId : null;
 
     public async Task<Guid?> IdOfAsync(
-        EntityType entityType, string setKey, string? code, CancellationToken cancellationToken = default)
+        string setKey, string? code, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(code))
         {
             return null;
         }
 
-        var byCode = await IdsByCodeAsync(entityType, setKey, cancellationToken);
+        var byCode = await IdsByCodeAsync(setKey, cancellationToken);
         return byCode.TryGetValue(code.Trim(), out var id) ? id : null;
     }
 
     public async Task<IReadOnlyDictionary<string, Guid>> IdsByCodeAsync(
-        EntityType entityType, string setKey, CancellationToken cancellationToken = default)
+        string setKey, CancellationToken cancellationToken = default)
     {
-        var key = $"optioncodes:{_generation}:ids:{ScopeTenantId}:{(int)entityType}:{setKey}";
+        var key = $"optioncodes:{_generation}:ids:{ScopeTenantId}:{setKey}";
         if (_cache.TryGetValue(key, out IReadOnlyDictionary<string, Guid>? cached) && cached is not null)
         {
             return cached;
         }
 
-        var set = await _sets.GetEffectiveSetAsync(ScopeTenantId, entityType, setKey, cancellationToken);
+        var set = await _sets.GetEffectiveSetAsync(ScopeTenantId, setKey, cancellationToken);
 
         // INACTIVE values are included on purpose. A record already recorded against a value a tenant has
         // since hidden must still resolve — hiding a value stops it being OFFERED, it does not unsay what

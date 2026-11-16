@@ -4,19 +4,19 @@ namespace EmsPortal.Api.Models.OptionSets;
 
 public sealed class CreateOptionSetRequest
 {
-    /// <summary>The entity type this list applies to (see the EntityType enum).</summary>
-    public int EntityType { get; set; }
     public string Key { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public Guid? ParentSetId { get; set; }
     /// <summary>"AlphabeticalAsc" | "AlphabeticalDesc" | "Custom".</summary>
-    public string ItemSortMode { get; set; } = "Custom";
+    public string ItemSortMode { get; set; } = "AlphabeticalAsc";
 }
 
 public sealed class UpdateOptionSetRequest
 {
     public string Name { get; set; } = string.Empty;
-    public string ItemSortMode { get; set; } = "Custom";
+    /// <summary>The list this one depends on; null for none. Changing it clears the values' "valid under".</summary>
+    public Guid? ParentSetId { get; set; }
+    public string ItemSortMode { get; set; } = "AlphabeticalAsc";
     public bool IsActive { get; set; } = true;
 }
 
@@ -26,7 +26,8 @@ public sealed class CreateOptionItemRequest
     public string Label { get; set; } = string.Empty;
     /// <summary>What this value means; shown as its tooltip wherever the value is offered or displayed.</summary>
     public string? Description { get; set; }
-    public Guid? ParentItemId { get; set; }
+    /// <summary>The parent-list values this one is valid under; empty means every parent.</summary>
+    public IReadOnlyList<Guid>? ParentItemIds { get; set; }
     public bool IsDefault { get; set; }
     public string? BackgroundColor { get; set; }
     public string? TextColor { get; set; }
@@ -43,7 +44,8 @@ public sealed class UpdateOptionItemRequest
     public string Value { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public Guid? ParentItemId { get; set; }
+    /// <summary>The parent-list values this one is valid under; empty means every parent.</summary>
+    public IReadOnlyList<Guid>? ParentItemIds { get; set; }
     public bool IsDefault { get; set; }
     public bool IsActive { get; set; } = true;
     public string? BackgroundColor { get; set; }
@@ -65,7 +67,6 @@ public sealed class ReorderItemsRequest
 public sealed record OptionSetSummaryResponse(
     Guid Id,
     Guid? TenantId,
-    int EntityType,
     string Key,
     string Name,
     Guid? ParentSetId,
@@ -85,7 +86,7 @@ public sealed record OptionSetSummaryResponse(
 public sealed record OptionSetItemResponse(
     Guid Id,
     Guid OptionSetId,
-    Guid? ParentItemId,
+    IReadOnlyList<Guid> ParentItemIds,
     string Value,
     string Label,
     string? Description,
@@ -104,7 +105,6 @@ public sealed record OptionSetItemResponse(
 public sealed record OptionSetDetailResponse(
     Guid Id,
     Guid? TenantId,
-    int EntityType,
     string Key,
     string Name,
     Guid? ParentSetId,

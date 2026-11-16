@@ -20,14 +20,11 @@
       <!-- Settings card -->
       <q-card flat bordered class="q-pa-md q-mb-md">
         <div class="row items-center q-col-gutter-md">
-          <div class="col-12 col-sm-4">
+          <div class="col-12 col-sm-8">
             <div class="text-caption text-grey-6">Name</div>
             <div class="text-weight-medium">{{ set.name }}</div>
             <div class="fs-12 text-grey-6">{{ set.key }}</div>
-          </div>
-          <div class="col-12 col-sm-4">
-            <div class="text-caption text-grey-6">Applies to</div>
-            <div><q-icon :name="iconFor(set.entityType)" color="primary" class="q-mr-xs" />{{ labelFor(set.entityType) }}</div>
+            <div v-if="parentName" class="fs-12 text-grey-6">Depends on {{ parentName }}</div>
           </div>
           <div class="col-12 col-sm-4">
             <app-select
@@ -87,7 +84,7 @@
                 {{ item.value }}
                 <!-- The number Maconomy files this value under, where the Maconomy sync uses one. -->
                 <span v-if="item.maconomyNumber"> · Maconomy {{ item.maconomyNumber }}</span>
-                <span v-if="parentLabelMap[item.parentItemId]"> · under {{ parentLabelMap[item.parentItemId] }}</span>
+                <span v-if="parentLabelsOf(item)"> · under {{ parentLabelsOf(item) }}</span>
               </q-item-label>
             </q-item-section>
             <q-item-section v-if="set.isEditable" side>
@@ -107,6 +104,7 @@
         :set-id="set.id"
         :item="editingItem"
         :parent-options="parentOptions"
+        :parent-name="parentName"
         :set-is-closed="!!set.isClosed"
         @saved="reloadItems"
       />
@@ -120,7 +118,6 @@ import { useRoute } from "vue-router";
 import { optionSetApi, getApiErrorMessage, OptionItemSortMode } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useConfirm } from "composables/useConfirm";
-import { useEntityMeta } from "composables/uf/useEntityMeta";
 import AppDetailHeader from "components/common/AppDetailHeader.vue";
 import AppSelect from "components/common/AppSelect.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
@@ -129,7 +126,6 @@ import OptionItemDialog from "modules/option-set/components/OptionItemDialog.vue
 const route = useRoute();
 const notify = useNotify();
 const { confirm } = useConfirm();
-const { labelFor, iconFor } = useEntityMeta();
 
 const setId = route.params.id;
 
@@ -137,11 +133,14 @@ const set = ref(null);
 const items = ref([]);
 const loading = ref(false);
 
-const sortMode = ref(OptionItemSortMode.Custom);
+const sortMode = ref(OptionItemSortMode.AlphabeticalAsc);
 const isActive = ref(true);
 
 const parentOptions = ref([]);
 const parentLabelMap = ref({});
+const parentName = ref("");
+const parentLabelsOf = (item) =>
+  (item.parentItemIds || []).map((id) => parentLabelMap.value[id]).filter(Boolean).join(", ");
 
 const sortModeOptions = [
   { label: "Alphabetical (A → Z)", value: OptionItemSortMode.AlphabeticalAsc },
@@ -187,11 +186,13 @@ const loadParent = async () => {
   if (!set.value?.parentSetId) {
     parentOptions.value = [];
     parentLabelMap.value = {};
+    parentName.value = "";
     return;
   }
   try {
     const parent = await optionSetApi.get(set.value.parentSetId);
     const parentItems = parent.items || [];
+    parentName.value = parent.name;
     parentOptions.value = parentItems.map((i) => ({ label: i.label, value: i.id }));
     parentLabelMap.value = Object.fromEntries(parentItems.map((i) => [i.id, i.label]));
   } catch {
@@ -205,7 +206,9 @@ const saveSettings = async () => {
     const updated = await optionSetApi.update(setId, {
       name: set.value.name,
       itemSortMode: sortMode.value,
-      isActive: isActive.value
+      isActive: isActive.value,
+      // Sent back as it is: leaving it out would clear the dependency.
+      parentSetId: set.value.parentSetId || null
     });
     hydrate(updated);
     notify.success("Saved.");

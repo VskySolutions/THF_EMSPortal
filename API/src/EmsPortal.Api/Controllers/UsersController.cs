@@ -905,8 +905,7 @@ public sealed class UsersController : ControllerBase
     /// <summary>The tenant's effective department list, falling back to the seeded codes when unavailable.</summary>
     private async Task<IReadOnlyList<DepartmentOptionDto>> ResolveDepartmentOptionsAsync(CancellationToken cancellationToken)
     {
-        var set = await _optionSets.GetEffectiveSetAsync(
-            User.GetActiveTenantId(), EntityType.Rems, DepartmentOptionSetKey, cancellationToken);
+        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), DepartmentOptionSetKey, cancellationToken);
 
         var items = set?.Items
             .Where(i => !i.Deleted && i.IsActive)

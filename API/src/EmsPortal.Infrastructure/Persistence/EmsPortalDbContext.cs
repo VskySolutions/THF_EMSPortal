@@ -88,6 +88,7 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     // ---- Option Sets (tenant-configurable input value lists) ----
     public DbSet<OptionSet> OptionSets => Set<OptionSet>();
     public DbSet<OptionSetItem> OptionSetItems => Set<OptionSetItem>();
+    public DbSet<OptionSetItemParent> OptionSetItemParents => Set<OptionSetItemParent>();
 
     // ---- Universal Features (Phase 14) ----
     public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();

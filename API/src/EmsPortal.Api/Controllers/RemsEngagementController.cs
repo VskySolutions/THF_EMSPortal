@@ -586,8 +586,7 @@ public sealed class RemsEngagementController : ControllerBase
         // code resolves to null rather than being stored as-is -- there is nothing to point at.
         if (request.ReferralSource is not null)
         {
-            client.ReferralSourceId = await _codes.IdOfAsync(
-                EntityType.Rems, RemsOptionSetKeys.ReferralSource, request.ReferralSource, cancellationToken);
+            client.ReferralSourceId = await _codes.IdOfAsync(RemsOptionSetKeys.ReferralSource, request.ReferralSource, cancellationToken);
         }
 
         // The billing name and email are the first billing contact's person; supplied blank, the contact goes.
@@ -794,6 +793,8 @@ public sealed class RemsEngagementController : ControllerBase
             }
         }
 
+        var before = (rems.DepartmentId, rems.ServiceLineId, rems.JobTypeId, IndustryId: rems.Client?.IndustryId);
+
         // Each of the three is an option-set item, referenced by id.
         var incomingDepartment = Normalize(request.Department);
         var departmentChanged = request.Department is not null
@@ -822,6 +823,34 @@ public sealed class RemsEngagementController : ControllerBase
             client.IndustryId = await _codes.RemsIdAsync(
                 RemsOptionSetKeys.Industry, Normalize(request.Industry), cancellationToken);
             _clients.Update(client);
+        }
+
+        // A dependent value must be one its parent offers. Asked only of a pair this save changed, so a
+        // request filed before the lists were linked still saves its other fields.
+        var after = (rems.DepartmentId, rems.ServiceLineId, rems.JobTypeId, IndustryId: rems.Client?.IndustryId);
+        var pairs = new (Guid? Parent, Guid? Child, bool Changed, string Message)[]
+        {
+            (after.DepartmentId, after.ServiceLineId,
+                after.DepartmentId != before.DepartmentId || after.ServiceLineId != before.ServiceLineId,
+                "That service line is not offered under the chosen department."),
+            (after.ServiceLineId, after.JobTypeId,
+                after.ServiceLineId != before.ServiceLineId || after.JobTypeId != before.JobTypeId,
+                "That job type is not offered under the chosen service line."),
+            (rems.Client?.EntityTypeId, after.IndustryId, after.IndustryId != before.IndustryId,
+                "That industry is not offered under the client's entity type."),
+        };
+        foreach (var (parent, child, changed, message) in pairs)
+        {
+            if (!changed || parent is not { } parentId || child is not { } childId)
+            {
+                continue;
+            }
+
+            var validUnder = await _optionSets.ListParentIdsAsync(childId, cancellationToken);
+            if (validUnder.Count > 0 && !validUnder.Contains(parentId))
+            {
+                return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Validation failed.", message));
+            }
         }
 
         // The department the director is mapped from is the one being SAVED, which on this request may be
@@ -1503,7 +1532,7 @@ public sealed class RemsEngagementController : ControllerBase
     private async Task<HashSet<Guid>> ResolveOptionItemIdsAsync(string setKey, CancellationToken cancellationToken)
     {
         var tenantId = User.GetActiveTenantId();
-        var set = await _optionSets.GetEffectiveSetAsync(tenantId, EntityType.Rems, setKey, cancellationToken);
+        var set = await _optionSets.GetEffectiveSetAsync(tenantId, setKey, cancellationToken);
         return set?.Items.Where(i => !i.Deleted).Select(i => i.Id).ToHashSet() ?? new HashSet<Guid>();
     }
 

@@ -365,7 +365,7 @@ import { remsApi, mediaApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useConfirm } from "composables/useConfirm";
 import {
-  useRemsMeta, remsIndustryOptions, remsIndustryFitsEntityType,
+  useRemsMeta, remsDependentOptions, remsFitsParent,
   REMS_EXISTING_CLIENT_TYPES, REMS_TYPE_BRAND_NEW_CLIENT, REMS_TYPE_EXISTING_CLIENT,
   isIndividualEntityType
 } from "modules/rems/useRemsMeta";
@@ -610,7 +610,9 @@ const offeredEntityTypes = computed(() => {
 
 // The trades this kind of entity is in, out of the tenant's own list.
 const offeredIndustries = computed(() =>
-  remsIndustryOptions(props.industryOptions, props.entityType, props.industry));
+  remsDependentOptions(props.industryOptions, props.entityTypeOptions, props.entityType, props.industry));
+const industryFits = (entityType, industry) =>
+  remsFitsParent(props.industryOptions, props.entityTypeOptions, entityType, industry);
 
 // Maconomy's industry, once it is the one on the form, is Maconomy's to change — as the entity type is.
 const industryFromMaconomy = computed(() =>
@@ -643,7 +645,7 @@ const applyEntityType = (value) => {
   if (props.setupReadonly || props.entityTypeLocked) return;
   emit("update:entityType", value || null);
   industryCleared.value = "";
-  if (!value || remsIndustryFitsEntityType(value, props.industry)) return;
+  if (!value || industryFits(value, props.industry)) return;
   const stranded = industryLabel(props.industry);
   emit("update:industry", null);
   industryCleared.value =
@@ -662,7 +664,7 @@ const applyMaconomyIndustry = (customer, entityType) => {
   const code = customer?.industry;
   if (!code || code === props.industry) return;
   if (!props.industryOptions.some((o) => o.value === code)) return;
-  if (!remsIndustryFitsEntityType(entityType || null, code)) return;
+  if (!industryFits(entityType || null, code)) return;
   onIndustryPicked(code);
 };
 

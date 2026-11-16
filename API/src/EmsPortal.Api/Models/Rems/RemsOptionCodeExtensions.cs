@@ -12,7 +12,7 @@ public static class RemsOptionCodeExtensions
     /// <summary>The item id for a REMS code, or null when the code is null/blank or the list has no such value.</summary>
     public static Task<Guid?> RemsIdAsync(
         this IOptionCodeResolver codes, string setKey, string? code, CancellationToken cancellationToken = default)
-        => codes.IdOfAsync(EntityType.Rems, setKey, code, cancellationToken);
+        => codes.IdOfAsync(setKey, code, cancellationToken);
 
     /// <summary>
     /// The item id for a REMS code the application itself sets — a status transition, the type a
@@ -20,7 +20,7 @@ public static class RemsOptionCodeExtensions
     /// </summary>
     public static async Task<Guid> RequireRemsIdAsync(
         this IOptionCodeResolver codes, string setKey, string code, CancellationToken cancellationToken = default)
-        => await codes.IdOfAsync(EntityType.Rems, setKey, code, cancellationToken)
+        => await codes.IdOfAsync(setKey, code, cancellationToken)
             ?? throw new InvalidOperationException(
                 $"The '{setKey}' option list has no value '{code}'. It is a value the application writes, so "
                 + "it should be present and locked — check the list in Administration → Option Sets.");

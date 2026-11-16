@@ -1535,7 +1535,7 @@ public sealed class RemsApprovalController : ControllerBase
             return Array.Empty<RemsApprovalOptionRef>();
         }
 
-        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), EntityType.Rems, setKey, cancellationToken);
+        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), setKey, cancellationToken);
         if (set is null)
         {
             return Array.Empty<RemsApprovalOptionRef>();

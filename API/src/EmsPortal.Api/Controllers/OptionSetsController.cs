@@ -49,7 +49,6 @@ public sealed class OptionSetsController : ControllerBase
     private static readonly SortMap<OptionSetSummaryResponse> ListSorts =
         new SortMap<OptionSetSummaryResponse>("updatedOnUtc")
             .Add("name", s => s.Name)
-            .Add("entityType", s => s.EntityType, s => s.Name)
             .Add("itemCount", s => s.ItemCount, s => s.Name)
             .Add("itemSortMode", s => s.ItemSortMode, s => s.Name)
             .Add("origin", s => s.IsSystem, s => s.Name)
@@ -63,17 +62,15 @@ public sealed class OptionSetsController : ControllerBase
     [RequirePermission(Permissions.OptionSetsRead)]
     [ProducesResponseType<ApiResponse<IEnumerable<OptionSetSummaryResponse>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> List(
-        [FromQuery] int? entityType,
         [FromQuery] string? sortBy = null,
         [FromQuery] bool descending = true,
         CancellationToken cancellationToken = default)
     {
-        var filter = entityType is { } et ? (EntityType)et : (EntityType?)null;
-        var sets = await _sets.ListSetsForScopeAsync(ScopeTenantId, filter, cancellationToken);
+        var sets = await _sets.ListSetsForScopeAsync(ScopeTenantId, cancellationToken);
 
         // A tenant with its own copy of a standard list sees only that copy.
-        var owned = sets.Where(s => s.TenantId is not null).Select(s => (s.EntityType, s.Key)).ToHashSet();
-        var visible = sets.Where(s => s.TenantId is not null || !owned.Contains((s.EntityType, s.Key))).ToList();
+        var owned = sets.Where(s => s.TenantId is not null).Select(s => s.Key).ToHashSet();
+        var visible = sets.Where(s => s.TenantId is not null || !owned.Contains(s.Key)).ToList();
 
         var counts = await _sets.CountItemsAsync(visible.Select(s => s.Id).ToList(), cancellationToken);
 
@@ -110,12 +107,11 @@ public sealed class OptionSetsController : ControllerBase
     [Authorize]
     [ProducesResponseType<ApiResponse<IEnumerable<OptionSetItemResponse>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Resolve(
-        [FromQuery] int entityType,
         [FromQuery] string key,
         [FromQuery] Guid? parentItemId,
         CancellationToken cancellationToken)
     {
-        var set = await _sets.GetEffectiveSetAsync(ScopeTenantId, (EntityType)entityType, key?.Trim() ?? string.Empty, cancellationToken);
+        var set = await _sets.GetEffectiveSetAsync(ScopeTenantId, key?.Trim() ?? string.Empty, cancellationToken);
         if (set is null)
         {
             return Ok(ApiResponseFactory.Success<IEnumerable<OptionSetItemResponse>>(Array.Empty<OptionSetItemResponse>(), "No options found."));
@@ -123,7 +119,9 @@ public sealed class OptionSetsController : ControllerBase
 
         var items = OrderItems(set)
             .Where(i => i.IsActive)
-            .Where(i => parentItemId is null || i.ParentItemId == parentItemId)
+            // A value with no parents is valid under every one.
+            .Where(i => parentItemId is null || i.Parents.Count == 0
+                || i.Parents.Any(p => p.ParentOptionSetItemId == parentItemId))
             .Select(ToItem)
             .ToList();
 
@@ -136,7 +134,6 @@ public sealed class OptionSetsController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateOptionSetRequest body, CancellationToken cancellationToken)
     {
         var input = new CreateOptionSetInput(
-            (EntityType)body.EntityType,
             body.Key,
             body.Name,
             body.ParentSetId,
@@ -157,7 +154,7 @@ public sealed class OptionSetsController : ControllerBase
     [RequirePermission(Permissions.OptionSetsManage)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOptionSetRequest body, CancellationToken cancellationToken)
     {
-        var input = new UpdateOptionSetInput(body.Name, ParseSortMode(body.ItemSortMode), body.IsActive);
+        var input = new UpdateOptionSetInput(body.Name, ParseSortMode(body.ItemSortMode), body.IsActive, body.ParentSetId);
         try
         {
             var set = await _service.UpdateSetAsync(id, input, cancellationToken);
@@ -194,7 +191,7 @@ public sealed class OptionSetsController : ControllerBase
     public async Task<IActionResult> CreateItem(Guid id, [FromBody] CreateOptionItemRequest body, CancellationToken cancellationToken)
     {
         var input = new CreateOptionItemInput(
-            id, body.Value, body.Label, body.Description, body.ParentItemId, body.IsDefault,
+            id, body.Value, body.Label, body.Description, body.ParentItemIds, body.IsDefault,
             body.BackgroundColor, body.TextColor, body.Icon, body.MetadataJson, body.MaconomyNumber);
         try
         {
@@ -214,7 +211,7 @@ public sealed class OptionSetsController : ControllerBase
     public async Task<IActionResult> UpdateItem(Guid id, Guid itemId, [FromBody] UpdateOptionItemRequest body, CancellationToken cancellationToken)
     {
         var input = new UpdateOptionItemInput(
-            body.Value, body.Label, body.Description, body.ParentItemId, body.IsDefault, body.IsActive,
+            body.Value, body.Label, body.Description, body.ParentItemIds, body.IsDefault, body.IsActive,
             body.BackgroundColor, body.TextColor, body.Icon, body.MetadataJson, body.MaconomyNumber);
         try
         {
@@ -266,7 +263,7 @@ public sealed class OptionSetsController : ControllerBase
     // ---- mapping helpers ----
 
     private static OptionItemSortMode ParseSortMode(string? value)
-        => Enum.TryParse<OptionItemSortMode>(value, ignoreCase: true, out var mode) ? mode : OptionItemSortMode.Custom;
+        => Enum.TryParse<OptionItemSortMode>(value, ignoreCase: true, out var mode) ? mode : OptionItemSortMode.AlphabeticalAsc;
 
     private static IEnumerable<OptionSetItem> OrderItems(OptionSet set) => set.ItemSortMode switch
     {
@@ -282,19 +279,19 @@ public sealed class OptionSetsController : ControllerBase
     private static bool IsEditable(OptionSet set) => true;
 
     private static OptionSetSummaryResponse ToSummary(OptionSet s, int itemCount, Func<Guid?, string?> nameOf) => new(
-        s.Id, s.TenantId, (int)s.EntityType, s.Key, s.Name, s.ParentSetId,
+        s.Id, s.TenantId, s.Key, s.Name, s.ParentSetId,
         s.ItemSortMode.ToString(), s.IsSystem, s.IsClosed, s.IsActive, IsEditable(s), itemCount,
         nameOf(s.CreatedById), s.CreatedOnUtc, nameOf(s.UpdatedById), s.UpdatedOnUtc);
 
     /// <summary>The list plus its provenance block, which the detail page ends with.</summary>
     private async Task<OptionSetDetailResponse> ToDetailAsync(OptionSet s, CancellationToken cancellationToken) => new(
-        s.Id, s.TenantId, (int)s.EntityType, s.Key, s.Name, s.ParentSetId,
+        s.Id, s.TenantId, s.Key, s.Name, s.ParentSetId,
         s.ItemSortMode.ToString(), s.IsSystem, s.IsClosed, s.IsActive, IsEditable(s),
         OrderItems(s).Select(ToItem).ToList(),
         await RecordAudit.ForAsync(_users, s, cancellationToken));
 
     private static OptionSetItemResponse ToItem(OptionSetItem i) => new(
-        i.Id, i.OptionSetId, i.ParentItemId, i.Value, i.Label, i.Description, i.SortOrder,
+        i.Id, i.OptionSetId, i.Parents.Select(p => p.ParentOptionSetItemId).ToList(), i.Value, i.Label, i.Description, i.SortOrder,
         i.IsDefault, i.IsActive, i.TenantId is null, i.BackgroundColor, i.TextColor, i.Icon, i.IsSystem,
         i.MetadataJson, i.MaconomyNumber);
 

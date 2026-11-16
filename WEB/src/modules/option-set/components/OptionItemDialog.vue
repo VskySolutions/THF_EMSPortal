@@ -51,14 +51,15 @@
           hint="Optional. Entity type: the specification 6 number. Industry: the specification 1 number. Service line: the template job number. Job type: the specification 2 value, only where it differs from the label. Department: the location number."
         />
 
-        <!-- Cascading lists: tie this value to a parent-list item. -->
+        <!-- Dependent lists: the parent-list values this one is offered under. -->
         <app-select
           v-if="parentOptions.length"
-          v-model="form.parentItemId"
+          v-model="form.parentItemIds"
           class="col-12"
           :options="parentOptions"
-          label="Valid under (parent)"
-          clearable
+          :label="parentName ? `Valid under (${parentName})` : 'Valid under'"
+          multiple
+          hint="Leave empty to offer this value under every one."
         />
 
         <!-- Display colours shown for this value on the front UI. -->
@@ -144,6 +145,7 @@ const props = defineProps({
   item: { type: Object, default: null },
   // For dependency lists: the parent set's items as { label, value } options.
   parentOptions: { type: Array, default: () => [] },
+  parentName: { type: String, default: "" },
   // Whether the LIST is closed — the application branches on its values and the set of them is fixed.
   // Decides only whether a seeded value may be hidden; the code lock is per-item (see isSystemItem).
   setIsClosed: { type: Boolean, default: false }
@@ -162,7 +164,7 @@ const blankForm = () => ({
   value: "",
   description: "",
   maconomyNumber: "",
-  parentItemId: null,
+  parentItemIds: [],
   isDefault: false,
   isActive: true,
   backgroundColor: null,
@@ -187,7 +189,7 @@ watch(
         value: props.item.value,
         description: props.item.description || "",
         maconomyNumber: props.item.maconomyNumber || "",
-        parentItemId: props.item.parentItemId,
+        parentItemIds: [...(props.item.parentItemIds || [])],
         isDefault: props.item.isDefault,
         isActive: props.item.isActive,
         backgroundColor: props.item.backgroundColor,
@@ -208,7 +210,7 @@ const submit = async () => {
       value: form.value.trim(),
       description: form.description.trim() || null,
       maconomyNumber: form.maconomyNumber.trim() || null,
-      parentItemId: form.parentItemId || null,
+      parentItemIds: form.parentItemIds || [],
       isDefault: form.isDefault,
       backgroundColor: form.backgroundColor || null,
       textColor: form.textColor || null,

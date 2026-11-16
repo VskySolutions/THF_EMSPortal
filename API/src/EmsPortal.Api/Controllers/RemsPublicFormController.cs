@@ -119,7 +119,7 @@ public sealed class RemsPublicFormController : ControllerBase
     private async Task<IReadOnlyList<RemsPublicOption>?> ResolvePublicOptionsAsync(
         Guid tenantId, string key, CancellationToken cancellationToken)
     {
-        var set = await _optionSets.GetEffectiveSetAsync(tenantId, EntityType.Rems, key, cancellationToken);
+        var set = await _optionSets.GetEffectiveSetAsync(tenantId, key, cancellationToken);
         if (set is null)
         {
             return null;

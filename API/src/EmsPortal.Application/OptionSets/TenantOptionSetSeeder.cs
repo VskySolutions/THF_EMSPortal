@@ -24,11 +24,11 @@ public static class TenantOptionSetSeeder
     public static async Task<bool> EnsureDefaultsAsync(
         IOptionSetRepository sets, Guid tenantId, CancellationToken cancellationToken = default)
     {
-        var added = false;
+        var created = new List<OptionSet>();
 
         foreach (var def in DefaultOptionSets.All)
         {
-            if (await sets.KeyExistsAsync(tenantId, def.EntityType, def.Key, excludeId: null, cancellationToken))
+            if (await sets.KeyExistsAsync(tenantId, def.Key, excludeId: null, cancellationToken))
             {
                 continue;
             }
@@ -37,7 +37,6 @@ public static class TenantOptionSetSeeder
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                EntityType = def.EntityType,
                 Key = def.Key,
                 Name = def.Name,
                 ItemSortMode = def.ItemSortMode,
@@ -67,10 +66,16 @@ public static class TenantOptionSetSeeder
                 }).ToList(),
             };
 
-            await sets.AddSetAsync(set, cancellationToken);
-            added = true;
+            created.Add(set);
         }
 
-        return added;
+        // Linked before the sets are added, so the links are inserted along with them.
+        await DefaultOptionSets.LinkDependenciesAsync(sets, tenantId, created, cancellationToken);
+        foreach (var set in created)
+        {
+            await sets.AddSetAsync(set, cancellationToken);
+        }
+
+        return created.Count > 0;
     }
 }

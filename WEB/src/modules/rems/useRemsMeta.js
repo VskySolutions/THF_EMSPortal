@@ -1,7 +1,7 @@
 import { ref, computed } from "vue";
 import { useAuthStore } from "stores/auth";
 import { Permissions } from "composables/usePermissions";
-import { optionSetApi, EntityType } from "services/api";
+import { optionSetApi } from "services/api";
 import { useRemsOptionCatalog, ensureRemsOptionsLoaded } from "modules/rems/useRemsOptionCatalog";
 import { REMS_STATUS } from "modules/rems/remsStatus";
 
@@ -39,88 +39,30 @@ export const isIndividualEntityType = (entityType) => entityType === REMS_ENTITY
 // Mirrors RemsFormPayloadValidator.TrustEstate.
 export const REMS_ENTITY_TYPE_TRUST_ESTATE = "trust_estate";
 
-// ---- Which industries belong to which entity type ----
-// THF's table. Entity type and trade do not partition cleanly — a hospital is Health Care whether it is
-// Commercial or Not-for-Profit — which is why this is a map of OVERLAPPING sets rather than a tree.
-export const REMS_INDUSTRIES_BY_ENTITY_TYPE = Object.freeze({
-  individual: Object.freeze(["individual"]),
-  // The unqualified `government` is retired from the list. Claimed here all the same, so that a firm
-  // which turns it back on sees it under Government and nowhere else.
-  government: Object.freeze(["state_government", "local_government", "federal_government", "government"]),
-  not_for_profit: Object.freeze([
-    "health_care", "educational_institutions", "trade_associations", "charitable_organizations_foundations",
-    "other_not_for_profit"
-  ]),
-  insurance: Object.freeze([
-    "insurance_health", "insurance_property_casualty", "insurance_life", "insurance_other"
-  ]),
-  commercial: Object.freeze([
-    "affordable_housing", "agribusiness", "auto_dealers", "construction", "entertainment",
-    "financial_institutions_banking", "hospitality", "manufacturing", "professional_service_firms",
-    "real_estate", "retail", "health_care", "oil_gas_distribution", "wholesale", "technology",
-    "educational_institutions", "distribution"
-  ]),
-  trust_estate: Object.freeze(["trust_estate"])
-  // The legacy `business` is deliberately absent: it has no stated list, so it is offered every trade.
-});
+// ---- Dependent dropdowns ----
+// Which values a parent offers is data now: each option carries the ids of the parent values it is valid
+// under (Administration → Option Sets, "Valid under"). Industry follows Entity Type, Service Line follows
+// Department and Job Type follows Service Line.
+const parentIdOf = (parentOptions, parent) => parentOptions.find((o) => o.value === parent)?.id;
 
-// ---- Which service lines belong to which department ----
-// THF's table again. The Job Type beneath the pair is NOT narrowed: every value is offered whatever the
-// department and service line (the user's call, 11 Nov 2026).
-export const REMS_SERVICE_LINES_BY_DEPARTMENT = Object.freeze({
-  tax: Object.freeze([
-    "tax_compliance", "consulting", "mergers_acquisitions", "plan_administration", "employee_benefits",
-    "estate_planning"
-  ]),
-  assurance: Object.freeze([
-    "attest_services", "consulting", "it_services", "soc", "employee_benefits", "litigation_support",
-    "forensic_accounting"
-  ]),
-  gcs: Object.freeze(["attest_services", "consulting", "it_services"]),
-  cas: Object.freeze(["client_accounting_services", "mergers_acquisitions", "consulting"]),
-  // Not on the table, which lists client work: the firm's own work is booked under Admin against the one
-  // line it was brought back alongside.
-  admin: Object.freeze(["non_chargeable_internal"])
-  // The retired `audit` is deliberately absent, so an engagement still filed under it is offered every line.
-});
-
-// Every code each map places somewhere. Anything outside it is a tenant's own addition and is offered
-// under every parent — a firm adding a value should not have to say which parents may see it.
-const claimed = (lists) => new Set(lists.flat());
-const CLAIMED_INDUSTRY_CODES = claimed(Object.values(REMS_INDUSTRIES_BY_ENTITY_TYPE));
-const CLAIMED_SERVICE_LINE_CODES = claimed(Object.values(REMS_SERVICE_LINES_BY_DEPARTMENT));
-
-// The options a parent value offers, out of the tenant's resolved list: the ones its list names, every
-// tenant addition, and whatever is currently stored — always kept, so a record never loses its answer. A
-// parent with no list of its own (one the tenant added) offers everything.
-const narrowTo = (options, allowed, claimedCodes, selected) => {
-  if (!allowed) return options;
+/**
+ * The options a parent value offers: the ones linked to it, any linked to no parent at all, and whatever
+ * is currently stored — always kept, so a record never loses its answer. Nothing but the stored value is
+ * offered until the parent is answered.
+ */
+export function remsDependentOptions (options, parentOptions, parent, selected = null) {
+  if (!parent) return options.filter((o) => o.value === selected);
+  const parentId = parentIdOf(parentOptions, parent);
   return options.filter((o) =>
-    allowed.includes(o.value) || !claimedCodes.has(o.value) || o.value === selected);
-};
-
-// Whether a stored value is one its parent offers — what decides if a changed parent clears it.
-const fitsUnder = (allowed, claimedCodes, value) =>
-  !value || !allowed || allowed.includes(value) || !claimedCodes.has(value);
-
-/** The Industry options to offer for an entity type. `selected` is the value currently stored. */
-export function remsIndustryOptions (options, entityType, selected = null) {
-  // Nothing to offer until the entity type is answered — except a stored value, which keeps showing.
-  if (!entityType) return options.filter((o) => o.value === selected);
-  return narrowTo(options, REMS_INDUSTRIES_BY_ENTITY_TYPE[entityType], CLAIMED_INDUSTRY_CODES, selected);
+    !o.parentIds?.length || o.parentIds.includes(parentId) || o.value === selected);
 }
 
-export const remsIndustryFitsEntityType = (entityType, industry) =>
-  fitsUnder(REMS_INDUSTRIES_BY_ENTITY_TYPE[entityType], CLAIMED_INDUSTRY_CODES, industry);
-
-/** The Service Line options to offer for a department, the same way. */
-export function remsServiceLineOptions (options, department, selected = null) {
-  if (!department) return options.filter((o) => o.value === selected);
-  return narrowTo(options, REMS_SERVICE_LINES_BY_DEPARTMENT[department], CLAIMED_SERVICE_LINE_CODES, selected);
+/** Whether a stored value is one its parent offers — what decides if a changed parent clears it. */
+export function remsFitsParent (options, parentOptions, parent, value) {
+  if (!value || !parent) return true;
+  const parentIds = options.find((o) => o.value === value)?.parentIds;
+  return !parentIds?.length || parentIds.includes(parentIdOf(parentOptions, parent));
 }
-
-export const remsServiceLineFitsDepartment = (department, serviceLine) =>
-  fitsUnder(REMS_SERVICE_LINES_BY_DEPARTMENT[department], CLAIMED_SERVICE_LINE_CODES, serviceLine);
 
 // Not offered on Engagement Setup (user, 13 Nov 2026). Still on the option lists, and a request already
 // filed under either keeps showing it.
@@ -411,7 +353,6 @@ export function useRemsEngagementOptionSets () {
   const resolveMarketing = async () => {
     try {
       const items = await optionSetApi.resolve({
-        entityType: EntityType.Rems,
         key: "REMSMarketing_MarketingMethods.MarketingMethodId"
       });
       const byGroup = new Map();

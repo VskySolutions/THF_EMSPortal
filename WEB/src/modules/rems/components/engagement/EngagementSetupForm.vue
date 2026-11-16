@@ -25,11 +25,12 @@
           info="From the REMS Service Line option list (Administration → Option Sets), narrowed to the lines the selected Department offers. What the firm is actually engaged to do."
           @update:model-value="onServiceLinePicked"
         />
-        <!-- Independent of the Department and Service Line above it: every value is offered. -->
+        <!-- Narrowed by the Service Line above it, as that is by the Department. -->
         <app-select
-          v-model="core.jobType" :options="jobTypeOptions" label="Job Type" required class="col-12 col-sm-6"
-          :readonly="!editable" :rules="[requiredRule('a Job Type')]"
-          info="From the REMS Job Type option list (Administration → Option Sets). The kind of job the engagement is set up as; it is part of the Maconomy job's name."
+          :model-value="core.jobType" :options="offeredJobTypes" label="Job Type" required class="col-12 col-sm-6"
+          :readonly="!editable" :rules="[jobTypeRule]" :hint="jobTypeHint"
+          info="From the REMS Job Type option list (Administration → Option Sets), narrowed to the job types the selected Service Line offers. The kind of job the engagement is set up as; it is part of the Maconomy job's name."
+          @update:model-value="onJobTypePicked"
         />
         <!-- A short plain-text tag for the job, under its job type. Optional. -->
         <app-text-field
@@ -325,7 +326,7 @@ import { MAX_UPLOAD_MB } from "composables/useFileDrop";
 import {
   useRemsMeta, isTaxDepartment, isGovernmentAudit, isCasDepartment, isAssuranceDepartment,
   isGcsDepartment, requiresClientAcceptanceForm,
-  remsServiceLineOptions, remsServiceLineFitsDepartment,
+  remsDependentOptions, remsFitsParent,
   REMS_HIDDEN_DEPARTMENTS, REMS_HIDDEN_SERVICE_LINES, remsWithoutHidden
 } from "modules/rems/useRemsMeta";
 import AppSelect from "components/common/AppSelect.vue";
@@ -449,6 +450,7 @@ const tax = ref(buildTax(props.engagement.tax));
 // empties itself with no explanation reads as data lost rather than as an answer that stopped applying.
 // Set and read further down, beside the picker it belongs to.
 const serviceLineCleared = ref("");
+const jobTypeCleared = ref("");
 
 // Re-sync every local form when the parent adopts a fresh engagement view.
 watch(() => props.engagement, (e) => {
@@ -460,6 +462,7 @@ watch(() => props.engagement, (e) => {
   cafOverride.value = undefined;
   govOverride.value = undefined;
   serviceLineCleared.value = "";
+  jobTypeCleared.value = "";
   nextTick(() => { syncing = false; });
 });
 
@@ -473,14 +476,40 @@ watch(() => tax.value.fiscalYearEnd, (fye, previous) => {
 });
 
 // ---- Service Line, narrowed by the department above it ----
-// The department decides which lines are offered (REMS_SERVICE_LINES_BY_DEPARTMENT). The labels are for
-// the note below. The Job Type is independent of both and is never narrowed or cleared.
-const { departmentLabel, serviceLineLabel } = useRemsMeta();
+// The department decides which lines are offered, and the line which job types — both from the option
+// lists' "Valid under" (Administration → Option Sets). The labels are for the notes below.
+const { departmentLabel, serviceLineLabel, jobTypeLabel } = useRemsMeta();
 const offeredDepartments = computed(() =>
   remsWithoutHidden(props.deptOptions, REMS_HIDDEN_DEPARTMENTS, core.value.department));
 const offeredServiceLines = computed(() => remsWithoutHidden(
-  remsServiceLineOptions(props.serviceLineOptions, core.value.department, core.value.serviceLine),
+  remsDependentOptions(props.serviceLineOptions, props.deptOptions, core.value.department, core.value.serviceLine),
   REMS_HIDDEN_SERVICE_LINES, core.value.serviceLine));
+const offeredJobTypes = computed(() =>
+  remsDependentOptions(props.jobTypeOptions, props.serviceLineOptions, core.value.serviceLine, core.value.jobType));
+
+const jobTypeHint = computed(() =>
+  jobTypeCleared.value ||
+  (core.value.serviceLine ? "" : "Choose a Service Line first — it decides which job types are offered."));
+
+// Every change of service line comes through here, so the job type beneath it is checked either way.
+const setServiceLine = (value) => {
+  core.value.serviceLine = value;
+  jobTypeCleared.value = "";
+  const jobType = core.value.jobType;
+  if (!jobType) return;
+  if (!value) {
+    core.value.jobType = null;
+  } else if (!remsFitsParent(props.jobTypeOptions, props.serviceLineOptions, value, jobType)) {
+    jobTypeCleared.value =
+      `Job Type cleared — ${jobTypeLabel(jobType)} is not offered under ${serviceLineLabel(value)}.`;
+    core.value.jobType = null;
+  }
+};
+
+const onJobTypePicked = (value) => {
+  core.value.jobType = value;
+  jobTypeCleared.value = "";
+};
 
 // The cleared note when there is one, otherwise the reason an empty picker is empty.
 const serviceLineHint = computed(() =>
@@ -494,20 +523,20 @@ const onDepartmentPicked = (value) => {
   if (!value) {
     // Removing the department empties the service line beneath it, quietly: the hint under the box says
     // what to choose first, and the box is not at fault.
-    core.value.serviceLine = null;
+    setServiceLine(null);
     return;
   }
-  if (line && !remsServiceLineFitsDepartment(value, line)) {
+  if (line && !remsFitsParent(props.serviceLineOptions, props.deptOptions, value, line)) {
     // The note first, so the required rule that fires on the change below already has it to show.
     serviceLineCleared.value =
       `Service Line cleared — ${serviceLineLabel(line)} is not offered under ${departmentLabel(value)}.`;
-    core.value.serviceLine = null;
+    setServiceLine(null);
   }
 };
 
 // A note has done its job the moment a value is chosen beneath it.
 const onServiceLinePicked = (value) => {
-  core.value.serviceLine = value;
+  setServiceLine(value);
   serviceLineCleared.value = "";
 };
 
@@ -697,6 +726,10 @@ const requiredValue = (what) => (v) => (v !== null && v !== undefined && v !== "
 const serviceLineRule = (v) =>
   requiredRule("a Service Line")(v) === true || !core.value.department || serviceLineCleared.value ||
   "Select a Service Line";
+// The Job Type under its Service Line, the same way.
+const jobTypeRule = (v) =>
+  requiredRule("a Job Type")(v) === true || !core.value.serviceLine || jobTypeCleared.value ||
+  "Select a Job Type";
 
 // Money: blank is "not known yet", a negative is wrong however early it is typed. One rule, four boxes.
 const amountRule = (v) => v === "" || v === null || v === undefined || Number(v) >= 0 || "Enter a valid amount";

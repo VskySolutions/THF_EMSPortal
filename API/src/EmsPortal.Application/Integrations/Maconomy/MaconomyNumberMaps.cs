@@ -49,7 +49,7 @@ public sealed class MaconomyNumberMaps : IMaconomyNumberMaps
 
     private async Task<IReadOnlyList<MaconomyNumbered>> ListAsync(Guid tenantId, string key, CancellationToken cancellationToken)
     {
-        var set = await _sets.GetEffectiveSetAsync(tenantId, EntityType.Rems, key, cancellationToken);
+        var set = await _sets.GetEffectiveSetAsync(tenantId, key, cancellationToken);
         if (set is null)
         {
             return Array.Empty<MaconomyNumbered>();
