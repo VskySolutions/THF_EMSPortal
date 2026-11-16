@@ -214,7 +214,9 @@ const submit = async () => {
       isDefault: form.isDefault,
       backgroundColor: form.backgroundColor || null,
       textColor: form.textColor || null,
-      icon: form.icon?.trim() || null
+      icon: form.icon?.trim() || null,
+      // Not edited here, and the update replaces the whole value: sent back so it is not wiped.
+      metadataJson: props.item?.metadataJson ?? null
     };
     if (props.item) {
       await optionSetApi.updateItem(props.setId, props.item.id, { ...payload, isActive: form.isActive });

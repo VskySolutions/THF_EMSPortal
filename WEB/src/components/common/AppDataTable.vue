@@ -153,6 +153,11 @@ watch(() => innerPagination.value.rowsPerPage, (size) => {
   if (props.clientSort) prefs?.merge({ pageSize: size });
 });
 
+// Nor does it raise a request, so a page that needs to know the sort is told here.
+watch(() => innerPagination.value.sortBy, () => {
+  if (props.clientSort) emit("update:pagination", innerPagination.value);
+});
+
 // The page's sort follows the page: a list that resets to page 1 on a new sort, or restores a remembered
 // one, has to be able to say so and see the header arrow move.
 watch(() => props.pagination, (next) => {

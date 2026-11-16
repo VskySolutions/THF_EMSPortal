@@ -19,7 +19,7 @@
         <q-menu anchor="bottom end" self="top end" auto-close>
           <q-list dense style="min-width: 150px;">
             <q-item
-              v-for="opt in NAME_SUFFIXES" :key="opt.value"
+              v-for="opt in suffixes" :key="opt.value"
               clickable :active="model === opt.value" active-class="bg-grey-2 text-primary"
               @click="pick(opt.value)"
             >
@@ -43,9 +43,13 @@
 // The name SUFFIX field — Jr., Sr., II, III, IV — asked beside a name.
 import { computed, nextTick } from "vue";
 import AppTextField from "components/common/AppTextField.vue";
-import { NAME_SUFFIXES, NAME_SUFFIX_MAX_LENGTH } from "utils/personName";
+import { NAME_SUFFIX_MAX_LENGTH } from "utils/personName";
+import { useNameSuffixes } from "composables/useNameSuffixes";
 
 const model = defineModel({ type: String, default: "" });
+
+// The Person.NameSuffix option list.
+const suffixes = useNameSuffixes();
 
 // Forwarded from the box, and raised for a suggestion picked off the menu too — a screen that saves as
 // you leave a field has to hear about a suffix chosen from the list as well as one typed.

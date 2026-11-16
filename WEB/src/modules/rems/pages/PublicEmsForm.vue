@@ -150,6 +150,8 @@ import {
   seedIntakePayload
 } from "modules/rems/useRemsIntakeForm";
 
+import { fillRemsOptions } from "modules/rems/useRemsOptionCatalog";
+import { setNameSuffixes } from "composables/useNameSuffixes";
 import ClientIntakeFields from "modules/rems/components/ClientIntakeFields.vue";
 import RemsReviewSummary from "modules/rems/components/RemsReviewSummary.vue";
 
@@ -166,6 +168,11 @@ const formTitle = computed(() => route.meta.title(branding.appName));
 // The referral-source list, as the SERVER sends it with the form — the tenant's own wording, in their own
 // order, with the descriptions that become each option's caption.
 const referralSources = ref([]);
+
+// No session here, so the suffix boxes must never ask for their list: it is handed over with the form.
+setNameSuffixes([]);
+const nameSuffixesIn = (lists) =>
+  Object.entries(lists || {}).find(([key]) => key.toLowerCase() === "person.namesuffix")?.[1];
 
 // ---- Screen state ----
 const loading = ref(true);
@@ -264,6 +271,9 @@ async function load () {
       // The tenant's own REMS.ReferralSource list, resolved server-side because this page has no
       // session to resolve it with. Absent (an emptied or missing list) leaves the built-in copy.
       if (res.referralSources?.length) referralSources.value = res.referralSources;
+      // The other option lists the form asks from, handed over for the same reason.
+      fillRemsOptions(res.optionLists);
+      setNameSuffixes(nameSuffixesIn(res.optionLists));
       seed(res.prefill, res.draftPayload);
     }
   } catch {

@@ -302,14 +302,6 @@ export const REMS_DEPARTMENT_CODES = Object.freeze({
 // The Entity Type code (REMS.EntityType value) that makes an audit a GOVERNMENT audit.
 export const REMS_ENTITY_TYPE_GOVERNMENT = "government";
 
-// The REMS.Marketing groups (from each item's MetadataJson `group` tag), in display order.
-const MARKETING_GROUPS = [
-  { key: "Global", label: "Global" },
-  { key: "Geography", label: "Geography" },
-  { key: "Service/Education", label: "Service / Education" },
-  { key: "Event", label: "Event" }
-];
-
 // Conditional engagement-detail predicates — mirror the backend RemsEngagementCodes helper exactly.
 export const isAuditDepartment = (department) => department === REMS_DEPARTMENT_CODES.AUDIT;
 export const isTaxDepartment = (department) => department === REMS_DEPARTMENT_CODES.TAX;
@@ -342,32 +334,27 @@ export function useRemsEngagementOptionSets () {
   const marketingGroups = ref([]);
   const marketingUnavailable = ref(false);
 
-  const groupOf = (metadataJson) => {
-    try {
-      return JSON.parse(metadataJson || "{}").group || "Other";
-    } catch {
-      return "Other";
-    }
-  };
-
+  // Each method is listed under the REMS.MarketingGroup values it sits under ("Depends on"); a method
+  // under none of them goes under Other.
   const resolveMarketing = async () => {
     try {
-      const items = await optionSetApi.resolve({
-        key: "REMSMarketing_MarketingMethods.MarketingMethodId"
-      });
-      const byGroup = new Map();
-      (items || []).forEach((i) => {
-        const g = groupOf(i.metadataJson);
-        if (!byGroup.has(g)) byGroup.set(g, []);
-        byGroup.get(g).push({ value: i.id, label: i.label });
-      });
-      const known = MARKETING_GROUPS
-        .map((g) => ({ key: g.key, label: g.label, items: byGroup.get(g.key) || [] }))
+      const [items] = await Promise.all([
+        optionSetApi.resolve({ key: "REMSMarketing_MarketingMethods.MarketingMethodId" }),
+        ensureRemsOptionsLoaded()
+      ]);
+      const methods = items || [];
+      const under = (group) => methods
+        .filter((i) => (i.parentItemIds || []).includes(group.id))
+        .map((i) => ({ value: i.id, label: i.label }));
+      const groups = catalog.marketingGroup
+        .map((g) => ({ key: g.value, label: g.label, items: under(g) }))
         .filter((g) => g.items.length);
-      const extra = [...byGroup.keys()]
-        .filter((k) => !MARKETING_GROUPS.some((g) => g.key === k))
-        .map((k) => ({ key: k, label: k, items: byGroup.get(k) }));
-      marketingGroups.value = [...known, ...extra];
+      const groupIds = catalog.marketingGroup.map((g) => g.id);
+      const rest = methods
+        .filter((i) => !(i.parentItemIds || []).some((id) => groupIds.includes(id)))
+        .map((i) => ({ value: i.id, label: i.label }));
+      if (rest.length) groups.push({ key: "other", label: "Other", items: rest });
+      marketingGroups.value = groups;
       marketingUnavailable.value = marketingGroups.value.length === 0;
     } catch {
       marketingGroups.value = [];

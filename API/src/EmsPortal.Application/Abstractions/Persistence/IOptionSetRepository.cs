@@ -18,6 +18,9 @@ public interface IOptionSetRepository
     /// <summary>Item counts per set id (non-deleted) for the given set ids.</summary>
     Task<IReadOnlyDictionary<Guid, int>> CountItemsAsync(IReadOnlyCollection<Guid> setIds, CancellationToken cancellationToken = default);
 
+    /// <summary>Per set: values holding a Maconomy number, and active values still without one.</summary>
+    Task<IReadOnlyDictionary<Guid, (int WithNumber, int Missing)>> CountMaconomyNumbersAsync(IReadOnlyCollection<Guid> setIds, CancellationToken cancellationToken = default);
+
     /// <summary>True when another non-deleted list in the same scope already uses this key.</summary>
     Task<bool> KeyExistsAsync(Guid? tenantId, string key, Guid? excludeId, CancellationToken cancellationToken = default);
 

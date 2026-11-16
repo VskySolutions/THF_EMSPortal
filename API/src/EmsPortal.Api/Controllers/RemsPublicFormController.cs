@@ -108,8 +108,29 @@ public sealed class RemsPublicFormController : ControllerBase
                 EntityType: entityType,
                 Prefill: BuildPrefill(client, entityType),
                 DraftPayload: DraftPayload(request, entityType),
-                ReferralSources: await ResolvePublicOptionsAsync(request.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken)),
+                ReferralSources: await ResolvePublicOptionsAsync(request.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken),
+                OptionLists: await ResolvePublicListsAsync(request.TenantId, cancellationToken)),
             "REMS form resolved."));
+    }
+
+    /// <summary>The lists the form's pickers and role labels are drawn from.</summary>
+    private static readonly string[] PublicListKeys =
+    {
+        RemsOptionSetKeys.RelationType, RemsOptionSetKeys.FilingType, RemsOptionSetKeys.BillingPreference,
+        RemsOptionSetKeys.ContactRole, RemsOptionSetKeys.NameSuffix,
+    };
+
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<RemsPublicOption>>> ResolvePublicListsAsync(
+        Guid tenantId, CancellationToken cancellationToken)
+    {
+        var lists = new Dictionary<string, IReadOnlyList<RemsPublicOption>>();
+        foreach (var key in PublicListKeys)
+        {
+            lists[key] = await ResolvePublicOptionsAsync(tenantId, key, cancellationToken)
+                ?? Array.Empty<RemsPublicOption>();
+        }
+
+        return lists;
     }
 
     /// <summary>

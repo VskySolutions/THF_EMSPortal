@@ -527,7 +527,9 @@ public sealed record RemsPublicFormResponse(
     RemsPublicPrefill? Prefill = null,
     RemsFormPayloadV1? DraftPayload = null,
     // The tenant's REMS.ReferralSource list, delivered WITH the form.
-    IReadOnlyList<RemsPublicOption>? ReferralSources = null);
+    IReadOnlyList<RemsPublicOption>? ReferralSources = null,
+    // The other lists the form asks from, keyed by option-set key: this caller has no session to resolve them with.
+    IReadOnlyDictionary<string, IReadOnlyList<RemsPublicOption>>? OptionLists = null);
 
 /// <summary>One selectable value for a public-form picker.</summary>
 public sealed record RemsPublicOption(string Value, string Label, string? Description);

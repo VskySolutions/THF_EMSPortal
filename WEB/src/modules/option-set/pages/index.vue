@@ -6,11 +6,15 @@
         { label: 'Tenant Settings' },
         { label: 'Option Sets' }
       ]"
+      :search="search"
+      show-search
+      search-placeholder="Search lists"
       :show-add="canManage"
       add-label="New List"
       show-back
       @add="openCreate"
       @back="$router.back()"
+      @update:search="search = $event || ''"
     >
       <template #actions>
         <q-toggle v-if="canManageDeleted" v-model="showDeleted" label="Show deleted?" dense />
@@ -21,11 +25,12 @@
       page-key="option_sets"
       row-key="id"
       title="Option lists"
-      :rows="rows"
+      :rows="shownRows"
       :columns="columns"
       :loading="loading"
-      :total-records="totalRecords"
+      :total-records="shownRows.length"
       :pagination="pagination"
+      :row-colours="maconomyColours"
       default-sort-by="updatedOnUtc"
       @request="onRequest"
       @refresh="load"
@@ -41,14 +46,28 @@
       <template #body-cell-dependsOn="cell">
         <q-td :props="cell">{{ parentNameOf(cell.row) }}</q-td>
       </template>
+      <template #body-cell-maconomy="cell">
+        <q-td :props="cell">
+          <!-- Only a list that already uses Maconomy numbers is counted. -->
+          <template v-if="cell.row.maconomyNumberCount">
+            <q-badge v-if="cell.row.maconomyMissingCount" color="orange-8" :label="`${cell.row.maconomyMissingCount} missing`">
+              <q-tooltip>{{ cell.row.maconomyMissingCount }} active value(s) have no Maconomy number yet; {{ cell.row.maconomyNumberCount }} have one.</q-tooltip>
+            </q-badge>
+            <q-badge v-else color="positive" label="Complete">
+              <q-tooltip>Every active value has a Maconomy number.</q-tooltip>
+            </q-badge>
+          </template>
+        </q-td>
+      </template>
       <template #body-cell-itemSortMode="cell">
         <q-td :props="cell">{{ sortModeLabel(cell.row.itemSortMode) }}</q-td>
       </template>
       <template #body-cell-origin="cell">
         <q-td :props="cell">
-          <!-- Origin comes from isSystem, NOT isEditable: standard lists are editable now, so isEditable no
-               longer distinguishes them. -->
-          <q-badge :color="cell.row.isSystem ? 'grey-6' : 'primary'" :label="cell.row.isSystem ? 'Standard' : 'Custom'" />
+          <!-- A system list is one the application reads by its key: editable, but it cannot be deleted. -->
+          <q-badge :color="cell.row.isSystem ? 'grey-6' : 'primary'" :label="cell.row.isSystem ? 'System' : 'Custom'">
+            <q-tooltip v-if="cell.row.isSystem">The application reads this list, so it cannot be deleted. Its values can be edited.</q-tooltip>
+          </q-badge>
         </q-td>
       </template>
       <template #body-cell-isActive="cell">
@@ -64,8 +83,7 @@
           <q-btn v-if="cell.row.isEditable && canManage" type="a" flat round dense color="primary" icon="o_edit" @click="openEdit(cell.row)">
             <q-tooltip>Edit</q-tooltip>
           </q-btn>
-          <!-- A standard list's VALUES are editable, but the list itself cannot be deleted: feature code
-               references its key, and the seeder would recreate it on the next restart anyway. -->
+          <!-- A system list cannot be deleted: feature code reads it by its key. -->
           <q-btn v-if="!cell.row.isSystem && canManage" type="a" flat round dense color="negative" icon="o_delete" @click="remove(cell.row)">
             <q-tooltip>Delete</q-tooltip>
           </q-btn>
@@ -91,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { optionSetApi, getApiErrorMessage, OptionItemSortMode, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useDeletedRecords } from "composables/useDeletedRecords";
@@ -114,7 +132,7 @@ const canManage = has(Permissions.OptionSetsManage);
 
 // Ordering is the server's, like every other list — a header click re-asks for the whole set in the
 // order it was asked for, rather than rearranging the rows already on screen.
-const { rows, loading, totalRecords, pagination, load, onRequest } = useListTable({
+const { rows, loading, pagination, load, onRequest } = useListTable({
   pageKey: "option_sets",
   fetcher: ({ sortBy, descending }) =>
     optionSetApi.list({ sortBy, descending })
@@ -126,6 +144,7 @@ const columns = [
   { name: "name", label: "Name", field: "name", align: "left", sortable: true, default: true },
   { name: "dependsOn", label: "Depends on", field: "parentSetId", align: "left", default: true },
   { name: "itemCount", label: "Values", field: "itemCount", align: "left", sortable: true, default: true },
+  { name: "maconomy", label: "Maconomy numbers", field: "maconomyMissingCount", align: "left", sortable: true, default: true },
   { name: "itemSortMode", label: "Order", field: "itemSortMode", align: "left", sortable: true, default: true },
   { name: "origin", label: "Type", field: "isSystem", align: "left", sortable: true, default: true },
   { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, default: true },
@@ -135,6 +154,20 @@ const columns = [
 
 // The parent list's name, off the rows already loaded.
 const parentNameOf = (row) => rows.value.find((r) => r.id === row.parentSetId)?.name || "";
+
+// A list that uses Maconomy numbers carries a stripe: amber while values are missing one, green once none are.
+const maconomyColours = computed(() => Object.fromEntries(
+  rows.value.filter((r) => r.maconomyNumberCount)
+    .map((r) => [r.id, r.maconomyMissingCount ? "#f57c00" : "#21ba45"])));
+
+// Quick search over the lists already loaded: name, key and the list it depends on.
+const search = ref("");
+const shownRows = computed(() => {
+  const needle = search.value.trim().toLowerCase();
+  if (!needle) return rows.value;
+  return rows.value.filter((r) =>
+    [r.name, r.key, parentNameOf(r)].some((v) => String(v || "").toLowerCase().includes(needle)));
+});
 
 const sortModeLabel = (mode) => ({
   [OptionItemSortMode.AlphabeticalAsc]: "Alphabetical (A → Z)",

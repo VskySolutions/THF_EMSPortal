@@ -22,6 +22,11 @@ public static class RemsOptionSetKeys
 
     /// <summary>Referenced by item ID already: the grouped marketing list.</summary>
     public const string MarketingMethods = "REMSMarketing_MarketingMethods.MarketingMethodId";
+    /// <summary>The headings the marketing methods are grouped under; Marketing Methods depends on it.</summary>
+    public const string MarketingGroup = "REMS.MarketingGroup";
+
+    /// <summary>Not a REMS list: the suffix suggestions beside a name, which the client form offers too.</summary>
+    public const string NameSuffix = "Person.NameSuffix";
     public const string AddressType = "REMS.AddressType";
     public const string ContactRole = "REMS.ContactRole";
     public const string RelationType = "REMS.RelationType";

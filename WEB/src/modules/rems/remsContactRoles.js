@@ -1,37 +1,37 @@
 // The client-intake contact roles, in ONE place.
-import { NAME_SUFFIXES } from "utils/personName";
+import { remsOptionCatalog } from "modules/rems/useRemsOptionCatalog";
 // Plain constants and a frozen-list predicate only: this file is read on the anonymous client form, which
 // must not wake the auth store that the rest of useRemsMeta reaches for.
 import { REMS_ENTITY_TYPE_TRUST_ESTATE, isBusinessEntityType } from "modules/rems/useRemsMeta";
 
-// / The label each role is asked and read under.
-export const CONTACT_ROLE_LABELS = {
-  self: "Self",
-  spouse: "Spouse",
-  primaryContact: "Primary Client Contact",
-  financialContact: "Financial Contact",
+// The REMS.ContactRole code each payload key is filed under. The label each role is asked and read under,
+// and the note in the tooltip beside it, are that option's label and description.
+const ROLE_CODES = {
+  self: "self",
+  spouse: "spouse",
+  primaryContact: "primary_client_contact",
+  financialContact: "financial_contact",
   // Retired with the Billing Contact block.
-  billingContact: "Billing Contact",
-  otherContact: "Other Contact",
-  financeDirector: "Finance Director",
-
+  billingContact: "billing_contact",
+  otherContact: "other_contact",
+  financeDirector: "finance_director",
   // Trust and Estate only — the person who ACTS for it. Optional for now.
-  trustEstateContact: "Trust and Estate Contact",
-
+  trustEstateContact: "trust_estate_contact",
   // Retired.
-  banker: "Banker",
-  lawyer: "Lawyer"
+  banker: "banker",
+  lawyer: "lawyer"
 };
 
-/// A one-line note on each role, for the tooltip beside it. Only where the label leaves a real question:
-/// "Self" and "Spouse" explain themselves.
-export const CONTACT_ROLE_HINTS = {
-  primaryContact: "Who we speak to about this engagement — the main person on your side.",
-  financialContact: "Who we speak to about your finances and reporting.",
-  otherContact: "Anyone else you would like us to have on file.",
-  financeDirector: "The finance director for this entity.",
-  trustEstateContact: "The trustee or personal representative who acts for the trust or estate."
-};
+const roleOption = (roleKey) =>
+  remsOptionCatalog.contactRole.find((o) => o.value === ROLE_CODES[roleKey]);
+
+// Until the list arrives, or for a role switched off in it, the key is read out: "primaryContact" →
+// "Primary Contact".
+const keyAsWords = (roleKey) =>
+  String(roleKey).replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+
+export const contactRoleLabel = (roleKey) => roleOption(roleKey)?.label || keyAsWords(roleKey);
+export const contactRoleHint = (roleKey) => roleOption(roleKey)?.description || "";
 
 /// The keys the payload can carry, in the order they are asked. Used to seed and to iterate a payload
 /// whose group is not known (a submission rendered before its entity type is read).
@@ -141,8 +141,8 @@ export const roleDefsFor = (entityType, extraKeys = []) => {
   const extras = extraKeys.filter((k) => !order.includes(k));
   return [...order, ...extras].map((roleKey) => ({
     key: roleKey,
-    label: CONTACT_ROLE_LABELS[roleKey] || roleKey,
-    hint: CONTACT_ROLE_HINTS[roleKey] || "",
+    label: contactRoleLabel(roleKey),
+    hint: contactRoleHint(roleKey),
     required: required.includes(roleKey),
     phoneRequired
   }));
@@ -151,9 +151,6 @@ export const roleDefsFor = (entityType, extraKeys = []) => {
 /** The keys a payload actually carries an answer under — what drives `extraKeys` above. */
 export const answeredRoleKeys = (roles) =>
   ALL_ROLE_KEYS.filter((k) => hasAny(roles?.[k]));
-
-/** The generational suffixes offered beside a client's name. */
-export const CLIENT_NAME_SUFFIXES = NAME_SUFFIXES;
 
 /** A client's name as it reads — the suffix AFTER the name ("John Smith Jr."). Mirrors
     REMS.ClientDisplayName. After. */

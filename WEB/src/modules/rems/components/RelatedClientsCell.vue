@@ -84,7 +84,7 @@
 import { computed } from "vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import RelatedStatusSelect from "modules/rems/components/RelatedStatusSelect.vue";
-import { INDIVIDUAL_TYPES } from "modules/rems/useRemsIntakeForm";
+import { relationTypeLabel } from "modules/rems/useRemsIntakeForm";
 import { isIndividualEntityType } from "modules/rems/useRemsMeta";
 
 const props = defineProps({
@@ -111,7 +111,7 @@ const isIndividual = computed(() => isIndividualEntityType(props.entityType));
 // What they are to the client, read back as the word the client chose.
 const relationLabel = (relation) => {
   if (!relation) return "";
-  return INDIVIDUAL_TYPES.find((o) => o.value === relation)?.label || relation;
+  return relationTypeLabel(relation);
 };
 
 const contactHint = (row) => [row.email, row.phoneNumber].filter(Boolean).join(" · ");

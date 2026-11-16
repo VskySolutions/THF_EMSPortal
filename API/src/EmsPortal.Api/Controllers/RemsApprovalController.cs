@@ -1541,10 +1541,17 @@ public sealed class RemsApprovalController : ControllerBase
             return Array.Empty<RemsApprovalOptionRef>();
         }
 
+        // A marketing method's group is the value it sits under on the list this one depends on.
+        var parent = set.ParentSetId is { } parentSetId
+            ? await _optionSets.GetSetWithItemsAsync(parentSetId, User.GetActiveTenantId(), cancellationToken)
+            : null;
+        string? GroupLabel(OptionSetItem item) => parent?.Items
+            .FirstOrDefault(p => item.Parents.Any(l => l.ParentOptionSetItemId == p.Id))?.Label;
+
         return set.Items
             .Where(i => !i.Deleted && ids.Contains(i.Id))
             .OrderBy(i => i.SortOrder)
-            .Select(i => new RemsApprovalOptionRef(i.Id, i.Label, GroupOf(i.MetadataJson)))
+            .Select(i => new RemsApprovalOptionRef(i.Id, i.Label, GroupLabel(i) ?? GroupOf(i.MetadataJson)))
             .ToList();
     }
 

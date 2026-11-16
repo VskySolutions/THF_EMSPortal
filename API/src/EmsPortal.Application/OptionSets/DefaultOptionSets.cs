@@ -308,6 +308,15 @@ public static class DefaultOptionSets
             // The one trade a Trust and Estate entity is in.
             new ItemDefinition("trust_estate", "Trust/Estate", 30),
         }),
+        // The headings the marketing methods are offered under on Engagement Setup. Marketing Methods
+        // depends on this list (Dependencies below); a method under no group is listed under "Other".
+        new Definition("REMS.MarketingGroup", "REMS Marketing Group", OptionItemSortMode.AlphabeticalAsc, new[]
+        {
+            new ItemDefinition("global", "Global", 1),
+            new ItemDefinition("geography", "Geography", 2),
+            new ItemDefinition("service_education", "Service / Education", 3),
+            new ItemDefinition("event", "Event", 4),
+        }),
         new Definition("REMSMarketing_MarketingMethods.MarketingMethodId", "REMS Marketing Methods", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             // Global — not auto-suggested, not editable.
@@ -625,12 +634,18 @@ public static class DefaultOptionSets
         {
             new ItemDefinition("self", "Self", 1),
             new ItemDefinition("spouse", "Spouse", 2),
-            new ItemDefinition("primary_client_contact", "Primary Client Contact", 3),
-            new ItemDefinition("financial_contact", "Financial Contact", 4),
+            // The descriptions are the tooltip beside each role on the client's intake form.
+            new ItemDefinition("primary_client_contact", "Primary Client Contact", 3, Description:
+                "Who we speak to about this engagement — the main person on your side."),
+            new ItemDefinition("financial_contact", "Financial Contact", 4, Description:
+                "Who we speak to about your finances and reporting."),
             new ItemDefinition("billing_contact", "Billing Contact", 5),
-            new ItemDefinition("other_contact", "Other Contact", 6),
-            new ItemDefinition("finance_director", "Finance Director", 7),
-            new ItemDefinition("trust_estate_contact", "Trust and Estate Contact", 8),
+            new ItemDefinition("other_contact", "Other Contact", 6, Description:
+                "Anyone else you would like us to have on file."),
+            new ItemDefinition("finance_director", "Finance Director", 7, Description:
+                "The finance director for this entity."),
+            new ItemDefinition("trust_estate_contact", "Trust and Estate Contact", 8, Description:
+                "The trustee or personal representative who acts for the trust or estate."),
             new ItemDefinition("banker", "Banker", 9),
             new ItemDefinition("lawyer", "Lawyer", 10),
         }, LockSeededValues: true),
@@ -651,6 +666,25 @@ public static class DefaultOptionSets
             new ItemDefinition("primary", "Bill the primary client", 1),
             new ItemDefinition("separate", "Bill separately", 2),
         }, LockSeededValues: true),
+
+        // The two person lists every name and person form offers. A person's record holds the value as
+        // text, so the codes are the words already stored. Nothing branches on either.
+        new Definition("Person.Gender", "Gender", OptionItemSortMode.AlphabeticalAsc, new[]
+        {
+            new ItemDefinition("Male", "Male", 1),
+            new ItemDefinition("Female", "Female", 2),
+            new ItemDefinition("Other", "Other", 3),
+            new ItemDefinition("Prefer not to say", "Prefer not to say", 4),
+        }),
+        // Suggestions beside a name box that still takes free text; the description is the caption.
+        new Definition("Person.NameSuffix", "Name Suffix", OptionItemSortMode.AlphabeticalAsc, new[]
+        {
+            new ItemDefinition("Jr.", "Jr.", 1, Description: "Junior"),
+            new ItemDefinition("Sr.", "Sr.", 2, Description: "Senior"),
+            new ItemDefinition("II", "II", 3, Description: "The second"),
+            new ItemDefinition("III", "III", 4, Description: "The third"),
+            new ItemDefinition("IV", "IV", 5, Description: "The fourth"),
+        }),
     };
 
     /// <summary>A list whose values are offered by the value picked on another: parent code → child codes.</summary>
@@ -732,6 +766,13 @@ public static class DefaultOptionSets
                 "nonchargeable_firm_forum", "nonchargeable_synergy", "nonchargeable_shareholder_meetings",
                 "nonchargeable_holiday_party",
             },
+        }),
+        new Dependency("REMSMarketing_MarketingMethods.MarketingMethodId", "REMS.MarketingGroup", new Dictionary<string, string[]>
+        {
+            ["global"] = new[] { "all", "active_clients" },
+            ["geography"] = new[] { "tallahassee", "panama_city_bay_county", "lakeland_dade_city", "tampa" },
+            ["service_education"] = new[] { "tax", "audit_nfp", "audit_insurance", "gcs", "cas" },
+            ["event"] = new[] { "tax_event", "finrep_conference" },
         }),
     };
 

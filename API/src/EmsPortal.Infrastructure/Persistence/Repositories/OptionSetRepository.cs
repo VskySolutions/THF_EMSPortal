@@ -49,6 +49,29 @@ internal sealed class OptionSetRepository : IOptionSetRepository
             .OrderByDescending(s => s.TenantId != null)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyDictionary<Guid, (int WithNumber, int Missing)>> CountMaconomyNumbersAsync(
+        IReadOnlyCollection<Guid> setIds, CancellationToken cancellationToken = default)
+    {
+        if (setIds.Count == 0)
+        {
+            return new Dictionary<Guid, (int, int)>();
+        }
+
+        var counts = await _dbContext.OptionSetItems
+            .Where(i => setIds.Contains(i.OptionSetId))
+            .GroupBy(i => i.OptionSetId)
+            .Select(g => new
+            {
+                SetId = g.Key,
+                WithNumber = g.Count(i => i.MaconomyNumber != null && i.MaconomyNumber != ""),
+                // A hidden value is not one anybody is waiting on.
+                Missing = g.Count(i => i.IsActive && (i.MaconomyNumber == null || i.MaconomyNumber == "")),
+            })
+            .ToListAsync(cancellationToken);
+
+        return counts.ToDictionary(c => c.SetId, c => (c.WithNumber, c.Missing));
+    }
+
     public async Task<IReadOnlyDictionary<Guid, int>> CountItemsAsync(IReadOnlyCollection<Guid> setIds, CancellationToken cancellationToken = default)
     {
         if (setIds.Count == 0)

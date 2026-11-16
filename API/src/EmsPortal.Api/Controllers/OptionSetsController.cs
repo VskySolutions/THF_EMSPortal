@@ -50,6 +50,7 @@ public sealed class OptionSetsController : ControllerBase
         new SortMap<OptionSetSummaryResponse>("updatedOnUtc")
             .Add("name", s => s.Name)
             .Add("itemCount", s => s.ItemCount, s => s.Name)
+            .Add("maconomy", s => s.MaconomyNumberCount == 0 ? -1 : s.MaconomyMissingCount, s => s.Name)
             .Add("itemSortMode", s => s.ItemSortMode, s => s.Name)
             .Add("origin", s => s.IsSystem, s => s.Name)
             .Add("isActive", s => s.IsActive, s => s.Name)
@@ -73,6 +74,7 @@ public sealed class OptionSetsController : ControllerBase
         var visible = sets.Where(s => s.TenantId is not null || !owned.Contains(s.Key)).ToList();
 
         var counts = await _sets.CountItemsAsync(visible.Select(s => s.Id).ToList(), cancellationToken);
+        var maconomy = await _sets.CountMaconomyNumbersAsync(visible.Select(s => s.Id).ToList(), cancellationToken);
 
         // One name lookup for the page, so the audit columns read as people rather than guids.
         var names = await _users.GetFullNamesAsync(
@@ -83,7 +85,7 @@ public sealed class OptionSetsController : ControllerBase
 
         // Ordered after projecting: Values is a count assembled here, and Type reads off a flag.
         var summaries = ListSorts
-            .Apply(visible.Select(s => ToSummary(s, counts.TryGetValue(s.Id, out var c) ? c : 0, NameOf)), sortBy, descending)
+            .Apply(visible.Select(s => ToSummary(s, counts.TryGetValue(s.Id, out var c) ? c : 0, maconomy.GetValueOrDefault(s.Id), NameOf)), sortBy, descending)
             .ToList();
         return Ok(ApiResponseFactory.Success<IEnumerable<OptionSetSummaryResponse>>(summaries, "Option lists retrieved."));
     }
@@ -278,9 +280,11 @@ public sealed class OptionSetsController : ControllerBase
     /// </summary>
     private static bool IsEditable(OptionSet set) => true;
 
-    private static OptionSetSummaryResponse ToSummary(OptionSet s, int itemCount, Func<Guid?, string?> nameOf) => new(
+    private static OptionSetSummaryResponse ToSummary(
+        OptionSet s, int itemCount, (int WithNumber, int Missing) maconomy, Func<Guid?, string?> nameOf) => new(
         s.Id, s.TenantId, s.Key, s.Name, s.ParentSetId,
         s.ItemSortMode.ToString(), s.IsSystem, s.IsClosed, s.IsActive, IsEditable(s), itemCount,
+        maconomy.WithNumber, maconomy.WithNumber > 0 ? maconomy.Missing : 0,
         nameOf(s.CreatedById), s.CreatedOnUtc, nameOf(s.UpdatedById), s.UpdatedOnUtc);
 
     /// <summary>The list plus its provenance block, which the detail page ends with.</summary>

@@ -77,6 +77,9 @@ public sealed record OptionSetSummaryResponse(
     bool IsActive,
     bool IsEditable,
     int ItemCount,
+    // Values holding a Maconomy number, and active values still without one (0 on a list that uses none).
+    int MaconomyNumberCount,
+    int MaconomyMissingCount,
     // *By names are resolved by the controller so the list's audit columns read as people, not guids.
     string? CreatedBy,
     DateTime CreatedOnUtc,

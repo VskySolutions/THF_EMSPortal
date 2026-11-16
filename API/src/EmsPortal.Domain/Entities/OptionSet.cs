@@ -36,7 +36,10 @@ public class OptionSet : AuditableEntity
     /// <summary>How the items are ordered in a picker.</summary>
     public OptionItemSortMode ItemSortMode { get; set; } = OptionItemSortMode.AlphabeticalAsc;
 
-    /// <summary>True for a seeded platform-standard list; such lists are read-only in the app.</summary>
+    /// <summary>
+    /// True for a list the application reads by its <see cref="Key"/>: the seeded ones, and a tenant's own
+    /// copy of one. A system list cannot be deleted; its values are managed like any other list's.
+    /// </summary>
     public bool IsSystem { get; set; }
 
     /// <summary>

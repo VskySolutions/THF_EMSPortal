@@ -337,7 +337,7 @@ public sealed class OptionSetService : IOptionSetService
     {
         if (set.TenantId is null || set.IsSystem)
         {
-            throw new OptionSetException(OptionSetErrorCodes.ReadOnlyStandardSet, "A standard list cannot be deleted. Its values can be edited instead.");
+            throw new OptionSetException(OptionSetErrorCodes.ReadOnlyStandardSet, "A system list cannot be deleted: the application reads it. Its values can be edited instead.");
         }
     }
 
