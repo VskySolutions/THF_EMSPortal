@@ -202,7 +202,7 @@ public static class DefaultOptionSets
             new ItemDefinition("not_initiated", "Not Initiated", 1, Description:
                 "Nothing has been raised for this related client yet. Every row starts here.",
                 BackgroundColor: Grey, TextColor: OnDark),
-            new ItemDefinition("rems_initiated", "REMS Initiated", 2, Description:
+            new ItemDefinition("rems_initiated", "COP Initiated", 2, Description:
                 "A REMS request has been raised for this related client and is being worked.",
                 BackgroundColor: Teal, TextColor: OnDark),
             new ItemDefinition("pending_approval", "Pending Approval", 3, Description:
