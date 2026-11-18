@@ -36,11 +36,37 @@ internal static class RemsSetupAccess
     public static bool IsParticipant(RemsRequest rems, Guid me)
         => IsInitiator(rems, me) || rems.CSEId == me || rems.AdminAssignedToId == me;
 
+    /// <summary>
+    /// May complete the intake form for a client who has it and has not answered: the initiator, the CSE
+    /// on the request, the REMS Admins and the elevated roles. Corrections after that are the admins'.
+    /// </summary>
+    public static bool CanCompleteIntake(ClaimsPrincipal user, RemsRequest rems, Guid me)
+        => IsElevated(user) || IsRemsAdmin(user) || IsInitiator(rems, me) || rems.CSEId == me;
+
     /// <summary>May READ the setup.</summary>
     public static bool CanRead(ClaimsPrincipal user, RemsRequest rems, Guid me)
         => IsElevated(user)
             || IsParticipant(rems, me)
             || user.HasPermission(Permissions.RemsEngagementsManage);
+
+    /// <summary>
+    /// May VIEW the request on the read-only page, which is the firm's: open to every signed-in user once
+    /// the request has left its draft, and to the setup's readers while it is one.
+    /// </summary>
+    public static bool CanView(ClaimsPrincipal user, RemsRequest rems, Guid me)
+        => !IsDraft(rems) || CanRead(user, rems, me);
+
+    /// <summary>
+    /// Whether the reader sees the money on the setup: the fee estimate, the engagement fee, the
+    /// realization, the purchase-order amount and the rate card. Everyone with a hand in the request does
+    /// (the people named on it, the REMS Admins, the elevated roles), and so does its Department Director,
+    /// the one approver the packet shows them to (AC-REMS-019.10). Anyone else reads the setup without them.
+    /// </summary>
+    public static bool MaySeeFinancials(ClaimsPrincipal user, RemsRequest rems, Guid me)
+        => CanRead(user, rems, me) || rems.DepartmentDirectorId == me;
+
+    private static bool IsDraft(RemsRequest rems)
+        => rems.Status is null || rems.Status.Value == RemsRequestStatuses.Draft;
 
     /// <summary>May WRITE the setup: whoever the request is with at this stage.</summary>
     /// <param name="initiatorHasCover"> Whether <see cref="PrincipalOf"/> has any REMS delegation in force today (<c>IRemsDelegationRepository.HasActiveDelegateAsync</c>). Passed in rather than looked up here so this stays a pure rule; a caller with no CSE in play may pass false without querying. </param>
@@ -88,6 +114,6 @@ internal static class RemsSetupAccess
             : RemsRequestStatuses.IsWithInitiator(rems.Status!.Value)
             ? "This request is with the person who raised it; only they (or the CSE named on it), or a REMS Admin, can work its engagement setup."
             : rems.AdminAssignedToId is null
-                ? "This request is waiting for pickup. Pick it up from EMS Review to work its engagement setup."
+                ? "This request is waiting for pickup. Pick it up from COP Review to work its engagement setup."
                 : "This request is being reviewed by another admin; only they can work its engagement setup.";
 }

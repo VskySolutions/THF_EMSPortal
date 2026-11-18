@@ -42,7 +42,7 @@
              here needs to know why they cannot, and what would change it. -->
         <div v-if="cseName && !cseEligible" class="sbd-note">
           <q-icon name="o_info" size="16px" class="q-mr-xs" />
-          {{ cseName }} cannot be given this: {{ initiatorName || "the partner" }} has not named a REMS
+          {{ cseName }} cannot be given this: {{ initiatorName || "the partner" }} has not named a {{ siteName }}
           delegate, so their rework stays with them.
         </div>
 
@@ -72,6 +72,7 @@
 // The admin's return of a request for engagement-setup rework. The reason is mandatory on the server too;
 // asking for it here is so they are not told off after the fact.
 import { ref, computed, watch } from "vue";
+import { useSiteName } from "composables/useSiteName";
 import AppTextField from "components/common/AppTextField.vue";
 
 const props = defineProps({
@@ -86,6 +87,7 @@ const props = defineProps({
   cseEligible: { type: Boolean, default: false }
 });
 const emit = defineEmits(["update:modelValue", "confirm"]);
+const siteName = useSiteName();
 
 const reason = ref("");
 const target = ref("initiator");

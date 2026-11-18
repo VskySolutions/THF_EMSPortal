@@ -1,4 +1,6 @@
+using EmsPortal.Application.Abstractions.Branding;
 using EmsPortal.Application.Abstractions.Persistence;
+using EmsPortal.Application.Abstractions.Tenancy;
 using EmsPortal.Application.Abstractions.UniversalFeatures;
 using EmsPortal.Domain.Entities;
 
@@ -19,10 +21,14 @@ public sealed class NotificationDispatcher : INotificationDispatcher
     private static readonly TimeSpan GroupingWindow = TimeSpan.FromSeconds(60);
 
     private readonly INotificationRepository _notifications;
+    private readonly ISiteNameProvider _siteName;
+    private readonly ITenantContext _tenant;
 
-    public NotificationDispatcher(INotificationRepository notifications)
+    public NotificationDispatcher(INotificationRepository notifications, ISiteNameProvider siteName, ITenantContext tenant)
     {
         _notifications = notifications;
+        _siteName = siteName;
+        _tenant = tenant;
     }
 
     public async Task DispatchAsync(CreateNotificationDto notification, CancellationToken cancellationToken = default)
@@ -38,13 +44,15 @@ public sealed class NotificationDispatcher : INotificationDispatcher
             notification.UserId, notification.Type, notification.EntityType, notification.EntityId,
             DateTime.UtcNow - GroupingWindow, cancellationToken);
 
+        // "REMS" in the wording is said as the site's name; with no tenant resolved the caller words it.
+        var tenantId = _tenant.IsResolved ? _tenant.TenantId : (Guid?)null;
         await _notifications.AddAsync(new Notification
         {
             Id = Guid.NewGuid(),
             UserId = notification.UserId,
             Type = notification.Type,
-            Title = notification.Title,
-            Body = notification.Body,
+            Title = await _siteName.ApplyAsync(tenantId, notification.Title, cancellationToken),
+            Body = await _siteName.ApplyAsync(tenantId, notification.Body, cancellationToken),
             EntityType = notification.EntityType,
             EntityId = notification.EntityId,
             IsRead = false,

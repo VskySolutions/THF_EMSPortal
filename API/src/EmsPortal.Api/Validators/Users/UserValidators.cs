@@ -11,6 +11,7 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
         RuleFor(x => x.PersonId).NotEmpty().WithMessage("personId is required.");
         // Email is optional here — it defaults to the person's primary email when omitted.
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
+        RuleFor(x => x.MaconomyNumber).MaximumLength(64);
         // At least one role (multi-role roleIds, the legacy single roleId, or the legacy role name).
         RuleFor(x => x)
             .Must(x => x.RoleIds is { Count: > 0 } || x.RoleId is not null || !string.IsNullOrWhiteSpace(x.Role))
@@ -24,6 +25,7 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
     {
         RuleFor(x => x.DisplayName).MaximumLength(200).When(x => x.DisplayName is not null);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => x.Email is not null);
+        RuleFor(x => x.MaconomyNumber).MaximumLength(64);
         RuleFor(x => x).Must(x => x.DisplayName is not null || x.Email is not null)
             .WithMessage("At least one of displayName or email must be provided.");
     }

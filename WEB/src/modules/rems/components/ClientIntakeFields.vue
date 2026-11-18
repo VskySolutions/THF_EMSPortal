@@ -22,6 +22,10 @@
               :error="!!errors.clientFirstName" :error-message="errors.clientFirstName"
             />
             <app-text-field
+              v-if="SHOW_MIDDLE_NAME" v-model="payload.clientMiddleName" label="Middle Name"
+              maxlength="100" class="col-12 col-sm-6"
+            />
+            <app-text-field
               v-model="payload.clientLastName" label="Last Name" required class="col-8 col-sm-4"
               :rules="nameRules('Last Name')"
               :error="!!errors.clientLastName" :error-message="errors.clientLastName"
@@ -310,7 +314,7 @@
                   class="col-12 col-sm-6 col-md-4"
                   :error="!!entityErr(i, 'fullName')" :error-message="entityErr(i, 'fullName')"
                 />
-                <!-- Required, not "email or phone": each of these becomes its own EMS request, and that
+                <!-- Required, not "email or phone": each of these becomes its own COP request, and that
                      request is opened by emailing an intake form to this address. -->
                 <app-text-field
                   v-model="entity.emailAddress" label="Email Address" type="email" required
@@ -347,6 +351,7 @@ import {
 import { nameRules } from "utils/personName";
 import AppTextField from "components/common/AppTextField.vue";
 import AppNameSuffixField from "components/common/AppNameSuffixField.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 import AppSelect from "components/common/AppSelect.vue";
 import AppPhoneInput from "components/common/AppPhoneInput.vue";
 import AppDateField from "components/common/AppDateField.vue";

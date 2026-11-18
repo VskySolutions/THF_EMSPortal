@@ -19,6 +19,8 @@ internal sealed class UnitOfWork : IUnitOfWork
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         => _dbContext.SaveChangesAsync(cancellationToken);
 
+    public void DiscardChanges() => _dbContext.ChangeTracker.Clear();
+
     public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default)
     {
         // Use an execution strategy so the transaction is retried as a unit under the connection

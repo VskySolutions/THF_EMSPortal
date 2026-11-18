@@ -22,7 +22,7 @@
               <q-icon name="o_verified" size="14px" class="q-mr-xs" /> Verified
             </q-badge>
           </div>
-          <div class="text-body2 text-grey-7">{{ email }}</div>
+          <div class="text-body2 text-grey-7"><app-email :email="email || ''" /></div>
           <div v-if="roleChips.length" class="q-mt-sm row q-gutter-xs">
             <q-chip
               v-for="r in roleChips" :key="r" dense color="primary" text-color="white" class="text-capitalize"
@@ -103,6 +103,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 import { ref, computed, onMounted } from "vue";
 import { useAuthStore } from "stores/auth";
 import { useTenantStore } from "stores/tenant";

@@ -90,6 +90,7 @@ import { useTenantOptions } from "composables/useTenantOptions";
 import { nameRules } from "utils/personName";
 import AppDetailHeader from "components/common/AppDetailHeader.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
+import { useOptionSetOptions } from "composables/useOptionSet";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
 import AppNameSuffixField from "components/common/AppNameSuffixField.vue";
@@ -113,7 +114,8 @@ const personCode = ref("");
 // Who made this record and who last touched it, for the block at the foot of the page.
 const audit = ref(null);
 
-const genderOptions = ["Male", "Female", "Other", "Prefer not to say"].map((g) => ({ label: g, value: g }));
+// The Person.Gender option list.
+const { options: genderOptions } = useOptionSetOptions(() => ({ key: "Person.Gender" }));
 const emailRules = [(v) => !v || /.+@.+\..+/.test(v) || "Enter a valid email"];
 
 const form = reactive({

@@ -21,6 +21,9 @@ public static class DependencyInjection
         // registered here so every host that composes this layer has it, not only the API.
         services.AddMemoryCache();
 
+        // The name a tenant's site goes by, for wording and request numbers.
+        services.AddScoped<Abstractions.Branding.ISiteNameProvider, Branding.SiteNameProvider>();
+
         // Maconomy: the tenant's connection, the token that keeps it alive, and the customer lookup.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyConnectionService, Integrations.Maconomy.MaconomyConnectionService>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomySessionManager, Integrations.Maconomy.MaconomySessionManager>();
@@ -30,6 +33,17 @@ public static class DependencyInjection
         // The customer sync: posting a fully approved brand-new client to Maconomy.
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCustomerWriter, Integrations.Maconomy.MaconomyCustomerWriter>();
         services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCustomerSyncService, Integrations.Maconomy.MaconomyCustomerSyncService>();
+        // The job sync: posting an approved engagement to Maconomy as a job, queued on approval or pressed from a list.
+        // What is sent lives in Integrations/Maconomy/Mapping; the card writer only carries it.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyCardWriter, Integrations.Maconomy.MaconomyCardWriter>();
+        // The Maconomy numbers the tenant's option items carry, read once per call and kept a minute.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyNumberMaps, Integrations.Maconomy.MaconomyNumberMaps>();
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyJobSyncService, Integrations.Maconomy.MaconomyJobSyncService>();
+        // Maconomy's pick lists (the country list, the job's Popup 1), read once and kept briefly: a popup takes its own literal.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyPickLists, Integrations.Maconomy.MaconomyPickLists>();
+        // The document upload: the request's files under the client's customer and the engagement's job.
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyDocumentWriter, Integrations.Maconomy.MaconomyDocumentWriter>();
+        services.AddScoped<Abstractions.Integrations.Maconomy.IMaconomyDocumentSyncService, Integrations.Maconomy.MaconomyDocumentSyncService>();
 
         // Email templates: management + rendering.
         services.AddScoped<Abstractions.Email.IEmailTemplateService, Email.EmailTemplateService>();

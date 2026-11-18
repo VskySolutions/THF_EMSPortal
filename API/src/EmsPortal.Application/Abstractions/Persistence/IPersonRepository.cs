@@ -17,6 +17,10 @@ public interface IPersonRepository
 
     Task<bool> PersonCodeExistsAsync(string personCode, CancellationToken cancellationToken = default);
 
+    /// <summary>Which of these emails are already the primary email of a person in the tenant.</summary>
+    Task<IReadOnlyList<string>> ListPrimaryEmailsInUseAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Paginated list with optional free-text search (name, email, person code) and optional
     /// structured filters (owning tenant, whether the person is a user, active state.

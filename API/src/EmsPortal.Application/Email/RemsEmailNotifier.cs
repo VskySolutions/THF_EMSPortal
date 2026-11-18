@@ -51,4 +51,11 @@ internal sealed class RemsEmailNotifier : IRemsEmailNotifier
             ["RequestLink"] = model.RequestLink,
             ["SubmittedOn"] = model.SubmittedOn,
         });
+
+    public void SendFormReceived(Guid tenantId, string toEmail, RemsFormReceivedEmail model)
+        => _dispatcher.Enqueue(tenantId, EmailTemplateKey.RemsFormReceived, toEmail, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ClientName"] = model.ClientName,
+            ["RemsNumber"] = model.RemsNumber,
+        });
 }

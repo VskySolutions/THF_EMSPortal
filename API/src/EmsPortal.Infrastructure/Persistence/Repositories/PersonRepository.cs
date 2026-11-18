@@ -145,6 +145,15 @@ internal sealed class PersonRepository : IPersonRepository
     public async Task AddAsync(Person person, CancellationToken cancellationToken = default)
         => await _dbContext.Persons.AddAsync(person, cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListPrimaryEmailsInUseAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken cancellationToken = default)
+        => emails.Count == 0
+            ? Array.Empty<string>()
+            : await _dbContext.Persons.IgnoreQueryFilters()
+                .Where(p => p.TenantId == tenantId && !p.Deleted && p.PrimaryEmail != null && emails.Contains(p.PrimaryEmail))
+                .Select(p => p.PrimaryEmail!)
+                .ToListAsync(cancellationToken);
+
     public void Update(Person person) => _dbContext.Persons.Update(person);
 
     public void Remove(Person person) => _dbContext.Persons.Remove(person);

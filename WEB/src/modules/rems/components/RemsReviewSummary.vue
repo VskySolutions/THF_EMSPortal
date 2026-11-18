@@ -23,6 +23,26 @@
         </div>
       </div>
 
+      <!-- Each billing block as the form asks it: who the invoice is for, then where it goes. -->
+      <div v-else-if="g.kind === 'billing'" class="review-billing">
+        <div v-for="(b, i) in g.rows" :key="i" :class="{ 'review-person': g.rows.length > 1 }">
+          <div v-if="b.title" class="review-people__title">{{ b.title }}</div>
+          <div class="review-group__body">
+            <div class="field-row">
+              <div class="rems-label">Name</div>
+              <div class="rems-value">
+                <app-name-with-suffix v-if="b.name" :name="b.name" :suffix="b.suffix" />
+                <template v-else>—</template>
+              </div>
+            </div>
+            <div v-for="r in b.fields" :key="r.label" class="field-row" :class="{ 'field-row--wide': r.wide }">
+              <div class="rems-label">{{ r.label }}</div>
+              <div class="rems-value">{{ r.value }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="g.kind === 'contacts'">
         <div v-if="g.rows.length" class="column q-gutter-sm">
           <div v-for="r in g.rows" :key="r.role" class="role-row">
@@ -96,6 +116,7 @@ import {
 } from "modules/rems/remsContactRoles";
 import { additionalIndividualHasData, individualSummary } from "modules/rems/useRemsIntakeForm";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 
 const props = defineProps({
   payload: { type: Object, required: true },
@@ -132,6 +153,7 @@ const groups = computed(() => {
   const contact = isIndividual.value
     ? [
       { label: "First Name", value: val(p.clientFirstName) },
+      ...(SHOW_MIDDLE_NAME ? [{ label: "Middle Name", value: val(p.clientMiddleName) }] : []),
       { label: "Last Name", value: val(p.clientLastName) },
       { label: "Suffix", value: val(p.clientSuffix) }
     ]
@@ -167,20 +189,16 @@ const groups = computed(() => {
   // where it goes.
   const billing = billingAddressList(p);
   // Numbered only where there is more than one — a "1" over a lone block answers a question nobody asked.
-  const billingLabel = (i) => (billing.length > 1 ? `Billing Information ${i + 1}` : "Billing Information");
-  const billingPeople = billing
-    .map((b, i) => ({ role: billingLabel(i), ...addresseeParts(b), email: b?.email, phone: b?.phone }))
-    .filter((person) => person.name || person.email || person.phone);
-  result.push({
-    title: "Billing Information",
-    icon: "o_receipt_long",
-    kind: "fields",
-    rows: billing.length
-      ? billing.map((b, i) => ({ label: billingLabel(i), value: addressText(b) }))
-      : [{ label: "Billing Information", value: "—" }],
-    people: billingPeople,
-    peopleTitle: "Invoices addressed to"
-  });
+  const billingBlocks = (billing.length ? billing : [null]).map((b, i) => ({
+    title: billing.length > 1 ? `Billing Information ${i + 1}` : "",
+    ...addresseeParts(b),
+    fields: [
+      { label: "Email Address", value: val(b?.email) },
+      { label: "Phone Number", value: val(b?.phone) },
+      { label: "Address", value: b ? addressText(b) : "—", wide: true }
+    ]
+  }));
+  result.push({ title: "Billing Information", icon: "o_receipt_long", kind: "billing", rows: billingBlocks });
 
   // Spouse & more individuals — everyone else on this return. Shown for an individual, and only where
   // they named somebody: a card saying "nobody" is a card about a question they answered No to.
@@ -289,6 +307,12 @@ const groups = computed(() => {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px 24px;
 }
+.review-billing {
+  display: grid;
+  gap: 10px;
+}
+/* An address is a sentence, not a value: it takes the row. */
+.field-row--wide { grid-column: 1 / -1; }
 .field-row--dense {
   margin-top: 4px;
 }

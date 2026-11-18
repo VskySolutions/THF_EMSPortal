@@ -60,6 +60,7 @@
 // The Person create/edit field set, defined once and reused (People list drawer + the quick-add dialog on
 // the user form).
 import { nameRules } from "utils/personName";
+import { useOptionSetOptions } from "composables/useOptionSet";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
 import AppNameSuffixField from "components/common/AppNameSuffixField.vue";
@@ -76,7 +77,8 @@ defineProps({
   loadingTenants: { type: Boolean, default: false }
 });
 
-const genderOptions = ["Male", "Female", "Other", "Prefer not to say"].map((g) => ({ label: g, value: g }));
+// The Person.Gender option list.
+const { options: genderOptions } = useOptionSetOptions(() => ({ key: "Person.Gender" }));
 const emailRules = [
   (v) => !!v || "Primary email is required",
   (v) => /.+@.+\..+/.test(v) || "Enter a valid email"

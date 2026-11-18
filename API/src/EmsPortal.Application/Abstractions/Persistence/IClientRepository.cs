@@ -60,7 +60,7 @@ public interface IClientRepository
     Task<RemsMaconomyCustomerSyncCounts> CountSyncAsync(Guid tenantId, DateTime staleBeforeUtc, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Clients an approved brand-new-client request made eligible for posting that have neither a Maconomy
+    /// Clients an approved request made eligible for posting that have neither a Maconomy
     /// number nor a sync under way.
     /// </summary>
     Task<IReadOnlyList<Client>> ListApprovedUnrecordedAsync(Guid tenantId, CancellationToken cancellationToken = default);

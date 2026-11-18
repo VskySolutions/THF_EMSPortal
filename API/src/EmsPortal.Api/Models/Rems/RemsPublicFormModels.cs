@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace EmsPortal.Api.Models.Rems;
 
 // ---------------------------------------------------------------------------------------------------
-// WO-113 — REMS public client EMS form.
+// WO-113 — REMS public client COP form.
 
 /// <summary>Versioned REMS onboarding form payload (V1).</summary>
 public sealed class RemsFormPayloadV1
@@ -22,6 +22,9 @@ public sealed class RemsFormPayloadV1
     /// the family name rather than typed into.
     /// </summary>
     public string? ClientSuffix { get; set; }
+
+    /// <summary>An individual client's middle name. Omitted leaves the record's alone; "" clears it.</summary>
+    public string? ClientMiddleName { get; set; }
 
     /// <summary>
     /// The courtesy title an individual client was once asked for — Mr., Mrs., Ms., Dr. RETIRED from
@@ -524,7 +527,9 @@ public sealed record RemsPublicFormResponse(
     RemsPublicPrefill? Prefill = null,
     RemsFormPayloadV1? DraftPayload = null,
     // The tenant's REMS.ReferralSource list, delivered WITH the form.
-    IReadOnlyList<RemsPublicOption>? ReferralSources = null);
+    IReadOnlyList<RemsPublicOption>? ReferralSources = null,
+    // The other lists the form asks from, keyed by option-set key: this caller has no session to resolve them with.
+    IReadOnlyDictionary<string, IReadOnlyList<RemsPublicOption>>? OptionLists = null);
 
 /// <summary>One selectable value for a public-form picker.</summary>
 public sealed record RemsPublicOption(string Value, string Label, string? Description);
@@ -536,7 +541,8 @@ public sealed record RemsPublicPrefill(
     string? ClientLastName,
     string? ClientSuffix,
     string Email,
-    string? MobileNumber);
+    string? MobileNumber,
+    string? ClientMiddleName = null);
 
 /// <summary>Draft auto-save acknowledgement (WO-113 PUT draft).</summary>
 public sealed record RemsDraftSavedResponse(DateTime LastSavedOnUtc);

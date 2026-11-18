@@ -1,10 +1,12 @@
 # Posting a REMS client to Maconomy on full approval — plan
 
-**Status: BUILT on 22 Oct 2026, not yet run against Maconomy.** Written 19 Oct 2026 on branch
+**Status: BUILT on 22 Oct 2026; customers have been created from the portal on thmasd01 since (900001 on
+30 Oct, 900005 on 2 Nov 2026). Name parts, addresses and documents added 12 Nov 2026 (section 6); the
+document upload has not yet run against Maconomy.** Written 19 Oct 2026 on branch
 `feat/rems-maconomy-client-search`; all seven decisions in section 5 were answered on 22 Oct 2026 and the
 code in section 2 was written the same day (migration `20261022112337_AddRemsMaconomyCustomerSync`). What
 remains is section 3: the first create against the test instance, which confirms the customer card's write
-field names (`Maconomy:CustomerCard` in configuration) and the init-create / create link names the gateway
+field names (constants in `MaconomyCustomerDataMapping` since 31 Oct 2026; only the container is configuration) and the init-create / create link names the gateway
 follows.
 
 Builds on the client search as built (`REMS_MACONOMY_CLIENT_SEARCH_PLAN.md`): the per-tenant connection,
@@ -79,7 +81,7 @@ posts nothing by itself. Stop does not interrupt a job already running.
 
 **What users see.** The request page header shows a Maconomy chip beside the status badge: "Maconomy
 10023B", or Not in Maconomy, queued, posting, sync failed. The client section repeats it with the failure
-reason — read-only, no button. The REMS lists (My Requests, EMS Review, Approvals) get a small Maconomy
+reason — read-only, no button. The REMS lists (My Requests, COP Review, Approvals) get a small Maconomy
 status column. Every attempt writes an activity event.
 
 **After success** the portal client becomes a Maconomy client: the generated number is written onto the
@@ -123,7 +125,7 @@ row only.
     `GET .../customer-sync/unsynced`, `POST .../customer-sync/{remsId}/run` (the settings page's Sync now) —
     `integrations.maconomy.manage` (Tenant Admin, Super Admin). ALWAYS the caller's own tenant: no `?tenantId=`
     override, unlike the connection endpoints (user, 22 Oct 2026).
-- Configuration: `Maconomy:CustomerCard` (container and the write field names: `name1`, `electronicmailaddress`,
+- Configuration: `Maconomy:CustomerCard:Container` only since 31 Oct 2026; the write field names (`name1`, `electronicmailaddress`,
   `telephone`, `specification6name`, `specification1name` — the instance refused `specification6` as a card
   field on 22 Oct 2026, the popup column IS the `…name` field) and `Maconomy:CustomerSyncStaleMinutes` (10).
 - Sync status on `RemsRequestDetail` and the list items; `ActivityEventTypes.RemsMaconomyCustomerSynced` /
@@ -168,8 +170,136 @@ row only.
 2. **One email match.** Link the request to that customer; create nothing.
 3. **Approval and sync are standalone.** A sync that failed, or was off at approval, stays as it is. Start
    posts nothing by itself; an admin re-syncs by hand with Sync now once the sync is on.
-4. **Address.** None is sent.
+4. **Address.** None is sent. SUPERSEDED 12 Nov 2026: the mailing and physical addresses go on the card
+   (section 6).
 5. **Name format** for an individual: `LastName, FirstName Suffix`, as typed.
 6. **Test instance.** The connection the tenant holds today is a test instance; the first create goes there.
 7. **REMS number on the customer card.** Not sent. The double-create guard is the Syncing status plus the
    email check on re-sync.
+
+---
+
+## 6. Name parts, addresses and documents — BUILT 12 Nov 2026
+
+The user's instruction of 12 Nov 2026 ("New Mapping Confirmed For Maconomy Integration"), with three
+points settled the same day: an individual keeps `name1` as it is AND sends the name in parts; the middle
+name is skipped for now; the marketing string on the job uses a comma and a space. This replaces decision 4
+of section 5 (no address is sent). Everything below is in `MaconomyCustomerDataMapping`.
+
+| Portal field | Card field | Rule |
+| --- | --- | --- |
+| First Name | `customerremark27` | individuals only; `name1` stays "Last, First Suffix" |
+| Last Name | `customerremark29` | individuals only |
+| Suffix | `customerremark30` | individuals only |
+| Mailing Address Line 1 | `name2` | |
+| Mailing Address Line 2 | `name3` | |
+| Mailing City | `postaldistrict` | |
+| Mailing State or Country | `country` | United States: the state code. Any other country: the country as selected, the state not sent |
+| Mailing Zip Code | `zipcode` | |
+| Physical Address Line 1 | `customerremark20` | |
+| Physical Address Line 2 | `customerremark21` | |
+| Physical City | `customerremark23` | |
+| Physical State or Country | `customerremark24` | the same rule, as text |
+| Physical Zip Code | `customerremark25` | |
+
+A blank is left out, as before. Nothing is updated on a customer that already exists (linked by email, or
+picked from Maconomy).
+
+- **The remarks are `customerremark…` on the API.** "Remark 27" is the field's title; the card refuses
+  `remark27` when it is opened ("Invalid field name"). Every name above was accepted on opening a
+  `customercard` instance on thmasd01 (12 Nov 2026, read-only: the instance was deleted, nothing created).
+- **`country` is a popup, and a popup takes its own literal.** THF's list (`popup_countrytype`) holds the
+  fifty states and DC by code and the countries by name; a record carries the literal (`fl`,
+  `united_kingdom`), not the title (`FL`, `United Kingdom`). `IMaconomyPickLists` reads the list (kept
+  `Maconomy:PickListCacheSeconds`, ten minutes) and the mapping sends the literal for the state code or the
+  country name. A place the list does not hold stops the sync before anything is posted, with the place
+  named in the reason ("…names "UM-81", which is not on Maconomy's Country list…"): the client's address is
+  corrected, or the value added in Maconomy, and the sync pressed again. The physical address's
+  `customerremark24` is free text, so it takes the code or the country as it is.
+- **Mailing same as physical.** The form stores the mailing address as a copy when the box is ticked, so
+  both sets go out. On dev every client with a physical address also holds a mailing one.
+- **Middle name.** Not sent and not asked: neither form has the box. `customerremark28` is left for it.
+- **Attachments.** The request's attachments are uploaded to the customer's documents once the client is
+  in Maconomy: `REMS_MACONOMY_JOB_SYNC_PLAN.md`, section 14.
+- `ClientRepository.GetSyncSubjectAsync` (the Sync now read) loads the addresses, as the queued run's
+  `FullGraph` already did.
+
+Checked on a scratch copy of the dev database against a stand-in for Maconomy that validates field names
+against the instance's saved specifications: an individual and an organisation created with the values
+above, a state code and a country the list does not hold both refused with the reason, a listed country
+sent as its literal.
+
+## 7. Contact persons, CSE, middle name, physical address first — BUILT 13 Nov 2026
+
+Supersedes section 6 where the two differ (the address fields and the middle name).
+
+**Order: contact company, then customer, then contact persons** (`MaconomyContactCompanyDataMapping`).
+A customer and its contact company share one number, name, address, email and phone: across 5,092 pairs
+on thmasd01 `name1`–`name3`, `zipcode`, `postaldistrict`, `country`, `telephone` and
+`electronicmailaddress` never differ. Until 11 Nov creating a customer made the company by itself; on
+13 Nov the live create was refused three ways, which fixed the order:
+
+- "Next number is 0 for the number series Contact Company Series … no number has been specified": Maconomy
+  no longer hands out the number, so the portal picks it: one more than the highest all-digit contact
+  company number (lettered ones such as 20280A are sub-entities), stepped past any customer holding it.
+- "Contact Company 900009 does not exist" when the customer named a company not yet there: the company is
+  created first (`contactcompanys` card: number, `name1`, the physical address block, email, phone), then
+  the customer with `customernumber` and `contactcompanynumber` both set to it.
+- The customer's email and phone read back blank until they were put on the company: they live there.
+
+The number is kept on the client (`Client.MaconomyContactCompanyNumber`) as soon as the company exists, so
+a retry after a refused customer does not make a second company. Two syncs picking the same number at the
+same moment is not guarded: Maconomy refuses the second company, and syncing again picks the next.
+
+**The CSE fields need access in Maconomy.** `accountmanagernumber` was refused with "There is no access to
+Employee 200366": the integration user sees 24 employees and none of the 16 account managers in use.
+`specification5name` was refused with "Specification 5 82 does not exist": it is checked against
+Maconomy's own Specification 5 list. Until the Maconomy administrator gives the integration user access to
+the CSEs' employee records, a client whose CSE has a Maconomy Number fails at the customer step.
+
+**Live on thmasd01, 13 Nov 2026:** contact company 900009, customer 900009 (made-up "ZZ COP Test" client,
+without the CSE fields) and contact persons 83294–83298, whose numbers Maconomy assigned; a second attempt
+added nobody.
+
+**Customer card.**
+
+| From | Field |
+|---|---|
+| Physical address (the primary one) | `name2`, `name3`, `postaldistrict`, `country`, `zipcode` |
+| Mailing address (secondary) | `customerremark20`, `21`, `23`, `24`, `25` |
+| Middle name (individuals) | `customerremark28` |
+| CSE's Maconomy Number (`Users.MaconomyNumber`) | `specification5name` and `accountmanagernumber` |
+
+A CSE without a number is left out of both. The country check now reads the physical address: a place
+Maconomy's Country list lacks stops the sync and tells the user to ask the Maconomy administrator to add it.
+
+**Contact persons** (`MaconomyContactPersonDataMapping`): rows of the table under the `contactcompanys`
+card whose `contactcompanynumber` is the customer number.
+
+| From | Field |
+|---|---|
+| What the person is | `remark2`: "Primary Client Contact", "Financial Contact", "Other Contact", "Trust And Estates", "Spouse And More Individuals" |
+| First name, last name, suffix | `firstname`, `lastname`, `initials` |
+| Email, phone | `electronicmailaddress`, `telephone` |
+| Individual's type, filing type, minor, billing preference | `contactpersonpopup2`, `3`, `4`, `5` |
+
+- Contact roles sent: primary client contact, financial contact, other contact, trust and estate contact.
+  Any other role is not sent. Individuals are the spouse / child / other relationships; a related entity is not.
+- A popup value goes only when Maconomy's list for it holds the value. On 13 Nov all four lists were empty,
+  so none is sent yet.
+- The step runs straight after the customer is created. `Client.IsMaconomyContactSyncPending` is set with
+  the customer and cleared when the people are in. If the step fails the client shows Failed with
+  "Customer N is in Maconomy, but its contact persons could not be added…", the job and documents are
+  queued regardless, and Sync now runs the step alone. A row already under the company (same `remark2`,
+  names and email) is not added twice.
+- Clients linked to an existing Maconomy customer get no contact persons.
+- Create only: a contact added in the portal after the sync is not sent.
+
+**Middle name box.** On Client Information and the client's form, behind `SHOW_MIDDLE_NAME` in
+`WEB/src/modules/rems/remsFeatureFlags.js` (off). While off the forms do not send the field, and an omitted
+middle name leaves the record's alone.
+
+**Checked** without a database or Maconomy: the two mappings on a made-up client and the real gateway's
+`AddTableRowsAsync` against a stand-in that validates field names against the saved specifications
+(36 checks), and one live create on thmasd01 through the mappings and the card writer. Not run: the sync
+service itself end to end (its retry path, the columns it writes), and the browser.

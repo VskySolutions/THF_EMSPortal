@@ -10,7 +10,7 @@ export default [
         path: "partner",
         name: "rems_partner",
         component: () => import("modules/rems/pages/PartnerDashboard.vue"),
-        meta: { requiresAuth: true, title: "My REMS Requests" }
+        meta: { requiresAuth: true, title: (site) => `My ${site} Requests` }
       },
       {
         // The Admin's only surface: requests whose clients have answered, opened for review of BOTH the
@@ -18,7 +18,7 @@ export default [
         path: "ems-review",
         name: "rems_ems_review",
         component: () => import("modules/rems/pages/EmsReview.vue"),
-        meta: { requiresAuth: true, permissions: ["rems.engagements.manage"], title: "EMS Review" }
+        meta: { requiresAuth: true, permissions: ["rems.engagements.manage"], title: "COP Review" }
       },
       { path: "client-forms", redirect: { name: "rems_ems_review" } },
       {
@@ -36,20 +36,20 @@ export default [
         path: "requests/new",
         name: "rems_request_new",
         component: () => import("modules/rems/pages/RemsRequestForm.vue"),
-        meta: { requiresAuth: true, permissions: ["rems.requests.create"], title: "New REMS Request" }
+        meta: { requiresAuth: true, permissions: ["rems.requests.create"], title: (site) => `New ${site} Request` }
       },
       {
         path: "requests/edit/:id",
         name: "rems_request_edit",
         component: () => import("modules/rems/pages/RemsRequestForm.vue"),
-        meta: { requiresAuth: true, title: "REMS Request" }
+        meta: { requiresAuth: true, title: (site) => `${site} Request` }
       },
       {
         // The read-only request detail.
         path: "requests/:id",
         name: "rems_request",
         component: () => import("modules/rems/pages/RemsRequestForm.vue"),
-        meta: { requiresAuth: true, title: "REMS Request" }
+        meta: { requiresAuth: true, title: (site) => `${site} Request` }
       },
       // Links minted before the split: /rems/requests/:id/form, with ?mode=edit deciding which of the two
       // it meant.
@@ -68,7 +68,7 @@ export default [
         path: "approvals",
         name: "rems_approvals",
         component: () => import("modules/rems/pages/ApprovalInbox.vue"),
-        meta: { requiresAuth: true, title: "REMS Approvals" }
+        meta: { requiresAuth: true, title: (site) => `${site} Approvals` }
       },
       {
         // The approval-task review packet, the caller's checklist, and the checklist-gated Approve /
@@ -80,7 +80,7 @@ export default [
       }
     ]
   },
-  // PUBLIC client EMS form (WO-113/116) — the anonymous, no-login onboarding form reached from the
+  // PUBLIC client COP form (WO-113/116) — the anonymous, no-login onboarding form reached from the
   // emailed invite link ({App:BaseUrl}/rems/form/{inviteCode}).
   {
     path: "/rems/form/:inviteCode",
@@ -90,7 +90,8 @@ export default [
         path: "",
         name: "rems_public_form",
         component: () => import("modules/rems/pages/PublicEmsForm.vue"),
-        meta: { requiresAuth: false, title: "EMS Form" }
+        // Named after the site that sent it: "<site title> Form", on the tab and as the page's own heading.
+        meta: { requiresAuth: false, title: (siteTitle) => `${siteTitle} Form` }
       }
     ]
   }

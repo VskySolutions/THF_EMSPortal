@@ -95,7 +95,7 @@ public sealed record PersonSummary(
     string? TenantName,
     bool IsUser,
     bool IsActive,
-    // Where this record came from — the Person screen, a REMS engagement, a client's EMS form.
+    // Where this record came from — the Person screen, a REMS engagement, a client's COP form.
     string? SourceEntityType,
     Guid? SourceEntityId,
     string? CreatedBy,

@@ -102,7 +102,7 @@ const SSO_ERRORS = {
   expired: "The Microsoft sign-in took too long. Please try again.",
   invalid_state: "The Microsoft sign-in could not be verified. Please try again.",
   provider: "Microsoft could not complete the sign-in. Please try again.",
-  no_account: "There is no EMS Portal account for that Microsoft account. Ask your administrator to add you, or sign in with your email and password.",
+  no_account: "There is no COP Portal account for that Microsoft account. Ask your administrator to add you, or sign in with your email and password.",
   disabled: "Your account is disabled. Please contact your administrator.",
   failed: "Microsoft sign-in failed. Please try again."
 };

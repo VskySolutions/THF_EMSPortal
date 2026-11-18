@@ -6,20 +6,18 @@
         <div class="app-field">
           <app-field-label label="Client" required :info="clientInfo" />
 
-          <!-- A new client has no record to find, so the box says so instead of taking a search. -->
-          <q-input
-            v-if="addingNew"
-            model-value="New client" outlined dense hide-bottom-space readonly aria-label="Client"
-          >
-            <template #prepend><q-icon name="o_person_add" color="primary" /></template>
-            <template #append>
-              <q-icon v-if="clientLocked" name="o_lock" size="18px" color="grey-6" />
-              <q-btn
-                v-else-if="!readonly" flat dense no-caps size="sm" color="primary" icon="o_search"
-                label="Search instead" @click="leaveNewClient"
-              />
+          <!-- A new client has no record to find, so the search box gives way to a line saying so, with
+               the way back to searching in it. -->
+          <div v-if="addingNew" class="cif-new-note">
+            <template v-if="readonly || clientLocked">
+              <q-icon name="o_lock" size="18px" color="grey-6" />
+              <span>New client, not yet on file.</span>
             </template>
-          </q-input>
+            <span v-else>
+              To search for a client again,
+              <a href="#" class="cif-link" @click.prevent="leaveNewClient">click here</a>.
+            </span>
+          </div>
 
           <q-input
             v-else
@@ -165,6 +163,10 @@
             </q-icon>
           </template>
         </app-text-field>
+        <app-text-field
+          v-if="SHOW_MIDDLE_NAME" v-model="model.clientMiddleName" label="Middle Name" maxlength="100"
+          :class="namePartCols" :readonly="nameReadonly"
+        />
         <app-text-field
           v-model="model.clientLastName" label="Last Name" required
           :class="namePartCols" :readonly="nameReadonly"
@@ -322,7 +324,7 @@
       />
       <!-- The Client Service Executive. -->
       <app-select
-        :model-value="cseUserId" :options="cseOptions" label="CSE" required
+        user-cards :model-value="cseUserId" :options="cseOptions" label="CSE" required
         class="col-12 col-sm-6 col-md-4" :readonly="setupReadonly" :clearable="false" :hint="cseHint"
         :error="attempted && !cseUserId" error-message="Choose a CSE."
         info="Users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. The CSE owns the client relationship and becomes an approver on this request's engagement."
@@ -347,7 +349,7 @@
       <div class="column q-gutter-xs">
         <app-stored-file-item
           v-for="file in files" :key="file.id"
-          :file="file" :removable="!readonly" :disable="removingId === file.id"
+          :file="file" :tag="maconomyDocumentTag(file.maconomy)" :removable="!readonly" :disable="removingId === file.id"
           @remove="removeFile(file)"
         />
       </div>
@@ -363,7 +365,7 @@ import { remsApi, mediaApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useConfirm } from "composables/useConfirm";
 import {
-  useRemsMeta, remsIndustryOptions, remsIndustryFitsEntityType,
+  useRemsMeta, remsDependentOptions, remsFitsParent,
   REMS_EXISTING_CLIENT_TYPES, REMS_TYPE_BRAND_NEW_CLIENT, REMS_TYPE_EXISTING_CLIENT,
   isIndividualEntityType
 } from "modules/rems/useRemsMeta";
@@ -382,6 +384,8 @@ import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppMultiFileUpload from "components/common/AppMultiFileUpload.vue";
 import AppStoredFileItem from "components/common/AppStoredFileItem.vue";
 import SuffixField from "modules/rems/components/SuffixField.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
+import { maconomyDocumentTag } from "modules/rems/maconomySync";
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
@@ -401,7 +405,7 @@ const props = defineProps({
   saved: { type: Object, default: null },
 
   // ---- The two classifications, which are NOT part of `model` ----
-  // Entity Type belongs to the request's EMS form record and Industry to its engagement, so both are
+  // Entity Type belongs to the request's COP form record and Industry to its engagement, so both are
   // written by endpoints of their own; the page owns the values and v-models them through here.
   setupReadonly: { type: Boolean, default: false },
   entityType: { type: String, default: null },
@@ -413,7 +417,7 @@ const props = defineProps({
   industryOptions: { type: Array, default: () => [] },
 
   // ---- The CSE, which is not part of `model` either ----
-  // It belongs to the request's EMS form record — what the client's invite is minted from — and is
+  // It belongs to the request's COP form record — what the client's invite is minted from — and is
   // saved by the same endpoint as the entity type above, which requires the pair.
   cseUserId: { type: String, default: null },
   cseOptions: { type: Array, default: () => [] },
@@ -606,7 +610,9 @@ const offeredEntityTypes = computed(() => {
 
 // The trades this kind of entity is in, out of the tenant's own list.
 const offeredIndustries = computed(() =>
-  remsIndustryOptions(props.industryOptions, props.entityType, props.industry));
+  remsDependentOptions(props.industryOptions, props.entityTypeOptions, props.entityType, props.industry));
+const industryFits = (entityType, industry) =>
+  remsFitsParent(props.industryOptions, props.entityTypeOptions, entityType, industry);
 
 // Maconomy's industry, once it is the one on the form, is Maconomy's to change — as the entity type is.
 const industryFromMaconomy = computed(() =>
@@ -639,7 +645,7 @@ const applyEntityType = (value) => {
   if (props.setupReadonly || props.entityTypeLocked) return;
   emit("update:entityType", value || null);
   industryCleared.value = "";
-  if (!value || remsIndustryFitsEntityType(value, props.industry)) return;
+  if (!value || industryFits(value, props.industry)) return;
   const stranded = industryLabel(props.industry);
   emit("update:industry", null);
   industryCleared.value =
@@ -658,7 +664,7 @@ const applyMaconomyIndustry = (customer, entityType) => {
   const code = customer?.industry;
   if (!code || code === props.industry) return;
   if (!props.industryOptions.some((o) => o.value === code)) return;
-  if (!remsIndustryFitsEntityType(entityType || null, code)) return;
+  if (!industryFits(entityType || null, code)) return;
   onIndustryPicked(code);
 };
 
@@ -1295,6 +1301,23 @@ defineExpose({ uploadAttachments, addingNew, emailHolder });
   margin-top: 18px;
   height: 40px;
 }
+
+/* Stands where the search box did, level with it, so the rows under it stay put when the box comes back. */
+.cif-new-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--ink-700);
+}
+.cif-link {
+  color: var(--q-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cif-link:hover { color: var(--teal-800); }
 
 /* A result row's tags: where it comes from, then its entity type. */
 .cif-tags {

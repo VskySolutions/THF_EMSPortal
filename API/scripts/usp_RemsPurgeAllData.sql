@@ -54,7 +54,11 @@ GO
                          signed client acceptance forms, purchase orders. Off: it removes the DB rows
                          only — the stored files are not this script's to delete, and orphaned Media
                          is harmless.
-   @ResetNumbering       (default ON)  REMS-n and CL-n come from sequences (seq_RemsNumber,
+   @IncludeEmailLogs     (default ON)  The Email Log's rows for the client form emails: invitation,
+                                       reminder, the staff "form submitted" notice and the client's
+                                       confirmation. The log has no request key, so they are found by
+                                       template, tenant-wide. Invitations and password emails stay.
+   @ResetNumbering       (default ON)  Request numbers (COP-n) and CL-n come from sequences (seq_RemsNumber,
                                        seq_ClientNumber), which do not move when rows go. When the
                                        WHOLE database is purged (@TenantId NULL) they restart at 1,
                                        the client one only when the clients went too. For one tenant
@@ -70,6 +74,7 @@ CREATE OR ALTER PROCEDURE dbo.usp_RemsPurgeAllData
     @IncludeSettings      bit              = 0,
     @IncludeClientPersons bit              = 0,
     @IncludeMedia         bit              = 0,
+    @IncludeEmailLogs     bit              = 1,
     @ResetNumbering       bit              = 1
 AS
 BEGIN
@@ -187,7 +192,6 @@ BEGIN
         ('REMS_PersonnelRate',              (SELECT COUNT(*) FROM dbo.REMS_PersonnelRate   x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMS_StatusHistory',              (SELECT COUNT(*) FROM dbo.REMS_StatusHistory   x JOIN #Rems r ON r.Id = x.REMSId)),
         ('REMS_TaxDueDate',                 (SELECT COUNT(*) FROM dbo.REMS_TaxDueDate      x JOIN #Rems r ON r.Id = x.REMSId)),
-        ('REMS_TaxForm',                    (SELECT COUNT(*) FROM dbo.REMS_TaxForm         x JOIN #Rems r ON r.Id = x.REMSId)),
         ('Client',                          (SELECT COUNT(*) FROM #Client)),
         ('Client_Relationship',             (SELECT COUNT(*) FROM dbo.Client_Relationship x
                                              WHERE x.ClientId IN (SELECT Id FROM #Client) OR x.RelatedClientId IN (SELECT Id FROM #Client))),
@@ -228,6 +232,19 @@ BEGIN
         ('UF: FieldModifiedLogs',           (SELECT COUNT(*) FROM dbo.FieldModifiedLogs x JOIN #Entity e ON e.EntityType = x.EntityType AND e.EntityId = x.EntityId)),
         ('Sequences restarted',             CASE WHEN @ResetNumbering = 1 AND @TenantId IS NULL THEN 1 + @IncludeClients ELSE 0 END);
 
+    -- Added by later releases; a database that has not had the migration yet simply has none.
+    DECLARE @HasEmailLogs bit = CASE WHEN OBJECT_ID(N'dbo.EmailLogs', N'U') IS NOT NULL THEN 1 ELSE 0 END;
+    IF @IncludeEmailLogs = 1 AND @HasEmailLogs = 1
+        INSERT INTO @Report (TableName, Rows)
+        SELECT 'EmailLogs (client form emails)', COUNT(*) FROM dbo.EmailLogs l
+        WHERE (@TenantId IS NULL OR l.TenantId = @TenantId)
+          AND l.TemplateKey IN (N'RemsFormLink', N'RemsFormReminder', N'RemsFormSubmitted', N'RemsFormReceived');
+
+    -- Clients that are kept lose only the pointer to the request their intake came in on.
+    IF @IncludeClients = 0
+        INSERT INTO @Report (TableName, Rows)
+        SELECT 'Client (intake request link cleared)', COUNT(*) FROM dbo.Client c JOIN #Rems r ON r.Id = c.IntakeSubmittedRemsId;
+
     IF @WhatIf = 1
     BEGIN
         SELECT TableName, Rows, N'WHATIF — nothing deleted' AS Outcome
@@ -264,6 +281,11 @@ BEGIN
         DELETE i FROM dbo.REMS_ApprovalChecklistItem i JOIN #Task t ON t.Id = i.TaskId;
         DELETE t FROM dbo.REMS_ApprovalTask          t JOIN #Task x ON x.Id = t.Id;
 
+        -- A client points back at the request its intake came in on, so that pointer is let go
+        -- before the request can be. The answers themselves stay on the client.
+        UPDATE c SET c.IntakeSubmittedRemsId = NULL
+        FROM dbo.Client c JOIN #Rems r ON r.Id = c.IntakeSubmittedRemsId;
+
         -- The request's other children, every one keyed by REMSId, then the request itself.
         DELETE x FROM dbo.REMS_Approver        x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS_CommissionSplit x JOIN #Rems r ON r.Id = x.REMSId;
@@ -273,7 +295,6 @@ BEGIN
         DELETE x FROM dbo.REMS_PersonnelRate   x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS_StatusHistory   x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS_TaxDueDate      x JOIN #Rems r ON r.Id = x.REMSId;
-        DELETE x FROM dbo.REMS_TaxForm         x JOIN #Rems r ON r.Id = x.REMSId;
         DELETE x FROM dbo.REMS                 x JOIN #Rems r ON r.Id = x.Id;
 
         IF @IncludeClients = 1
@@ -303,6 +324,11 @@ BEGIN
 
         IF @IncludeMedia = 1
             DELETE m FROM dbo.Media m JOIN #Media t ON t.Id = m.Id;
+
+        IF @IncludeEmailLogs = 1 AND @HasEmailLogs = 1
+            DELETE l FROM dbo.EmailLogs l
+            WHERE (@TenantId IS NULL OR l.TenantId = @TenantId)
+              AND l.TemplateKey IN (N'RemsFormLink', N'RemsFormReminder', N'RemsFormSubmitted', N'RemsFormReceived');
 
         IF @IncludeSettings = 1
         BEGIN

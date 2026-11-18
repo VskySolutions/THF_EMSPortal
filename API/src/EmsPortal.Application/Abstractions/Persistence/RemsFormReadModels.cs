@@ -5,7 +5,7 @@ using EmsPortal.Domain.Enums;
 namespace EmsPortal.Application.Abstractions.Persistence;
 
 /// <summary>
-/// The EMS-Inbox query for the REMS form pipeline (WO-112). Every request that has a
+/// The COP-Inbox query for the REMS form pipeline (WO-112). Every request that has a
 /// <see cref="REMSForm"/> is a candidate row; the optional <see cref="FormState"/> narrows to a single
 /// <see cref="RemsFormStatus"/>. Tenant isolation is applied by the ambient query filter.
 /// </summary>
@@ -17,7 +17,7 @@ public sealed record RemsInboxQuery(
     int Page,
     int Limit);
 
-/// <summary>Which slice of EMS Review the caller is looking at (the list's quick-filter buttons).</summary>
+/// <summary>Which slice of COP Review the caller is looking at (the list's quick-filter buttons).</summary>
 public enum RemsClientFormAssignment
 {
     /// <summary>Every request in the queue, whoever holds it — including the ones waiting for pickup.</summary>
@@ -56,7 +56,7 @@ public sealed record RemsClientFormQuery(
     DateTime? UpdatedToUtc = null);
 
 /// <summary>
-/// How many requests each quick-filter button on EMS Review would list: the All / Assigned-to-me pair,
+/// How many requests each quick-filter button on COP Review would list: the All / Assigned-to-me pair,
 /// and the Request Status group by REMS.Status code (<c>waiting_for_pickup</c> included). Each group is
 /// counted under every filter but its own, so a button's number is the rows clicking it produces.
 /// </summary>
@@ -65,7 +65,7 @@ public sealed record RemsClientFormQuickCounts(
     IReadOnlyDictionary<string, int> RequestStatus);
 
 /// <summary>
-/// One EMS-Inbox row (WO-112): a request that has a form, projected with the request context, the form
+/// One COP-Inbox row (WO-112): a request that has a form, projected with the request context, the form
 /// state, its creator, and the latest email-delivery event (send/delivered/opened/failed). User ids are
 /// resolved to display names by the controller.
 /// </summary>
@@ -92,7 +92,7 @@ public sealed record RemsInboxItem(
     DateTime UpdatedOnUtc);
 
 /// <summary>
-/// One client-forms row (WO-114, AC-REMS-013.1): a request that has an EMS form, with its
+/// One client-forms row (WO-114, AC-REMS-013.1): a request that has an COP form, with its
 /// submitted/not-submitted state, submission date, and the request's assigned Admin/CSE.
 /// </summary>
 public sealed record RemsClientFormItem(
@@ -115,5 +115,9 @@ public sealed record RemsClientFormItem(
     Guid? UpdatedById,
     DateTime UpdatedOnUtc,
     /// <summary>Set when the client is a Maconomy customer, whose name is read from Maconomy rather than the database.</summary>
-    string? MaconomyCustomerNumber = null);
+    string? MaconomyCustomerNumber = null,
+    /// <summary>The number of the request this one was copied from, when it was made with Copy.</summary>
+    string? CopiedFromRemsNumber = null,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: nothing was emailed.</summary>
+    bool IntakeReused = false);
 

@@ -101,8 +101,7 @@ public sealed class RemsSettingsController : ControllerBase
 
         // The mapping keys off the department ITEM now, so each wanted code is resolved once up front. A
         // code the tenant's list does not have is dropped rather than stored: there is nothing to map.
-        var idsByCode = await _codes.IdsByCodeAsync(
-            EmsPortal.Domain.Enums.EntityType.Rems, RemsOptionSetKeys.Department, cancellationToken);
+        var idsByCode = await _codes.IdsByCodeAsync(RemsOptionSetKeys.Department, cancellationToken);
 
         // Remove mappings that are no longer wanted.
         foreach (var row in existing)

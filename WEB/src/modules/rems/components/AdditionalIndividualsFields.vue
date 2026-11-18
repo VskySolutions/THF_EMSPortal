@@ -27,7 +27,7 @@
           <div class="row q-col-gutter-sm">
             <!-- What they are to the client. -->
             <app-select
-              v-model="row.type" :options="INDIVIDUAL_TYPES" label="Type" required :clearable="false"
+              v-model="row.type" :options="individualTypes()" label="Type" required :clearable="false"
               class="col-12 col-sm-6 col-md-4"
               :error="!!err(i, 'type')" :error-message="err(i, 'type')"
               @update:model-value="onRuleChange(row)"
@@ -125,7 +125,7 @@
 import { computed } from "vue";
 import { nameRules } from "utils/personName";
 import {
-  INDIVIDUAL_TYPES, INDIVIDUAL_FILING_TYPES, INDIVIDUAL_BILLING_PREFERENCES,
+  individualTypes, individualFilingTypes, individualBillingPreferences,
   MAX_ADDITIONAL_INDIVIDUALS, additionalIndividualHasData, applyIndividualRules,
   individualAsksMinor, individualBillingLocked, individualFilingLocked, individualLabel,
   newAdditionalIndividual
@@ -170,13 +170,15 @@ const err = (i, field) => props.errors[`additionalIndividuals[${i}].${field}`] |
 
 // A locked choice is DISABLED, not removed: the client can see what was decided for them, which is the
 // difference between a rule and a missing feature.
-const filingOptions = (row) => INDIVIDUAL_FILING_TYPES.map((o) => ({
-  ...o,
+const filingOptions = (row) => individualFilingTypes().map((o) => ({
+  label: o.label,
+  value: o.value,
   disable: individualFilingLocked(row) && o.value !== "individual"
 }));
 
-const billingOptions = (row) => INDIVIDUAL_BILLING_PREFERENCES.map((o) => ({
-  ...o,
+const billingOptions = (row) => individualBillingPreferences().map((o) => ({
+  label: o.label,
+  value: o.value,
   disable: individualBillingLocked(row) && o.value !== "primary"
 }));
 

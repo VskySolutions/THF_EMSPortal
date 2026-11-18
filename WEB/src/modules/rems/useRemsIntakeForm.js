@@ -11,6 +11,8 @@ import {
 // not wake one.
 import { isBusinessEntityType, REMS_ENTITY_TYPE_TRUST_ESTATE } from "modules/rems/useRemsMeta";
 import { nameIssue } from "utils/personName";
+import { remsOptionCatalog } from "modules/rems/useRemsOptionCatalog";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 
 // The client intake form's DATA, in one place — its shape, how a stored payload is read into it, how it
 // is written back out, and what still has to be filled in before it can be sent.
@@ -37,6 +39,8 @@ export const blankIntakePayload = () => reactive({
   // The generational particle on an individual's name — Jr., Sr., III. Held apart from the name, and
   // deliberately not folded into it: the name is what THF files and searches the client under.
   clientSuffix: "",
+  // Hidden for now (remsFeatureFlags): asked beside the first name once it is switched on.
+  clientMiddleName: "",
   // Retired from the form, which asked for a courtesy title here before it asked for the suffix. Kept in
   // the shape for the reason blankRole gives: a submission saved under the old box carries one.
   clientPrefix: "",
@@ -146,24 +150,22 @@ export const newRelatedEntity = (index = 0) => ({
 // ---------------------------------------------------------------------------------------------------
 // Spouse & more individuals — the other people on this client's return.
 
-/** What relation this person is to the client. */
-export const INDIVIDUAL_TYPES = [
-  { value: "spouse", label: "Spouse" },
-  { value: "child", label: "Child" },
-  { value: "other", label: "Other" }
-];
+// The three choices below are option lists (REMS.RelationType, REMS.FilingType, REMS.BillingPreference):
+// their wording is the tenant's. The rules further down are written against the codes.
+
+/** What relation this person is to the client. A related entity is a relation too, but not a person. */
+export const individualTypes = () =>
+  remsOptionCatalog.relationType.filter((o) => o.value !== "related_entity");
 
 /** How their return is filed. */
-export const INDIVIDUAL_FILING_TYPES = [
-  { value: "joint", label: "Joint" },
-  { value: "individual", label: "Individual" }
-];
+export const individualFilingTypes = () => remsOptionCatalog.filingType;
 
 /** Who is invoiced for their return. */
-export const INDIVIDUAL_BILLING_PREFERENCES = [
-  { value: "primary", label: "Bill To Primary" },
-  { value: "separate", label: "Bill Separately" }
-];
+export const individualBillingPreferences = () => remsOptionCatalog.billingPreference;
+
+/** A relation code read back as the tenant's word for it. */
+export const relationTypeLabel = (code) =>
+  remsOptionCatalog.relationType.find((o) => o.value === code)?.label || code;
 
 /** How many extra individuals one client may declare. */
 export const MAX_ADDITIONAL_INDIVIDUALS = 10;
@@ -252,7 +254,7 @@ export const individualLabel = (row, i = 0) => {
   const name = [row?.lastName, row?.firstName, row?.suffix]
     .map((v) => s(v).trim()).filter(Boolean).join(" ");
   if (name) return name;
-  const type = INDIVIDUAL_TYPES.find((o) => o.value === row?.type)?.label;
+  const type = individualTypes().find((o) => o.value === row?.type)?.label;
   return type ? `${type} ${i + 1}` : `Individual ${i + 1}`;
 };
 
@@ -271,14 +273,14 @@ export const individualSummary = (row, i = 0) => ({
   name: individualLabel(row, i),
   // Their relation, drawn as a badge beside the name rather than as a labelled row: it is a category, and
   // a category is what a badge is for.
-  type: optionLabel(INDIVIDUAL_TYPES, row?.type),
+  type: optionLabel(individualTypes(), row?.type),
   email: s(row?.email).trim(),
   phone: s(row?.phone).trim(),
   // The two answers the firm acts on, plus the minor flag where it was asked — one line, because they are
   // read together ("Joint, billed to the primary") and separately mean less.
-  filing: optionLabel(INDIVIDUAL_FILING_TYPES, row?.filingType),
+  filing: optionLabel(individualFilingTypes(), row?.filingType),
   minor: individualAsksMinor(row) ? (row?.isMinor === true ? "Minor" : "Not a minor") : "",
-  billing: optionLabel(INDIVIDUAL_BILLING_PREFERENCES, row?.billingPreference),
+  billing: optionLabel(individualBillingPreferences(), row?.billingPreference),
   // Only on a submission that actually carried one — the form stopped asking, but a form answered before
   // it stopped still reads back complete.
   billedTo: individualHasBillingName(row)
@@ -303,6 +305,7 @@ export function seedIntakePayload (payload, stored, prefill = null) {
   // From the prefill where the client has not answered yet: the staff intake asks for the particle, and the
   // client's form has a box of its own.
   payload.clientSuffix = d.clientSuffix ?? prefill?.clientSuffix ?? "";
+  payload.clientMiddleName = d.clientMiddleName ?? prefill?.clientMiddleName ?? "";
   payload.clientPrefix = d.clientPrefix ?? "";
   // The two parts come from the stored answer where they were given.
   payload.clientFirstName = d.clientFirstName ?? prefill?.clientFirstName ?? "";
@@ -381,6 +384,8 @@ export function buildIntakePayload (payload, entityType) {
     version: 1,
     clientName: intakeClientName(payload),
     clientSuffix: s(payload.clientSuffix),
+    // Not sent while the box is hidden: an omitted middle name leaves the record's alone.
+    ...(SHOW_MIDDLE_NAME ? { clientMiddleName: s(payload.clientMiddleName) } : {}),
     clientPrefix: s(payload.clientPrefix),
     clientFirstName: s(payload.clientFirstName),
     clientLastName: s(payload.clientLastName),

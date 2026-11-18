@@ -111,7 +111,7 @@ public sealed record RemsClientChoice(Guid Id, string Name);
 
 /// <summary>
 /// How many requests each quick-filter button on My Requests would list, keyed by the button's value:
-/// the Status group by REMS.Status code (<c>waiting_for_pickup</c> included) and the EMS group by form
+/// the Status group by REMS.Status code (<c>waiting_for_pickup</c> included) and the COP group by form
 /// state. Each group is counted under every filter but its own, so a button's number is the rows
 /// clicking it produces.
 /// </summary>
@@ -131,7 +131,7 @@ public sealed record RemsRelatedEntityQuickCounts(
     IReadOnlyDictionary<string, int> RelatedStatus);
 
 /// <summary>
-/// The EMS-form and client-submission state for a request, projected from the (at most one active)
+/// The COP-form and client-submission state for a request, projected from the (at most one active)
 /// <see cref="REMSForm"/> and its submissions. Absent when the form has not been started (WO-111 left-join;
 /// forms/submissions are populated by later WOs).
 /// </summary>
@@ -244,7 +244,9 @@ public sealed record RemsRelatedEntityItem(
     Guid? UpdatedById,
     DateTime UpdatedOnUtc,
     /// <summary>Set when the client is a Maconomy customer, whose name and email are read from Maconomy rather than the database.</summary>
-    string? MaconomyCustomerNumber = null);
+    string? MaconomyCustomerNumber = null,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: nothing was emailed.</summary>
+    bool IntakeReused = false);
 
 /// <summary>
 /// One related client, from either source table, in the shape the list draws them in.

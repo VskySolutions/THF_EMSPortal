@@ -6,7 +6,7 @@ namespace EmsPortal.Api.Models.Rems;
 // WO-114 — REMS engagement workspace (Part A) + copy/marketing/commission (Part B).
 
 /// <summary>
-/// One row of the client-forms list (AC-REMS-013.1): a request that has (or once had) an EMS form,
+/// One row of the client-forms list (AC-REMS-013.1): a request that has (or once had) an COP form,
 /// with its submitted/not-submitted state, client name, submission date, and assigned Admin/CSE.
 /// </summary>
 public sealed record RemsClientFormRow(
@@ -39,9 +39,21 @@ public sealed record RemsClientFormRow(
     string? UpdatedBy,
     DateTime UpdatedOnUtc,
     /// <summary>The Maconomy customer sync status word, where a row has been recorded for the request.</summary>
-    string? MaconomySyncStatus = null);
+    string? MaconomySyncStatus = null,
+    /// <summary>Where posting the engagement to Maconomy as a job has got to, on an approved request; Sync job now lives on this list.</summary>
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
+    /// <summary>The number of the request this one was copied from, when it was made with Copy.</summary>
+    string? CopiedFromRemsNumber = null,
+    /// <summary>The caller may raise a new request from this one's engagement setup.</summary>
+    bool CanCopy = false,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
+    bool IntakeReused = false);
 
-/// <summary>The submitted-form view (AC-REMS-013.2/3), rendered from the <c>REMSFormSubmission</c> payload.</summary>
+/// <summary>
+/// The intake form as the request page shows it: the client's answers, rebuilt from their rows. A completed
+/// intake (this request's own, or the one on file from an earlier request), or what the client has saved so
+/// far while the form is out with them.
+/// </summary>
 public sealed record RemsSubmissionView(
     Guid SubmissionId,
     Guid RemsId,
@@ -50,14 +62,26 @@ public sealed record RemsSubmissionView(
     string? LockedEmail,
     /// <summary>The request's generational suffix on the client's name.</summary>
     string? ClientNameSuffix,
-    DateTime SubmittedOnUtc,
+    /// <summary>When the intake was completed, on this request or the one it is on file from. Null while the form is out and unanswered.</summary>
+    DateTime? SubmittedOnUtc,
     RemsFormPayloadV1 Payload,
     /// <summary>The staff member who last corrected these answers; null while they are the client's own.</summary>
     string? EditedBy = null,
     /// <summary>When they were last corrected; null while they are the client's own.</summary>
     DateTime? EditedOnUtc = null,
-    /// <summary>Whether THIS caller may correct them — an Admin, on a request no approval round has frozen.</summary>
-    bool CanEdit = false);
+    /// <summary>
+    /// Whether THIS caller may write them: an Admin correcting a completed intake on a request no round has
+    /// frozen, or one of the people on the request completing a form that is out with the client.
+    /// </summary>
+    bool CanEdit = false,
+    /// <summary>The answers are a completed intake. False while the form is out with the client.</summary>
+    bool Submitted = true,
+    /// <summary>The request the intake came in on, when it was not this one.</summary>
+    RemsRequestRef? OnFileFrom = null,
+    /// <summary>The user who completed the form for the client; null when the client did.</summary>
+    string? CompletedBy = null,
+    /// <summary>When the client last saved the unanswered form; null while they have not opened it.</summary>
+    DateTime? LastSavedOnUtc = null);
 
 // -------------------- Workspace read model --------------------
 
@@ -142,7 +166,7 @@ public sealed record RemsEngagementView(
     Guid Id,
     string? Department,
     string? ServiceLine,
-    string? JobTemplate,
+    string? JobType,
     string? Industry,
     RemsUserRef? DepartmentDirector,
     RemsUserRef? EngagementExecutive,
@@ -152,12 +176,16 @@ public sealed record RemsEngagementView(
     decimal? RealizationPercentage,
     string? BillingPeriod,
     string? BillingProcessDescription,
+    /// <summary>The short plain-text job description from the setup form.</summary>
+    string? JobDescription,
     string Status,
     IReadOnlyList<Guid> MarketingMethodIds,
     IReadOnlyList<RemsCommissionSplitView> CommissionSplits,
     RemsAuditDetailView? Audit,
     RemsGovernmentDetailView? Government,
-    RemsTaxDetailView? Tax);
+    RemsTaxDetailView? Tax,
+    /// <summary>True when the money has been withheld from this reader (RemsSetupAccess.MaySeeFinancials): the fee rows are null and the rate card carries no rates.</summary>
+    bool FinancialsRestricted = false);
 
 /// <summary>A commission split (employee + percentage).</summary>
 public sealed record RemsCommissionSplitView(Guid Id, RemsUserRef Employee, decimal Percentage);
@@ -167,7 +195,9 @@ public sealed record RemsAuditDetailView(
     Guid Id,
     Guid? ClientAcceptanceFormMediaId,
     string? FileName,
-    DateOnly? ClientFiscalYearEnd);
+    DateOnly? ClientFiscalYearEnd,
+    /// <summary>Where uploading the signed form to the Maconomy job has got to.</summary>
+    RemsMaconomyDocumentView? MaconomyDocument = null);
 
 /// <summary>
 /// Government audit detail — contract number, Florida 1% flag and the copied contract/PO dates —
@@ -188,7 +218,9 @@ public sealed record RemsGovernmentDetailView(
     Guid? PurchaseOrderMediaId,
     string? PurchaseOrderFileName,
     /// <summary>The GCS rate card, in the personnel-level list's own order.</summary>
-    IReadOnlyList<RemsPersonnelRateView> PersonnelRates);
+    IReadOnlyList<RemsPersonnelRateView> PersonnelRates,
+    /// <summary>Where uploading the purchase order to the Maconomy job has got to.</summary>
+    RemsMaconomyDocumentView? PurchaseOrderMaconomyDocument = null);
 
 /// <summary>
 /// One line of a GCS engagement's rate card. The level is the <c>REMS.PersonnelLevel</c> code, with its
@@ -198,16 +230,15 @@ public sealed record RemsGovernmentDetailView(
 public sealed record RemsPersonnelRateView(string PersonnelLevel, string PersonnelLevelLabel, decimal? BillRatePerHour);
 
 /// <summary>
-/// Tax engagement detail: fiscal year end, the two due dates (derived from it and then editable), the
-/// snapshot JSON the approver's packet reads, and the form checklist.
+/// Tax engagement detail: fiscal year end, the two due dates (derived from it and then editable), and the
+/// snapshot JSON the approver's packet reads.
 /// </summary>
 public sealed record RemsTaxDetailView(
     Guid Id,
     DateOnly? FiscalYearEnd,
     DateOnly? OriginalDueDate,
     DateOnly? FirstExtensionDueDate,
-    string? CalculatedDueDates,
-    IReadOnlyList<Guid> TaxFormIds);
+    string? CalculatedDueDates);
 
 // -------------------- Editing requests --------------------
 
@@ -276,8 +307,8 @@ public sealed class UpdateRemsEngagementRequest
     /// </summary>
     public string? ServiceLine { get; set; }
 
-    /// <summary>The job template the engagement is set up from (option-set <c>REMS.JobTemplate</c> code).</summary>
-    public string? JobTemplate { get; set; }
+    /// <summary>The job type the engagement is set up from (option-set <c>REMS.JobType</c> code).</summary>
+    public string? JobType { get; set; }
 
     /// <summary>
     /// The client's trade — the INDUSTRY as the setup form labels it (option-set
@@ -300,6 +331,9 @@ public sealed class UpdateRemsEngagementRequest
 
     /// <summary>How the client is actually billed, in prose.</summary>
     public string? BillingProcessDescription { get; set; }
+
+    /// <summary>Short plain-text job description, at most 6 characters. Null leaves it alone; empty clears it.</summary>
+    public string? JobDescription { get; set; }
 }
 
 /// <summary>
@@ -344,8 +378,8 @@ public sealed class UpdateRemsGovernmentDetailRequest
     public string? PurchaseOrderNumber { get; set; }
     public decimal? PurchaseOrderAmount { get; set; }
 
-    /// <summary>The rate card. Levels not listed, and lines with no rate, are levels the engagement is not staffed at.</summary>
-    public List<RemsPersonnelRateInput> PersonnelRates { get; set; } = new();
+    /// <summary>The rate card. Null leaves the stored card alone; levels not listed, and lines with no rate, are levels the engagement is not staffed at.</summary>
+    public List<RemsPersonnelRateInput>? PersonnelRates { get; set; }
 }
 
 /// <summary>One line of the rate card: a <c>REMS.PersonnelLevel</c> code and the hourly rate billed at it.</summary>
@@ -356,15 +390,13 @@ public sealed class RemsPersonnelRateInput
 }
 
 /// <summary>
-/// Set the tax detail: fiscal year end, the two due dates, and the tax-form checklist
-/// (AC-REMS-014.14).
+/// Set the tax detail: fiscal year end and the two due dates (AC-REMS-014.14).
 /// </summary>
 public sealed class UpdateRemsTaxDetailRequest
 {
     public DateOnly? FiscalYearEnd { get; set; }
     public DateOnly? OriginalDueDate { get; set; }
     public DateOnly? FirstExtensionDueDate { get; set; }
-    public List<Guid> TaxFormIds { get; set; } = new();
 }
 
 // -------------------- Part B: marketing + commission --------------------
@@ -376,7 +408,7 @@ public sealed class SetRemsMarketingRequest
 }
 
 /// <summary>
-/// Set the engagement commission splits (AC-REMS-016): up to ten recipients, each &gt; 0 and &lt;=
+/// Set the engagement commission splits (AC-REMS-016): up to three recipients, each &gt; 0 and &lt;=
 /// 100, allocating no more than 100% in total.
 /// </summary>
 public sealed class SetRemsCommissionRequest

@@ -1,5 +1,6 @@
 <template>
   <q-table
+    ref="tableRef"
     v-model:pagination="innerPagination"
     v-model:selected="innerSelected"
     :rows="displayedRows"
@@ -89,6 +90,24 @@
       </q-th>
     </template>
 
+    <!-- An email column gets the copy button, unless the page draws that cell itself. -->
+    <template v-for="slotName in emailCellSlots" #[slotName]="cellProps" :key="`email-${slotName}`">
+      <q-td :props="cellProps"><app-email :email="String(cellProps.value ?? '')" /></q-td>
+    </template>
+
+    <!-- A column that names a user (`userId: (row) => id`) says who they are on hover. -->
+    <template v-for="c in userCells" #[c.slot]="cellProps" :key="`user-${c.slot}`">
+      <q-td :props="cellProps">
+        <span>
+          {{ cellProps.value }}
+          <app-user-card-tooltip
+            v-if="c.userId(cellProps.row)" :user-id="c.userId(cellProps.row)"
+            anchor="bottom middle" self="top middle"
+          />
+        </span>
+      </q-td>
+    </template>
+
     <!-- Forward all parent-provided body slots (e.g. body-cell-xxx) to QTable. -->
     <template v-for="(_, name) in forwardedSlots" #[name]="slotProps" :key="name">
       <slot :name="name" v-bind="slotProps" />
@@ -97,8 +116,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, useSlots, toRef } from "vue";
+import { computed, ref, watch, useSlots, toRef, onMounted, onBeforeUnmount } from "vue";
 import { usePreferences } from "composables/usePreferences";
+import AppEmail from "components/common/AppEmail.vue";
+import AppUserCardTooltip from "components/common/AppUserCardTooltip.vue";
 import useColumnResize from "composables/dataTable/useColumnResize.js";
 import useColumnOrder from "composables/dataTable/useColumnOrder.js";
 
@@ -129,13 +150,14 @@ const rowsPerPageOptions = [10, 20, 50, 100];
 const prefs = props.pageKey ? usePreferences(props.pageKey) : null;
 
 // The page owns page, size AND sort — useListTable holds them, sends them to the server and remembers
-// them.
+// them. A total is what tells QTable the rows are one server page; a client-sorted list leaves it out,
+// so QTable sorts and pages the rows it was given by itself.
 const innerPagination = ref({
   page: 1,
   rowsPerPage: prefs?.get("pageSize", 20) ?? 20,
   sortBy: props.defaultSortBy,
   descending: props.defaultDescending,
-  rowsNumber: props.totalRecords,
+  ...(props.clientSort ? {} : { rowsNumber: props.totalRecords }),
   ...(props.pagination || {})
 });
 
@@ -143,7 +165,17 @@ const innerSelected = ref([]);
 watch(innerSelected, (val) => emit("update:selected", val));
 
 watch(() => props.totalRecords, (total) => {
-  innerPagination.value = { ...innerPagination.value, rowsNumber: total };
+  if (!props.clientSort) innerPagination.value = { ...innerPagination.value, rowsNumber: total };
+});
+
+// A client-sorted list pages by itself and never asks the server, so its page size is remembered here.
+watch(() => innerPagination.value.rowsPerPage, (size) => {
+  if (props.clientSort) prefs?.merge({ pageSize: size });
+});
+
+// Nor does it raise a request, so a page that needs to know the sort is told here.
+watch(() => innerPagination.value.sortBy, () => {
+  if (props.clientSort) emit("update:pagination", innerPagination.value);
 });
 
 // The page's sort follows the page: a list that resets to page 1 on a new sort, or restores a remembered
@@ -271,11 +303,23 @@ const resetColumns = () => {
 // ---- Column resizing (persisted) ----
 const columnsRef = toRef(props, "columns");
 const resizeWidths = ref(prefs?.get("columnWidths", {}) ?? {});
-const { startResize } = useColumnResize({
+const { startResize, isResizeClick } = useColumnResize({
   columns: columnsRef,
   resizeWidths,
   saveResizableWidthState: (widths) => prefs?.set("columnWidths", widths)
 });
+
+// Letting go of a resize handle fires a click on the header cell, which QTh would take as a sort. It is
+// caught on the way down, before QTh's own handler sees it.
+const tableRef = ref(null);
+const swallowResizeClick = (e) => {
+  if (isResizeClick()) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+};
+onMounted(() => tableRef.value?.$el?.addEventListener("click", swallowResizeClick, true));
+onBeforeUnmount(() => tableRef.value?.$el?.removeEventListener("click", swallowResizeClick, true));
 
 const columnStyle = (name) => {
   const w = resizeWidths.value?.[name];
@@ -297,6 +341,15 @@ const slots = useSlots();
 const reserved = ["top", "no-data", "actions", "bulk-actions", "header-cell"];
 const forwardedSlots = computed(() =>
   Object.fromEntries(Object.entries(slots).filter(([name]) => !reserved.includes(name))));
+
+const userCells = computed(() => props.columns
+  .filter((c) => typeof c.userId === "function" && !slots[`body-cell-${c.name}`])
+  .map((c) => ({ slot: `body-cell-${c.name}`, userId: c.userId })));
+
+const emailCellSlots = computed(() => props.columns
+  .filter((c) => /email$/i.test(c.name))
+  .map((c) => `body-cell-${c.name}`)
+  .filter((slotName) => !slots[slotName]));
 </script>
 
 <style scoped>

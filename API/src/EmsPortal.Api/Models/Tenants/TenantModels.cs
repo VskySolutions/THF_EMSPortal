@@ -5,12 +5,18 @@ public sealed class CreateTenantRequest
     public string Name { get; set; } = string.Empty;
     public string Identifier { get; set; } = string.Empty;
     public string TimeZoneId { get; set; } = "UTC";
+
+    /// <summary>Who the portal emails when an integration it runs for the tenant breaks. Up to twenty.</summary>
+    public List<string>? DeveloperEmails { get; set; }
 }
 
 public sealed class UpdateTenantRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? TimeZoneId { get; set; }
+
+    /// <summary>Null leaves the list as it is; an empty list clears it.</summary>
+    public List<string>? DeveloperEmails { get; set; }
 }
 
 public sealed class UpdateTenantStatusRequest
@@ -26,6 +32,7 @@ public sealed record TenantSummary(
     string Identifier,
     string Status,
     string TimeZoneId,
+    IReadOnlyList<string> DeveloperEmails,
     string? CreatedBy,
     string? UpdatedBy,
     DateTime CreatedOnUtc,
@@ -38,4 +45,5 @@ public sealed record TenantDetail(
     string Identifier,
     string Status,
     string TimeZoneId,
+    IReadOnlyList<string> DeveloperEmails,
     RecordAudit Audit);

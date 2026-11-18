@@ -16,10 +16,30 @@ public interface IRemsRequestRepository
 
     /// <summary>
     /// Everything the setup, submission and approval screens read: the request's option items and seats,
-    /// its contract, personnel rates, marketing methods, commission splits, tax forms, due dates, picked
+    /// its contract, personnel rates, marketing methods, commission splits, tax due dates, picked
     /// approvers and files, and the client's full graph.
     /// </summary>
     Task<RemsRequest?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The request with what the Maconomy job and document syncs read: type, status, client with person,
+    /// service line, job type, department, contract, marketing methods and files with their media.
+    /// </summary>
+    Task<RemsRequest?> GetForJobSyncAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The same attachment, already uploaded to Maconomy, on another request of the client — a copy of a
+    /// request carries its source's files. Null when there is none.
+    /// </summary>
+    Task<RemsFile?> FindUploadedTwinAsync(Guid clientId, Guid mediaId, Guid excludingFileId, CancellationToken cancellationToken = default);
+
+    void UpdateFile(RemsFile file);
+
+    /// <summary>The caller's tenant's approved requests, newest change first, with the same graph loaded. The Job tab's table.</summary>
+    Task<IReadOnlyList<RemsRequest>> ListApprovedForJobSyncAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>How the caller's tenant's approved requests stand with the Maconomy job sync; a Pending or Syncing older than the cut-off counts as failed.</summary>
+    Task<RemsMaconomyJobSyncCounts> CountJobSyncAsync(DateTime staleBeforeUtc, CancellationToken cancellationToken = default);
 
     /// <summary>The request an invite code opens, outside the tenant filter, with type, status and client.</summary>
     Task<RemsRequest?> GetByInviteCodeUnscopedAsync(string inviteCode, CancellationToken cancellationToken = default);
@@ -34,6 +54,9 @@ public interface IRemsRequestRepository
     /// <summary>Whether another live request names the same client.</summary>
     Task<bool> IsClientSharedAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default);
 
+    /// <summary>The client's OTHER request whose intake form is out with them and unanswered, or null. One form per client at a time.</summary>
+    Task<RemsIntakeHolder?> FindOutstandingIntakeAsync(Guid clientId, Guid excludingRemsId, CancellationToken cancellationToken = default);
+
     /// <summary>A client's requests, newest first, with type and status.</summary>
     Task<IReadOnlyList<RemsRequest>> ListByClientAsync(Guid clientId, CancellationToken cancellationToken = default);
 
@@ -44,7 +67,7 @@ public interface IRemsRequestRepository
     Task<RemsPoolCounts> CountPoolScopesAsync(RemsRequestListOptions options, CancellationToken cancellationToken = default);
     Task<RemsRequestQuickCounts> CountQuickFiltersAsync(RemsRequestListOptions options, CancellationToken cancellationToken = default);
 
-    // ---- EMS Review (client forms) ----
+    // ---- COP Review (client forms) ----
 
     Task<(IReadOnlyList<RemsClientFormItem> Items, int Total)> ListClientFormsAsync(RemsClientFormQuery query, CancellationToken cancellationToken = default);
     Task<RemsClientFormQuickCounts> CountClientFormQuickFiltersAsync(RemsClientFormQuery query, CancellationToken cancellationToken = default);
@@ -99,10 +122,13 @@ public interface IRemsRequestRepository
     Task AddMarketingMethodAsync(RemsMarketingMethod method, CancellationToken cancellationToken = default);
     void RemoveMarketingMethod(RemsMarketingMethod method);
 
-    Task AddTaxFormAsync(RemsTaxForm taxForm, CancellationToken cancellationToken = default);
-    void RemoveTaxForm(RemsTaxForm taxForm);
-
     Task AddTaxDueDateAsync(RemsTaxDueDate dueDate, CancellationToken cancellationToken = default);
     void UpdateTaxDueDate(RemsTaxDueDate dueDate);
     void RemoveTaxDueDate(RemsTaxDueDate dueDate);
 }
+
+/// <summary>Approved requests by Maconomy job sync state: created, failed (lost attempts included), under way, and still to post.</summary>
+public sealed record RemsMaconomyJobSyncCounts(int Synced, int Failed, int Syncing, int Waiting);
+
+/// <summary>The request a client's intake form went out with.</summary>
+public sealed record RemsIntakeHolder(Guid RemsId, string RemsNumber);

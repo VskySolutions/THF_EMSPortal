@@ -1,6 +1,6 @@
-# EMS Portal — Development Guidelines
+# COP Portal — Development Guidelines
 
-This document defines how the EMS Portal codebase is organized and how to extend it consistently. Read it before adding features. It complements the [README](../README.md).
+This document defines how the COP Portal codebase is organized and how to extend it consistently. Read it before adding features. It complements the [README](../README.md).
 
 ---
 
@@ -209,7 +209,7 @@ media-uploads/8f3a…/_unassigned/2026/08/documents/…          ← no parent r
 
 ### Add or use an Option Set (tenant-configurable input value lists)
 
-Option Sets are admin-managed dropdown value lists keyed by `(EntityType, Key)` — e.g. a "Department" list. A list with `TenantId == null` is a platform-**standard** seeded list (`IsSystem = true`, visible to every tenant, read-only in the app); a `TenantId`-bearing list is that tenant's own. Tables `OptionSets` / `OptionSetItems`; sort modes `AlphabeticalAsc`/`AlphabeticalDesc`/`Custom` (drag-reorder); dependency chains via `ParentSetId` + item `ParentItemId`.
+Option Sets are admin-managed dropdown value lists keyed by `Key` (the entity type was dropped on 16 Nov 2026) — e.g. a "Department" list. A list with `TenantId == null` is a platform-**standard** seeded list (`IsSystem = true`, visible to every tenant, read-only in the app); a `TenantId`-bearing list is that tenant's own. Tables `OptionSets` / `OptionSetItems`; sort modes `AlphabeticalAsc`/`AlphabeticalDesc`/`Custom` (drag-reorder); dependency chains via `ParentSetId` on the list + the `OptionSetItemParents` link table (a value may sit under several parent values; none means every parent).
 
 - **Consume options in a form:** use the reusable `<AppOptionPicker :entity-type :option-key="'payment_terms'" v-model="…">` (`components/common/AppOptionPicker.vue`); pass `:parent-item-id` for a cascading child list. It resolves via `GET /api/option-sets/resolve` (composable `useOptionSet`).
 - **Seed a new standard list:** add a `Definition` to `Application/OptionSets/DefaultOptionSets.cs` — `BootstrapSeeder` inserts it idempotently (`TenantId = null`, `IsSystem = true`). Scope to an existing `EntityType` member.

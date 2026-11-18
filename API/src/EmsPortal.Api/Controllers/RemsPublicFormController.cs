@@ -1,24 +1,18 @@
-using System.Globalization;
 using EmsPortal.Api.Models.Rems;
 using EmsPortal.Api.RateLimiting;
 using EmsPortal.Api.Rems;
 using EmsPortal.Api.Validators.Rems;
-using EmsPortal.Application.Abstractions.Email;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
 using EmsPortal.Application.Abstractions.OptionSets;
 using EmsPortal.Application.Abstractions.Persistence;
 using EmsPortal.Application.Abstractions.Tenancy;
-using EmsPortal.Application.Abstractions.UniversalFeatures;
 using EmsPortal.Domain.Entities;
 using EmsPortal.Domain.Enums;
-using EmsPortal.Shared.Configuration;
 using EmsPortal.Shared.Contracts;
-using EmsPortal.Shared.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -45,16 +39,10 @@ public sealed class RemsPublicFormController : ControllerBase
 
     private readonly IRemsRequestRepository _requests;
     private readonly RemsClientIntake _intake;
-    private readonly IUserRepository _users;
+    private readonly RemsIntakeSubmission _submission;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITenantContext _tenantContext;
-    private readonly IActivityEventWriter _activity;
-    private readonly INotificationDispatcher _notifications;
-    private readonly IRemsEmailNotifier _emailNotifier;
-    private readonly string _baseUrl;
     private readonly IOptionSetRepository _optionSets;
-    private readonly IOptionCodeResolver _codes;
-    private readonly ILogger<RemsPublicFormController> _logger;
     private readonly IMaconomyClientDirectory _maconomy;
 
     /// <summary>The address this request's form is locked to, worked out once by <see cref="LoadFormAsync"/>.</summary>
@@ -63,30 +51,18 @@ public sealed class RemsPublicFormController : ControllerBase
     public RemsPublicFormController(
         IRemsRequestRepository requests,
         RemsClientIntake intake,
-        IUserRepository users,
+        RemsIntakeSubmission submission,
         IUnitOfWork unitOfWork,
         ITenantContext tenantContext,
-        IActivityEventWriter activity,
-        INotificationDispatcher notifications,
-        IRemsEmailNotifier emailNotifier,
-        IOptions<AppOptions> appOptions,
         IOptionSetRepository optionSets,
-        IOptionCodeResolver codes,
-        ILogger<RemsPublicFormController> logger,
         IMaconomyClientDirectory maconomy)
     {
         _requests = requests;
         _intake = intake;
-        _users = users;
+        _submission = submission;
         _unitOfWork = unitOfWork;
         _tenantContext = tenantContext;
-        _activity = activity;
-        _notifications = notifications;
-        _emailNotifier = emailNotifier;
-        _baseUrl = appOptions.Value.BaseUrl;
         _optionSets = optionSets;
-        _codes = codes;
-        _logger = logger;
         _maconomy = maconomy;
     }
 
@@ -132,8 +108,29 @@ public sealed class RemsPublicFormController : ControllerBase
                 EntityType: entityType,
                 Prefill: BuildPrefill(client, entityType),
                 DraftPayload: DraftPayload(request, entityType),
-                ReferralSources: await ResolvePublicOptionsAsync(request.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken)),
+                ReferralSources: await ResolvePublicOptionsAsync(request.TenantId, RemsOptionSetKeys.ReferralSource, cancellationToken),
+                OptionLists: await ResolvePublicListsAsync(request.TenantId, cancellationToken)),
             "REMS form resolved."));
+    }
+
+    /// <summary>The lists the form's pickers and role labels are drawn from.</summary>
+    private static readonly string[] PublicListKeys =
+    {
+        RemsOptionSetKeys.RelationType, RemsOptionSetKeys.FilingType, RemsOptionSetKeys.BillingPreference,
+        RemsOptionSetKeys.ContactRole, RemsOptionSetKeys.NameSuffix,
+    };
+
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<RemsPublicOption>>> ResolvePublicListsAsync(
+        Guid tenantId, CancellationToken cancellationToken)
+    {
+        var lists = new Dictionary<string, IReadOnlyList<RemsPublicOption>>();
+        foreach (var key in PublicListKeys)
+        {
+            lists[key] = await ResolvePublicOptionsAsync(tenantId, key, cancellationToken)
+                ?? Array.Empty<RemsPublicOption>();
+        }
+
+        return lists;
     }
 
     /// <summary>
@@ -143,7 +140,7 @@ public sealed class RemsPublicFormController : ControllerBase
     private async Task<IReadOnlyList<RemsPublicOption>?> ResolvePublicOptionsAsync(
         Guid tenantId, string key, CancellationToken cancellationToken)
     {
-        var set = await _optionSets.GetEffectiveSetAsync(tenantId, EntityType.Rems, key, cancellationToken);
+        var set = await _optionSets.GetEffectiveSetAsync(tenantId, key, cancellationToken);
         if (set is null)
         {
             return null;
@@ -264,8 +261,9 @@ public sealed class RemsPublicFormController : ControllerBase
             return BadRequest(ApiResponseFactory.ValidationError(validation.Errors));
         }
 
-        await SubmitTransactionAsync(request, effective!, entityType, cancellationToken);
-        await DispatchPostSubmitAsync(request, effective!, cancellationToken);
+        // The client's own submission: nobody signed in did it, and that is what the record says.
+        await _submission.SubmitAsync(request, effective!, entityType, byUserId: null, cancellationToken);
+        await _submission.NotifyAsync(request, Clean(effective!.EffectiveClientName), byUserId: null, cancellationToken);
 
         return Ok(ApiResponseFactory.Success(
             new RemsPublicFormResponse(
@@ -293,118 +291,6 @@ public sealed class RemsPublicFormController : ControllerBase
 
         // Intentionally non-destructive: no state change, nothing cleared — the client may resume later.
         return Ok(ApiResponseFactory.Success(new RemsPublicCancelResponse(true), "Cancellation acknowledged."));
-    }
-
-    // -------------------- Submit transaction --------------------
-
-    private async Task SubmitTransactionAsync(
-        RemsRequest request, RemsFormPayloadV1 payload, string entityType, CancellationToken cancellationToken)
-    {
-        var now = DateTime.UtcNow;
-
-        // The client's answers are in, so the request passes to the Admin the initiator named. The engagement
-        // setup was filled before any of this, so what happens next is review, not setup.
-        var submittedStatusId = await _codes.RequireRemsIdAsync(
-            RemsOptionSetKeys.Status, RemsRequestStatuses.AdminReview, cancellationToken);
-
-        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
-        {
-            // The answers go onto the client master; the request only records when they arrived.
-            await _intake.ApplyAsync(request, payload, entityType, ct);
-            request.FormSubmittedOnUtc = now;
-            request.FormLastSavedOnUtc = now;
-
-            var previousStatusId = request.StatusId;
-            request.StatusId = submittedStatusId;
-            _requests.Update(request);
-            await _requests.AddStatusHistoryAsync(new RemsStatusHistory
-            {
-                Id = Guid.NewGuid(),
-                TenantId = request.TenantId, // EXPLICIT — no tenant stamping in the public context.
-                REMSId = request.Id,
-                FromStatusId = previousStatusId,
-                ToStatusId = submittedStatusId,
-                ChangedByUserId = null, // the client is not a user
-                ChangedOnUtc = now,
-            }, ct);
-
-            await _unitOfWork.SaveChangesAsync(ct);
-        }, cancellationToken);
-    }
-
-    // -------------------- Post-commit (best-effort) --------------------
-
-    /// <summary>
-    /// After the submission is durably committed, notify the assigned Admin and CSE in-app and by
-    /// email (AC-REMS ...).
-    /// </summary>
-    private async Task DispatchPostSubmitAsync(RemsRequest request, RemsFormPayloadV1 payload, CancellationToken cancellationToken)
-    {
-        var client = request.Client!;
-        // Assigned admin, CSE, and the requester — the customer coming back is the milestone the person who
-        // raised the request is waiting on.
-        var recipients = new[] { request.AdminAssignedToId, request.CSEId, request.CreatedById }
-            .Where(id => id.HasValue)
-            .Select(id => id!.Value)
-            .Distinct()
-            .ToList();
-
-        try
-        {
-            foreach (var userId in recipients)
-            {
-                await _notifications.DispatchAsync(new CreateNotificationDto(
-                    userId,
-                    NotificationType.RemsFormSubmitted,
-                    "A REMS onboarding form was submitted",
-                    $"{request.RemsNumber} — {client.ClientName}",
-                    EntityType.Rems,
-                    request.Id), cancellationToken);
-            }
-
-            // Nobody has claimed this request, so the answers that just landed are on no admin's desk in
-            // particular.
-            if (request.AdminAssignedToId is null)
-            {
-                var admins = await _users.ListByTenantRolesAsync(
-                    request.TenantId, new[] { Roles.Admin, Roles.SuperAdmin }, cancellationToken);
-                foreach (var admin in admins.Where(a => !recipients.Contains(a.Id)))
-                {
-                    await _notifications.DispatchAsync(new CreateNotificationDto(
-                        admin.Id,
-                        NotificationType.RemsRequestAssigned,
-                        "A REMS request is waiting for pickup",
-                        $"{request.RemsNumber} — {client.ClientName}",
-                        EntityType.Rems,
-                        request.Id), cancellationToken);
-                }
-            }
-
-            await _activity.WriteAsync(
-                new CreateActivityEventDto(EntityType.Rems, request.Id, ActivityEventTypes.RemsFormSubmitted), cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-            // External "form submitted" email to the Admin + CSE. Enqueued on a worker; never throws/blocks.
-            var model = new RemsFormSubmittedEmail(
-                Clean(payload.EffectiveClientName) ?? client.ClientName,
-                request.RemsNumber,
-                $"{_baseUrl.TrimEnd('/')}/rems/requests/{request.Id}",
-                (request.FormSubmittedOnUtc ?? DateTime.UtcNow).ToString("f", CultureInfo.InvariantCulture) + " UTC");
-
-            foreach (var userId in recipients)
-            {
-                var user = await _users.GetByIdAsync(userId, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(user?.Email))
-                {
-                    _emailNotifier.SendFormSubmitted(request.TenantId, user!.Email, model);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex, "The form on REMS request {RemsId} was submitted, but post-commit notification/email dispatch failed.", request.Id);
-        }
     }
 
     // -------------------- Review model --------------------
@@ -539,7 +425,7 @@ public sealed class RemsPublicFormController : ControllerBase
             : string.Join(" ", new[] { first, last }.Where(p => p.Length > 0));
         return new RemsPublicPrefill(
             name, first, last, client.IsOrganisation ? null : person?.Suffix,
-            _lockedEmail, client.ClientPhone);
+            _lockedEmail, client.ClientPhone, client.IsOrganisation ? null : person?.MiddleName);
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

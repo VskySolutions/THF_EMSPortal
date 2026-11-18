@@ -51,6 +51,7 @@ public sealed class RemsClientIntake
             ClientFirstName = client.IsOrganisation ? null : person?.FirstName,
             ClientLastName = client.IsOrganisation ? null : person?.LastName,
             ClientSuffix = client.IsOrganisation ? null : person?.Suffix,
+            ClientMiddleName = client.IsOrganisation ? null : person?.MiddleName,
             Email = lockedEmail.Length > 0 ? lockedEmail : client.ClientEmail,
             MobileNumber = client.PrimaryPhone,
             ReferralSource = client.ReferralSource?.Value,
@@ -164,7 +165,7 @@ public sealed class RemsClientIntake
 
         // The client row and, for an individual, the person it points at.
         client.PrimaryPhone = Clean(payload.MobileNumber);
-        client.ReferralSourceId = await _codes.IdOfAsync(EntityType.Rems, RemsOptionSetKeys.ReferralSource, Clean(payload.ReferralSource), cancellationToken);
+        client.ReferralSourceId = await _codes.IdOfAsync(RemsOptionSetKeys.ReferralSource, Clean(payload.ReferralSource), cancellationToken);
         client.ReferralSourceDetail = Clean(payload.ReferralSourceDetail);
         client.EIN = isBusiness ? Clean(payload.Ein) : null;
         if (client.IsOrganisation)
@@ -176,6 +177,10 @@ public sealed class RemsClientIntake
             if (Clean(payload.ClientFirstName) is { } first) person.FirstName = first;
             if (Clean(payload.ClientLastName) is { } last) person.LastName = last;
             person.Suffix = Clean(payload.ClientSuffix);
+            if (payload.ClientMiddleName is not null)
+            {
+                person.MiddleName = Clean(payload.ClientMiddleName);
+            }
             person.DisplayName = string.Join(" ", new[] { person.FirstName, person.LastName }.Where(p => !string.IsNullOrWhiteSpace(p)));
             person.LastProfileUpdatedOn = DateTime.UtcNow;
             _persons.Update(person);
@@ -312,7 +317,7 @@ public sealed class RemsClientIntake
 
     private async Task UpsertIndividualsAsync(RemsRequest request, Client client, IReadOnlyList<RemsAdditionalIndividualPayload> wanted, CancellationToken cancellationToken)
     {
-        var individualTypeId = await _codes.IdOfAsync(EntityType.Rems, RemsOptionSetKeys.EntityType, RemsFormPayloadValidator.Individual, cancellationToken);
+        var individualTypeId = await _codes.IdOfAsync(RemsOptionSetKeys.EntityType, RemsFormPayloadValidator.Individual, cancellationToken);
         var billingRoleId = await _codes.RequireRemsIdAsync(RemsOptionSetKeys.ContactRole, RemsContactRoles.BillingContactCode, cancellationToken);
         var existing = client.Relationships.Where(r => !r.Deleted && r.RelatedClient is { IsOrganisation: false }).ToList();
         var kept = new HashSet<Guid>();
@@ -320,8 +325,8 @@ public sealed class RemsClientIntake
         {
             var match = MatchIndividual(existing, individual, kept);
             var relationTypeId = await _codes.RequireRemsIdAsync(RemsOptionSetKeys.RelationType, Clean(individual.Type) ?? RemsRelationTypes.Other, cancellationToken);
-            var filingTypeId = await _codes.IdOfAsync(EntityType.Rems, RemsOptionSetKeys.FilingType, individual.EffectiveFilingType, cancellationToken);
-            var billingPreferenceId = await _codes.IdOfAsync(EntityType.Rems, RemsOptionSetKeys.BillingPreference, individual.EffectiveBillingPreference, cancellationToken);
+            var filingTypeId = await _codes.IdOfAsync(RemsOptionSetKeys.FilingType, individual.EffectiveFilingType, cancellationToken);
+            var billingPreferenceId = await _codes.IdOfAsync(RemsOptionSetKeys.BillingPreference, individual.EffectiveBillingPreference, cancellationToken);
             Client related;
             if (match is null)
             {

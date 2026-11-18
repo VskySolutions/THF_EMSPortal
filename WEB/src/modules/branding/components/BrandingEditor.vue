@@ -22,8 +22,8 @@
               <div class="row q-col-gutter-md">
                 <app-text-field
                   v-model="draft.identity.applicationName" label="Application name" class="col-12 col-sm-6"
-                  :placeholder="DEFAULT_THEME.identity.applicationName" maxlength="60"
-                  hint="Beside the logo, in the browser tab and on the sign-in screen."
+                  :placeholder="saved?.tenantName || DEFAULT_THEME.identity.applicationName" maxlength="60"
+                  hint="Beside the logo, in the browser tab and on the sign-in screen. Left empty, the tenant's name is used."
                 />
                 <app-text-field
                   v-model="draft.identity.tagline" label="Tagline" class="col-12 col-sm-6" maxlength="120"
@@ -293,7 +293,7 @@
           <q-separator />
           <q-card-section>
             <branding-preview
-              :theme="resolved" :logo="assetUrl(assets.logo)" :login-background="assetUrl(assets.loginBackground)"
+              :theme="previewTheme" :logo="assetUrl(assets.logo)" :login-background="assetUrl(assets.loginBackground)"
             />
           </q-card-section>
         </q-card>
@@ -435,6 +435,13 @@ const assets = computed(() => saved.value?.assets || {});
 const isCustomised = computed(() => !!saved.value?.isCustomised);
 
 const resolved = computed(() => resolveTheme(draft.value));
+
+// Left unnamed, the application goes by the tenant's name: the preview shows that, not the stock name.
+const previewTheme = computed(() => {
+  const name = saved.value?.tenantName;
+  if (!name || draft.value.identity.applicationName) return resolved.value;
+  return { ...resolved.value, identity: { ...resolved.value.identity, applicationName: name } };
+});
 
 const updatedLine = computed(() => {
   const s = saved.value;

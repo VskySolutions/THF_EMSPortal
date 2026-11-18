@@ -13,6 +13,13 @@
     </q-item-section>
     <q-item-section side>
       <div class="row items-center no-wrap">
+        <q-chip
+          v-if="tag" dense square size="sm" class="q-mr-sm"
+          :color="tag.color" :text-color="tag.textColor || 'white'" :icon="tag.icon"
+        >
+          {{ tag.label }}
+          <q-tooltip v-if="tag.tooltip" max-width="320px">{{ tag.tooltip }}</q-tooltip>
+        </q-chip>
         <q-icon name="o_open_in_new" size="18px" color="grey-6" class="q-mr-xs">
           <q-tooltip>Open in a new tab</q-tooltip>
         </q-icon>
@@ -45,6 +52,8 @@ const props = defineProps({
   removable: { type: Boolean, default: false },
   // Removal is in flight / the form is locked — the row still opens, it just cannot be removed.
   disable: { type: Boolean, default: false },
+  // A short status beside the file — where else it has been sent, say: { label, color, textColor?, icon?, tooltip? }.
+  tag: { type: Object, default: null },
   // Where the bytes come from, for a file that is NOT in the media store — Universal Features keeps its
   // attachments behind an endpoint of its own. Default: /api/media/{mediaId}/content.
   fetchBlob: { type: Function, default: null }

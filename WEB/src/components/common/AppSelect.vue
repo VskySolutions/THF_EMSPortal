@@ -1,6 +1,11 @@
 <template>
   <div class="app-field">
     <app-field-label :label="label" :required="required" :info="info" />
+    <!-- The chosen user, on hovering the field. -->
+    <app-user-card-tooltip
+      v-if="userCards && !multiple && chosenUserId" :user-id="chosenUserId"
+      anchor="bottom middle" self="top middle"
+    />
     <q-select
       v-model="model"
       :options="visibleOptions"
@@ -44,25 +49,30 @@
           @remove="scope.removeAtIndex(scope.index)"
         >
           {{ scope.opt.label ?? scope.opt }}
+          <app-user-card-tooltip
+            v-if="userCards" :user-id="String(optionKey(scope.opt) ?? '')"
+            anchor="bottom middle" self="top middle"
+          />
         </q-chip>
       </template>
 
       <!-- Category labels in a grouped list — options carrying `header: true`, as the role picker's
            System / Operational / REMS Seats / Custom do. -->
-      <template v-if="hasHeaders" #option="scope">
+      <template v-if="hasHeaders || userCards" #option="scope">
         <q-item-label v-if="scope.opt.header" header class="app-select__group">
           {{ scope.opt.label }}
         </q-item-label>
         <q-item v-else v-bind="scope.itemProps">
-          <q-item-section v-if="multiple" side>
+          <q-item-section v-if="multiple && hasHeaders" side>
             <q-checkbox
               :model-value="scope.selected" dense
               @update:model-value="scope.toggleOption(scope.opt)"
             />
           </q-item-section>
           <q-item-section>
-            <q-item-label>{{ scope.opt.label }}</q-item-label>
+            <q-item-label>{{ optionText(scope.opt) }}</q-item-label>
           </q-item-section>
+          <app-user-card-tooltip v-if="userCards" :user-id="String(optionKey(scope.opt) ?? '')" />
         </q-item>
       </template>
 
@@ -84,6 +94,7 @@
 <script setup>
 import { ref, computed, toRef } from "vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
+import AppUserCardTooltip from "components/common/AppUserCardTooltip.vue";
 import { useFieldLabel } from "composables/useFieldLabel";
 
 const props = defineProps({
@@ -92,6 +103,8 @@ const props = defineProps({
   label: { type: String, default: "" },
   // Force the required marker; a trailing "*" in the label also marks it required.
   required: { type: Boolean, default: false },
+  // The options are users (value = user id): each one, and the chosen one, shows who they are on hover.
+  userCards: { type: Boolean, default: false },
   // Explains what this list is scoped to (a user group, a role, an option list). Use it whenever the
   // options are a filtered set — otherwise an empty or short dropdown just looks broken.
   info: { type: String, default: "" },
@@ -164,6 +177,11 @@ const isSelectedOption = (opt) => {
   const key = optionKey(opt);
   return key !== undefined && selectedKeys.value.includes(key);
 };
+
+const chosenUserId = computed(() => {
+  const key = optionKey(props.modelValue);
+  return typeof key === "string" ? key : "";
+});
 
 // True when the list carries category headers (see useRoleOptions). Only then is the option slot taken
 // over, so every other select in the app keeps Quasar's default rendering.

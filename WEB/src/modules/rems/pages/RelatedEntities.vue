@@ -4,7 +4,7 @@
       :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'Related Entities' }]"
       :search="search"
       show-search
-      search-placeholder="Search REMS number, client or related client"
+      :search-placeholder="`Search ${siteName} number, client or related client`"
       show-filters
       :filter-count="allChips.length"
       show-back
@@ -72,14 +72,11 @@
                it: the button is at the far right and the reason the row is at the top is here. -->
           <entity-pinned-mark :pinned="isPinned(cell.row.remsId)" />
           <q-btn
-            v-if="cell.row.canView"
             flat dense no-caps color="primary" class="text-weight-medium"
             :label="cell.row.remsNumber" :to="requestRoute(cell.row)"
           >
             <q-tooltip>Open the request</q-tooltip>
           </q-btn>
-          <!-- Not everyone on this shared board is on every request: the number stays, the way in does not. -->
-          <span v-else class="text-weight-medium q-px-sm">{{ cell.row.remsNumber }}</span>
         </q-td>
       </template>
 
@@ -90,7 +87,7 @@
             <app-name-with-suffix :name="cell.row.clientName" :suffix="cell.row.clientNameSuffix" />
           </div>
           <div v-if="cell.row.clientEmail" class="text-caption text-primary ellipsis">
-            {{ cell.row.clientEmail }}
+            <app-email :email="cell.row.clientEmail" />
           </div>
         </q-td>
       </template>
@@ -132,20 +129,22 @@
       <template #body-cell-actions="cell">
         <q-td :props="cell">
           <!-- The same four a REMS request carries on every other list, in the same order and worded the
-               same way: read it, work it, see what the client has been told, talk about it. -->
-          <q-btn v-if="cell.row.canView" flat round dense color="primary" icon="o_visibility" :to="requestRoute(cell.row)">
+               same way: read it (everybody's), work it (Edit or Manage), see what the client has been told,
+               talk about it. -->
+          <q-btn flat round dense color="primary" icon="o_visibility" :to="requestRoute(cell.row)">
             <q-tooltip>View</q-tooltip>
           </q-btn>
           <q-btn
             v-if="cell.row.canEdit"
-            flat round dense color="primary" icon="o_edit" :to="editRoute(cell.row)"
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
           >
-            <q-tooltip>Edit</q-tooltip>
+            <q-tooltip>{{ workAction.label }}</q-tooltip>
           </q-btn>
           <!-- Every row here has a submitted form, so there is always a log to read — unlike My Requests,
-               where the action waits until something has actually been sent. -->
+               where the action waits until something has actually been sent. Except a request that reused
+               the client's intake on file, which emailed nothing. -->
           <q-btn
-            v-if="canReadEmailLog" type="a"
+            v-if="canReadEmailLog && !cell.row.intakeReused" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
           >
             <q-tooltip>Email log</q-tooltip>
@@ -190,11 +189,13 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 // Related Entities — the shared board of the clients a client brought with them.
 import { ref, reactive, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
 import { useFilterMemory } from "composables/useFilterMemory";
@@ -220,11 +221,12 @@ import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 import RelatedClientsCell from "modules/rems/components/RelatedClientsCell.vue";
 
 const notify = useNotify();
+const siteName = useSiteName();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const {
   entityTypeLabel, entityTypeOption, entityTypeOptions, requestStatusOption, statusFilterOptions,
-  relatedEntityStatusOption, relatedEntityStatusOptions
+  relatedEntityStatusOption, relatedEntityStatusOptions, workAction
 } = useRemsMeta();
 
 // requestStatusOption reads a REQUEST shape (`status` + `assignedAdmin`); this list calls the first field
@@ -245,7 +247,7 @@ onMounted(async () => {
 // box; the client is a dropdown of the clients on the list, every date column filters as a From/To range,
 // and Related Clients is a count with no filter worth offering.
 const columns = computed(() => [
-  { name: "remsNumber", label: "REMS ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
+  { name: "remsNumber", label: `${siteName.value} ID`, field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "clientName", label: "Client Name", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: true, filterOptions: entityTypeOptions.value },
   { name: "submittedOnUtc", label: "Submitted On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },

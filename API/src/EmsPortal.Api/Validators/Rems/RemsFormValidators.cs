@@ -4,7 +4,7 @@ using FluentValidation;
 namespace EmsPortal.Api.Validators.Rems;
 
 /// <summary>
-/// Validates the EMS form build/save payload (WO-112, AC-REMS-007.7): a CSE and a known entity type
+/// Validates the COP form build/save payload (WO-112, AC-REMS-007.7): a CSE and a known entity type
 /// code are both required before the form can be saved.
 /// </summary>
 public sealed class SaveRemsFormRequestValidator : AbstractValidator<SaveRemsFormRequest>

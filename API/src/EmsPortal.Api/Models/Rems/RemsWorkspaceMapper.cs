@@ -14,7 +14,7 @@ internal static class RemsWorkspaceMapper
         => id is { } uid ? new RemsUserRef(uid, names.TryGetValue(uid, out var n) ? n : string.Empty) : null;
 
     /// <summary>
-    /// The request's EMS-form state as the UI reads it: the form's own status, and whether the client
+    /// The request's COP-form state as the UI reads it: the form's own status, and whether the client
     /// has submitted / is still being waited on.
     /// </summary>
     public static (string EmsFormState, string? ClientSubmissionState) FormState(RemsFormStateInfo? form)
@@ -84,7 +84,9 @@ internal static class RemsWorkspaceMapper
         var department = request.Department?.Value;
 
         var auditView = RemsEngagementCodes.RequiresClientAcceptanceForm(department) || acceptance is not null || client?.FiscalYearEnd is not null
-            ? new RemsAuditDetailView(request.Id, acceptance?.MediaId, acceptance?.Media?.OriginalFileName, client?.FiscalYearEnd)
+            ? new RemsAuditDetailView(
+                request.Id, acceptance?.MediaId, acceptance?.Media?.OriginalFileName, client?.FiscalYearEnd,
+                RemsMaconomyDocumentViews.Of(acceptance, request))
             : null;
         var govView = RemsEngagementCodes.IsGcs(department) || request.ContractId is not null || request.ContractNumber is not null
             || request.PurchaseOrderNumber is not null || request.PersonnelRates.Any(r => !r.Deleted)
@@ -94,9 +96,11 @@ internal static class RemsWorkspaceMapper
                 request.Contract?.PurchaseOrderStartDate, request.Contract?.PurchaseOrderEndDate,
                 request.PurchaseOrderNumber, request.PurchaseOrderAmount,
                 purchaseOrder?.MediaId, purchaseOrder?.Media?.OriginalFileName,
-                PersonnelRates(request))
+                PersonnelRates(request),
+                RemsMaconomyDocumentViews.Of(purchaseOrder, request))
             : null;
-        var taxView = RemsEngagementCodes.IsTax(department) || request.TaxForms.Any(f => !f.Deleted) || request.TaxDueDates.Any(d => !d.Deleted)
+        var taxView = RemsEngagementCodes.IsTax(department) || request.FiscalYearEnd is not null
+            || request.TaxDueDates.Any(d => !d.Deleted)
             ? TaxDetail(request)
             : null;
 
@@ -104,7 +108,7 @@ internal static class RemsWorkspaceMapper
             request.Id,
             department,
             request.ServiceLine?.Value,
-            request.JobTemplate?.Value,
+            request.JobType?.Value,
             client?.Industry?.Value,
             UserRef(request.DepartmentDirectorId, names),
             UserRef(request.EngagementExecutiveId, names),
@@ -114,6 +118,7 @@ internal static class RemsWorkspaceMapper
             request.RealizationPercentage,
             request.BillingPeriod?.Value,
             request.BillingProcessDescription,
+            request.JobDescription,
             RemsDerived.EngagementStatusOf(request).ToString(),
             marketing,
             commission,
@@ -128,7 +133,8 @@ internal static class RemsWorkspaceMapper
     /// </summary>
     public static RemsTaxDetailView TaxDetail(RemsRequest request)
     {
-        var fye = request.Client?.FiscalYearEnd;
+        // The engagement's own year end: a client with a return a year holds several.
+        var fye = request.FiscalYearEnd;
         var original = request.TaxDueDates.FirstOrDefault(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.Original);
         var extension = request.TaxDueDates.FirstOrDefault(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.FirstExtension);
         string? schedule = null;
@@ -143,8 +149,7 @@ internal static class RemsWorkspaceMapper
             request.Id, fye,
             original is { IsOverridden: true } ? original.DueOn : null,
             extension is { IsOverridden: true } ? extension.DueOn : null,
-            schedule,
-            request.TaxForms.Where(f => !f.Deleted).Select(f => f.TaxFormId).ToList());
+            schedule);
     }
 
     /// <summary>The client as the setup screen edits it. Billing name and email come from the first billing contact.</summary>

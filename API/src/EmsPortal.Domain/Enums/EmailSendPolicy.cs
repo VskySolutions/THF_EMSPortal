@@ -26,6 +26,8 @@ public static class EmailSendPolicy
         EmailTemplateKey.RemsFormLink,      // REMS external — client form link
         EmailTemplateKey.RemsFormReminder,  // REMS external — nudge a client who has not submitted yet
         EmailTemplateKey.RemsFormSubmitted, // REMS external — form submitted to Admin + CSE
+        EmailTemplateKey.RemsFormReceived,  // REMS external — confirmation to the client who submitted the form
+        EmailTemplateKey.MaconomyConnectionDisabled, // operations — the tenant's developers, when the portal switches Maconomy off
     };
 
     /// <summary>True when the template key is permitted to be delivered by email.</summary>

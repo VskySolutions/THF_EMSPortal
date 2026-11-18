@@ -54,7 +54,6 @@ public sealed class RemsApprovalController : ControllerBase
     private const string CodeApproverReserved = "REMS_APPROVER_RESERVED";
 
     private const string MarketingSetKey = "REMSMarketing_MarketingMethods.MarketingMethodId";
-    private const string TaxFormSetKey = "REMS.TaxForm";
 
     private readonly IRemsRequestRepository _requests;
     /// <summary>Only to answer whether an initiator has cover arranged — see RemsSetupAccess.CanWork.</summary>
@@ -71,6 +70,8 @@ public sealed class RemsApprovalController : ControllerBase
     // STATIC-APPROVAL-POLICY
     private readonly IRemsApprovalPolicy _policy;
     private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IMaconomyJobSyncService _jobSync;
+    private readonly IMaconomyDocumentSyncService _documentSync;
 
     public RemsApprovalController(
         IRemsRequestRepository requests,
@@ -85,10 +86,14 @@ public sealed class RemsApprovalController : ControllerBase
         INotificationDispatcher notifications,
         IOptionCodeResolver codes,
         IRemsApprovalPolicy policy,
-        IMaconomyCustomerSyncService customerSync)
+        IMaconomyCustomerSyncService customerSync,
+        IMaconomyJobSyncService jobSync,
+        IMaconomyDocumentSyncService documentSync)
     {
         _policy = policy;
         _customerSync = customerSync;
+        _jobSync = jobSync;
+        _documentSync = documentSync;
         _requests = requests;
         _delegations = delegations;
         _tasks = tasks;
@@ -358,7 +363,8 @@ public sealed class RemsApprovalController : ControllerBase
     [ProducesResponseType<ApiResponse<IEnumerable<RemsApprovalRoundHistory>>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> History(Guid id, CancellationToken cancellationToken)
     {
-        if (User.GetUserId() is not { } me)
+        // Open to every signed-in user: the read-only request page carries the rounds, and it is the firm's.
+        if (User.GetUserId() is null)
         {
             return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
         }
@@ -366,15 +372,6 @@ public sealed class RemsApprovalController : ControllerBase
         if (await _requests.GetByIdAsync(id, cancellationToken) is not { } request)
         {
             return NotFound(ApiResponseFactory.NotFound("REMS engagement not found."));
-        }
-
-        // The permission first: it is free, and it is what the staff reading this hold. The approver check
-        // is a query, so only a caller the permission did not cover pays for it.
-        if (!User.HasPermission(Permissions.RemsRequestsRead)
-            && !await _tasks.IsApproverOnRequestAsync(request.Id, me, cancellationToken))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponseFactory.Forbidden("Not permitted to view this engagement's approval history."));
         }
 
         var tasks = await _tasks.ListByRequestAsync(id, cancellationToken);
@@ -490,7 +487,7 @@ public sealed class RemsApprovalController : ControllerBase
         // The audit actors, each request's CSE and each row's approvers, resolved in one read: a name
         // lookup per row would be one round trip per task. A tenant-wide row names its whole round.
         var auditNames = await _users.GetFullNamesAsync(
-            tasks.SelectMany(t => new[] { t.CreatedById, t.UpdatedById, t.Request?.CSEId, (Guid?)t.ApproverId }
+            tasks.SelectMany(t => new[] { t.CreatedById, t.UpdatedById, t.Request?.CSEId, t.Request?.MaconomyJobSyncedById, (Guid?)t.ApproverId }
                     .Concat(tenantScope is null
                         ? Array.Empty<Guid?>()
                         : t.Request!.ApprovalTasks.Where(o => o.RoundNumber == t.RoundNumber).Select(o => (Guid?)o.ApproverId)))
@@ -506,6 +503,9 @@ public sealed class RemsApprovalController : ControllerBase
         var syncEnabled = User.GetActiveTenantId() is { } tenantId
             && await _customerSync.IsEnabledAsync(tenantId, cancellationToken);
         var maySyncAny = User.HasPermission(Permissions.RemsEngagementsManage);
+        var jobContext = User.GetActiveTenantId() is { } jobTenant
+            ? await _jobSync.GetContextAsync(jobTenant, cancellationToken)
+            : MaconomyJobSyncContext.None;
 
         var rows = new List<RemsApprovalTaskRow>(tasks.Count);
         foreach (var t in tasks)
@@ -516,6 +516,9 @@ public sealed class RemsApprovalController : ControllerBase
             var maconomySync = RemsMaconomySyncViews.For(
                 request, client is not null && _customerSync.IsStale(client), syncEnabled,
                 canManage: t.ApproverId == me || maySyncAny);
+            var maconomyJobSync = RemsMaconomyJobSyncViews.ForListed(
+                request, jobContext, _jobSync.IsStale(request), canManage: t.ApproverId == me || maySyncAny,
+                NameOf(request.MaconomyJobSyncedById));
             // A tenant-wide row is the request: Decided is when its round closed, and every approver is on it.
             var approvers = tenantScope is null ? null : round.Tasks
                 .OrderBy(x => DisplayRank(x.ApproverRole))
@@ -536,6 +539,7 @@ public sealed class RemsApprovalController : ControllerBase
                 round.Tasks.Count,
                 NameOf(t.CreatedById), t.CreatedOnUtc, NameOf(t.UpdatedById), t.UpdatedOnUtc,
                 MaconomySync: maconomySync,
+                MaconomyJobSync: maconomyJobSync,
                 Approver: RemsWorkspaceMapper.UserRef(t.ApproverId, auditNames),
                 Approvers: approvers));
         }
@@ -785,6 +789,7 @@ public sealed class RemsApprovalController : ControllerBase
         var round = RoundOf(request, task, threshold);
         var fullyApproved = round.Status == RemsApprovalRoundStatus.Approved;
         Client? pendingSync = null;
+        RemsRequest? pendingJob = null;
         if (fullyApproved)
         {
             await ChangeStatusAsync(request, RemsRequestStatuses.Approved, me, now, cancellationToken);
@@ -799,6 +804,9 @@ public sealed class RemsApprovalController : ControllerBase
             // A brand-new client is posted to Maconomy from here — recorded with the approval, queued once
             // it is committed, and never anything the approval waits on or fails because of.
             pendingSync = await _customerSync.RecordOnApprovalAsync(request, cancellationToken);
+            // The engagement follows as a Maconomy job: queued here when the client is already a customer,
+            // otherwise by the customer sync once it has made them one.
+            pendingJob = await _jobSync.RecordPendingAsync(request, requireApproved: false, cancellationToken);
 
             var involved = new HashSet<Guid>(round.Tasks.Select(t => t.ApproverId));
             if (round.SentByUserId is { } sender)
@@ -829,6 +837,15 @@ public sealed class RemsApprovalController : ControllerBase
         if (pendingSync is not null)
         {
             _customerSync.Enqueue(pendingSync);
+        }
+        if (pendingJob is not null)
+        {
+            _jobSync.Enqueue(pendingJob);
+        }
+        // A client already in Maconomy can take the request's attachments straight away; a new one's follow the customer sync.
+        if (fullyApproved && client is { IsMaconomyClient: true })
+        {
+            _documentSync.Enqueue(request.Id, request.TenantId);
         }
 
         var view = await BuildTaskViewAsync(await ReloadAsync(task, cancellationToken), me, cancellationToken);
@@ -1172,6 +1189,7 @@ public sealed class RemsApprovalController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Department?.Value)) missing.Add("Department");
         // The service the firm is actually engaged to do.
         if (string.IsNullOrWhiteSpace(request.ServiceLine?.Value)) missing.Add("Service Line");
+        if (request.JobTypeId is null) missing.Add("Job Type");
         if (request.EngagementExecutiveId is null) missing.Add("Engagement Executive");
         if (request.BillingManagerId is null) missing.Add("Billing Manager");
         if (request.RealizationPercentage is null) missing.Add("% Realization");
@@ -1204,13 +1222,12 @@ public sealed class RemsApprovalController : ControllerBase
         }
 
         // Tax: the whole fiscal-year card — the year end, the two due dates that follow from it (each a row,
-        // computed or typed over), and at least one form on the checklist.
+        // computed or typed over).
         if (RemsEngagementCodes.IsTax(department))
         {
-            if (request.Client?.FiscalYearEnd is null) missing.Add("Fiscal Year End");
+            if (request.FiscalYearEnd is null) missing.Add("Fiscal Year End");
             if (!request.TaxDueDates.Any(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.Original)) missing.Add("Original Due Date");
             if (!request.TaxDueDates.Any(d => !d.Deleted && d.Kind == RemsTaxDueDateKind.FirstExtension)) missing.Add("First Extension Due Date");
-            if (!request.TaxForms.Any(f => !f.Deleted)) missing.Add("at least one Tax Form");
         }
 
         if (missing.Count > 0)
@@ -1378,7 +1395,8 @@ public sealed class RemsApprovalController : ControllerBase
             request.CreatedOnUtc,
             request.Files.Where(f => !f.Deleted && f.Kind == RemsFileKind.Attachment)
                 .Select(f => new RemsFileRef(
-                    f.Id, f.MediaId, f.Media?.OriginalFileName, f.Media?.MimeType, f.Media?.FileSize, f.Media?.PublicUrl))
+                    f.Id, f.MediaId, f.Media?.OriginalFileName, f.Media?.MimeType, f.Media?.FileSize, f.Media?.PublicUrl,
+                    RemsMaconomyDocumentViews.Of(f, request)))
                 .ToList());
 
         var engagementView = await BuildApprovalEngagementViewAsync(task, request, client, names, cancellationToken);
@@ -1450,9 +1468,7 @@ public sealed class RemsApprovalController : ControllerBase
             var dueDates = tax.FiscalYearEnd is { } fiscalYearEnd
                 ? RemsTaxDueDates.Effective(fiscalYearEnd, original?.DueOn, extension?.DueOn)
                 : null;
-            taxView = new RemsApprovalTaxDetailView(
-                tax.Id, tax.FiscalYearEnd, dueDates,
-                await ResolveOptionRefsAsync(TaxFormSetKey, tax.TaxFormIds, cancellationToken));
+            taxView = new RemsApprovalTaxDetailView(tax.Id, tax.FiscalYearEnd, dueDates);
         }
 
         // The PO's value and the rates are money, so a role that may not see the fee reads which levels
@@ -1480,7 +1496,7 @@ public sealed class RemsApprovalController : ControllerBase
             setup.Status,
             setup.Department,
             setup.ServiceLine,
-            setup.JobTemplate,
+            setup.JobType,
             setup.Industry,
             clientView,
             entityView,
@@ -1495,6 +1511,7 @@ public sealed class RemsApprovalController : ControllerBase
             // of the arrangement, not the fee.
             setup.BillingPeriod,
             setup.BillingProcessDescription,
+            setup.JobDescription,
             auditView,
             governmentView,
             taxView,
@@ -1518,16 +1535,23 @@ public sealed class RemsApprovalController : ControllerBase
             return Array.Empty<RemsApprovalOptionRef>();
         }
 
-        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), EntityType.Rems, setKey, cancellationToken);
+        var set = await _optionSets.GetEffectiveSetAsync(User.GetActiveTenantId(), setKey, cancellationToken);
         if (set is null)
         {
             return Array.Empty<RemsApprovalOptionRef>();
         }
 
+        // A marketing method's group is the value it sits under on the list this one depends on.
+        var parent = set.ParentSetId is { } parentSetId
+            ? await _optionSets.GetSetWithItemsAsync(parentSetId, User.GetActiveTenantId(), cancellationToken)
+            : null;
+        string? GroupLabel(OptionSetItem item) => parent?.Items
+            .FirstOrDefault(p => item.Parents.Any(l => l.ParentOptionSetItemId == p.Id))?.Label;
+
         return set.Items
             .Where(i => !i.Deleted && ids.Contains(i.Id))
             .OrderBy(i => i.SortOrder)
-            .Select(i => new RemsApprovalOptionRef(i.Id, i.Label, GroupOf(i.MetadataJson)))
+            .Select(i => new RemsApprovalOptionRef(i.Id, i.Label, GroupLabel(i) ?? GroupOf(i.MetadataJson)))
             .ToList();
     }
 

@@ -1,10 +1,10 @@
-# EMS Portal — User Guide
+# COP Portal — User Guide
 
-A practical, task-oriented guide to using EMS Portal from a user's point of view. It explains
+A practical, task-oriented guide to using COP Portal from a user's point of view. It explains
 what the platform does, who can do what, and how to perform every common task — from your first
 login to triggering an import and checking whether it succeeded.
 
-> EMS Portal automates importing financial data from **Concur** into **Maconomy** —
+> COP Portal automates importing financial data from **Concur** into **Maconomy** —
 > expense reports, vendor invoices, and vendor payments. It also handles
 > user/role administration, email, dashboards, and a cross-cutting **Universal Features** layer.
 > You can drive it through the **web app** (`WEB/`, a Quasar/Vue SPA) or directly through the REST API

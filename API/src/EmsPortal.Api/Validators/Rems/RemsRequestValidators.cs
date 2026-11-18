@@ -20,6 +20,7 @@ public sealed class CreateRemsRequestRequestValidator : AbstractValidator<Create
         // A name particle, not a second name field — the column is nvarchar(16). Free text rather than a
         // closed set: the five offered in the picker are what most clients need, not all a client may have.
         RuleFor(x => x.ClientNameSuffix).MaximumLength(16).When(x => !string.IsNullOrWhiteSpace(x.ClientNameSuffix));
+        RuleFor(x => x.ClientMiddleName).MaximumLength(100);
         // The partner's message is client-facing now and holds pasted correspondence; the column is
         // nvarchar(max), so nothing is capped here either.
         RuleFor(x => x.CustomerEmail).EmailAddress().MaximumLength(256)
@@ -49,6 +50,7 @@ public sealed class UpdateRemsRequestRequestValidator : AbstractValidator<Update
             .When(x => x.ClientName is not null && string.IsNullOrWhiteSpace(x.MaconomyCustomerNumber));
         // Not NotEmpty: "" is how the suffix is CLEARED, which an omitted field cannot say.
         RuleFor(x => x.ClientNameSuffix).MaximumLength(16).When(x => x.ClientNameSuffix is not null);
+        RuleFor(x => x.ClientMiddleName).MaximumLength(100);
         RuleFor(x => x.CustomerEmail).EmailAddress().MaximumLength(256)
             .When(x => !string.IsNullOrWhiteSpace(x.CustomerEmail) && string.IsNullOrWhiteSpace(x.MaconomyCustomerNumber));
         RuleFor(x => x.CustomerMobileNumber).MaximumLength(32)

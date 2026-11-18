@@ -1,5 +1,5 @@
 <template>
-  <!-- The client's submitted EMS form, read-only, rendered from the immutable submission. -->
+  <!-- The client's submitted COP form, read-only, rendered from the immutable submission. -->
   <div class="sfp">
     <div v-if="loading" class="row flex-center q-pa-xl"><q-spinner color="primary" size="32px" /></div>
 
@@ -20,7 +20,7 @@
           </span>
           <span class="text-grey-6"> · {{ view.remsNumber }}</span>
         </div>
-        <div class="col-auto text-caption text-grey-7">Submitted {{ fmt.formatDateTime(view.submittedOnUtc) }}</div>
+        <div class="col-auto text-caption text-grey-7">{{ receivedNote }}</div>
       </div>
 
       <!-- Said before the answers, not after them: a reader checking an EIN against the setup needs to know
@@ -40,7 +40,33 @@
         <div v-if="g.kind === 'fields'" class="submitted-group__body">
           <div v-for="r in g.rows" :key="r.label" class="field-row">
             <div class="rems-label">{{ r.label }}</div>
-            <div class="rems-value">{{ r.value }}</div>
+            <div class="rems-value">
+              <app-email v-if="isEmailRow(r)" :email="String(r.value)" />
+              <template v-else>{{ r.value }}</template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Each billing block as the form asks it: who the invoice is for, then where it goes. -->
+        <div v-else-if="g.kind === 'billing'" class="submitted-billing">
+          <div v-for="(b, i) in g.rows" :key="i" :class="{ 'submitted-person': g.rows.length > 1 }">
+            <div v-if="b.title" class="submitted-people__title">{{ b.title }}</div>
+            <div class="submitted-group__body">
+              <div class="field-row">
+                <div class="rems-label">Name</div>
+                <div class="rems-value">
+                  <app-name-with-suffix v-if="b.name" :name="b.name" :suffix="b.suffix" />
+                  <template v-else>—</template>
+                </div>
+              </div>
+              <div v-for="r in b.fields" :key="r.label" class="field-row" :class="{ 'field-row--wide': r.wide }">
+                <div class="rems-label">{{ r.label }}</div>
+                <div class="rems-value">
+                  <app-email v-if="isEmailRow(r)" :email="String(r.value)" />
+                  <template v-else>{{ r.value }}</template>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -49,7 +75,7 @@
             <div v-for="r in g.rows" :key="r.role" class="role-row">
               <div class="rems-label">{{ r.role }}</div>
               <div class="rems-value"><app-name-with-suffix :name="r.name" :suffix="r.suffix" /></div>
-              <div class="text-caption text-grey-7">{{ r.email || "no email" }} · {{ r.phone || "no phone" }}</div>
+              <div class="text-caption text-grey-7"><app-email :email="r.email || ''" empty="no email" /> · {{ r.phone || "no phone" }}</div>
             </div>
           </div>
           <div v-else class="text-grey-6">No contacts provided.</div>
@@ -66,7 +92,7 @@
               />
             </div>
             <div class="text-caption text-grey-7 ellipsis">
-              {{ p.email || "no email" }}<template v-if="p.phone"> · {{ p.phone }}</template>
+              <app-email :email="p.email || ''" empty="no email" /><template v-if="p.phone"> · {{ p.phone }}</template>
             </div>
             <div class="text-caption text-grey-8">
               {{ p.filing }}<template v-if="p.minor"> · {{ p.minor }}</template> · {{ p.billing }}
@@ -81,7 +107,10 @@
               <div class="rems-value text-weight-medium">{{ e.name || "Unnamed entity" }}</div>
               <div v-for="r in e.rows" :key="r.label" class="field-row field-row--dense">
                 <div class="rems-label">{{ r.label }}</div>
-                <div class="rems-value">{{ r.value }}</div>
+                <div class="rems-value">
+                  <app-email v-if="isEmailRow(r)" :email="String(r.value)" />
+                  <template v-else>{{ r.value }}</template>
+                </div>
               </div>
             </q-card>
           </div>
@@ -98,7 +127,7 @@
               <div class="rems-value"><app-name-with-suffix :name="person.name" :suffix="person.suffix" /></div>
               <!-- The phone only where one was given: the billing block never asks for it. -->
               <div class="text-caption text-grey-7">
-                {{ person.email || "no email" }}<template v-if="person.phone"> · {{ person.phone }}</template>
+                <app-email :email="person.email || ''" empty="no email" /><template v-if="person.phone"> · {{ person.phone }}</template>
               </div>
             </div>
           </div>
@@ -109,6 +138,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 // Renders one REMS request's submitted client form.
 import { ref, computed, watch } from "vue";
 import { remsApi, getApiErrorMessage } from "services/api";
@@ -120,6 +150,7 @@ import {
 } from "modules/rems/remsContactRoles";
 import { additionalIndividualHasData, individualSummary } from "modules/rems/useRemsIntakeForm";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
+import { SHOW_MIDDLE_NAME } from "modules/rems/remsFeatureFlags";
 
 const props = defineProps({
   remsId: { type: String, default: null },
@@ -139,6 +170,9 @@ const payload = computed(() => view.value?.payload || {});
 const isIndividual = computed(() => view.value?.entityType === "individual");
 const isBusiness = computed(() => isBusinessEntityType(view.value?.entityType));
 const isGovernment = computed(() => view.value?.entityType === "government");
+
+// A row whose answer is an email address: it gets the copy button.
+const isEmailRow = (r) => /email/i.test(r.label);
 
 const val = (v) => (v == null || String(v).trim() === "" ? "—" : v);
 
@@ -161,6 +195,21 @@ const clientName = computed(() => {
 // Calendar dates read MM/DD/YYYY and are never timezone-shifted — see formatDateOnly.
 const dateOnly = formatDateOnly;
 
+// When the answers came in and whose intake they are: this request's own, on file from an earlier request,
+// or not in yet while the form is out with the client.
+const receivedNote = computed(() => {
+  const v = view.value;
+  if (!v) return "";
+  if (!v.submitted) {
+    return v.lastSavedOnUtc
+      ? `Not submitted yet · last saved ${fmt.formatDateTime(v.lastSavedOnUtc)}`
+      : "Not submitted yet";
+  }
+  const via = v.onFileFrom?.remsNumber ? ` via ${v.onFileFrom.remsNumber}` : "";
+  const by = v.completedBy ? ` by ${v.completedBy}` : "";
+  return `Submitted ${v.submittedOnUtc ? fmt.formatDateTime(v.submittedOnUtc) : ""}${via}${by}`;
+});
+
 const groups = computed(() => {
   const p = payload.value;
   const result = [];
@@ -169,6 +218,7 @@ const groups = computed(() => {
   const contact = isIndividual.value
     ? [
       { label: "First Name", value: val(p.clientFirstName ?? p.clientName) },
+      ...(SHOW_MIDDLE_NAME ? [{ label: "Middle Name", value: val(p.clientMiddleName) }] : []),
       { label: "Last Name", value: val(p.clientLastName) },
       { label: "Suffix", value: val(p.clientSuffix) }
     ]
@@ -206,22 +256,16 @@ const groups = computed(() => {
   const billing = billingAddressList(p);
   // Numbered only where they gave more than one — a "1" over a lone block answers a question nobody
   // asked — and in the order they gave them.
-  const billingLabel = (i) => (billing.length > 1 ? `Billing Information ${i + 1}` : "Billing Information");
-  const billingPeople = billing
-    .map((b, i) => ({ role: billingLabel(i), ...addresseeParts(b), email: b?.email, phone: b?.phone }))
-    .filter((person) => person.name || person.email || person.phone);
-  result.push({
-    title: "Billing Information",
-    icon: "o_receipt_long",
-    kind: "fields",
-    // A dash rather than nothing on a submission that carries none: billing is required now, so an empty
-    // one is an older form, and saying so beats an absent heading.
-    rows: billing.length
-      ? billing.map((b, i) => ({ label: billingLabel(i), value: addressText(b) }))
-      : [{ label: "Billing Information", value: "—" }],
-    people: billingPeople,
-    peopleTitle: "Invoices addressed to"
-  });
+  const billingBlocks = (billing.length ? billing : [null]).map((b, i) => ({
+    title: billing.length > 1 ? `Billing Information ${i + 1}` : "",
+    ...addresseeParts(b),
+    fields: [
+      { label: "Email Address", value: val(b?.email) },
+      { label: "Phone Number", value: val(b?.phone) },
+      { label: "Address", value: b ? addressText(b) : "—", wide: true }
+    ]
+  }));
+  result.push({ title: "Billing Information", icon: "o_receipt_long", kind: "billing", rows: billingBlocks });
 
   // Spouse & more individuals — everyone else on this return, with how each one files and who pays for
   // them. Absent on a submission that named nobody, and on every submission sent before the card existed.
@@ -357,6 +401,12 @@ defineExpose({ reload: load });
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px 24px;
 }
+.submitted-billing {
+  display: grid;
+  gap: 10px;
+}
+/* An address is a sentence, not a value: it takes the row. */
+.field-row--wide { grid-column: 1 / -1; }
 .field-row--dense {
   margin-top: 4px;
 }

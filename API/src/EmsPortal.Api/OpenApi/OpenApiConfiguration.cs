@@ -25,7 +25,7 @@ internal sealed class SecuritySchemeDocumentTransformer : IOpenApiDocumentTransf
     {
         document.Info = new OpenApiInfo
         {
-            Title = "EMS Portal API",
+            Title = "COP Portal API",
             Version = "v1",
             Description = "Administration platform API: tenants, users, and auth.",
         };

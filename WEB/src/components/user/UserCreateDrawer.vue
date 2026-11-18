@@ -22,6 +22,10 @@
           :error="!!emailError" :error-message="emailError"
           :rules="[(v) => !!v || 'Username is required', (v) => /.+@.+\..+/.test(v) || 'Enter a valid email']"
         />
+        <app-text-field
+          v-model="form.maconomyNumber" label="Maconomy Number" maxlength="64" class="q-mb-md"
+          hint="Their employee number in Maconomy. Optional."
+        />
         <!-- Not asked when the caller is already looking at one tenant: the account goes into the tenant
              whose page this drawer was opened from, and a second answer to that could only disagree. -->
         <app-select
@@ -112,6 +116,7 @@ const formRef = ref(null);
 const form = reactive({
   personId: null,
   email: "",
+  maconomyNumber: "",
   roleIds: [],
   tenantId: null,
   sendInvitation: false,
@@ -279,6 +284,7 @@ const onTenantChange = (tenantId) => {
 const resetForm = () => {
   form.personId = null;
   form.email = "";
+  form.maconomyNumber = "";
   form.roleIds = [];
   form.tenantId = null;
   form.sendInvitation = false;
@@ -342,6 +348,7 @@ const submitForm = async ({ clearDraft } = {}) => {
     const payload = {
       personId: form.personId,
       email: form.email,
+      maconomyNumber: (form.maconomyNumber || "").trim() || null,
       roleIds: form.roleIds,
       tenantId,
       sendInvitation: form.sendInvitation

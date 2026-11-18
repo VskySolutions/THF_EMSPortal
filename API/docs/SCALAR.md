@@ -1,6 +1,6 @@
 # Scalar API Reference
 
-EMS Portal documents its HTTP API with the native ASP.NET Core OpenAPI generator and serves an interactive reference UI with **Scalar**.
+COP Portal documents its HTTP API with the native ASP.NET Core OpenAPI generator and serves an interactive reference UI with **Scalar**.
 
 See also: [README](../README.md) · [RUN](RUN.md)
 

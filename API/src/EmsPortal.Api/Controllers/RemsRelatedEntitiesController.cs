@@ -42,7 +42,6 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
 
     private readonly IRemsRequestRepository _rems;
     private readonly IClientRepository _clients;
-    private readonly IRemsApprovalTaskRepository _approvals;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IActivityEventWriter _activity;
@@ -51,7 +50,6 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
     public RemsRelatedEntitiesController(
         IRemsRequestRepository rems,
         IClientRepository clients,
-        IRemsApprovalTaskRepository approvals,
         IUserRepository users,
         IUnitOfWork unitOfWork,
         IActivityEventWriter activity,
@@ -59,7 +57,6 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
     {
         _rems = rems;
         _clients = clients;
-        _approvals = approvals;
         _users = users;
         _unitOfWork = unitOfWork;
         _activity = activity;
@@ -134,17 +131,9 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
             mayUpdate && !RemsRequestStatuses.IsFrozen(i.RequestStatus)
             && (isRemsAdmin || (me is { } uid && (i.CreatedById == uid || i.OnBehalfOfUserId == uid)));
 
-        // The board is the whole firm's; the request page opens only to a REMS Admin, the people named on
-        // the request and its approvers (RemsRequestsController.GetById). So never offer a View it refuses.
-        var approverOn = me is { } approver
-            ? await _approvals.RequestsWithApproverAsync(remsIds, approver, cancellationToken)
-            : new HashSet<Guid>();
-        bool CanView(RemsRelatedEntityItem i) =>
-            isRemsAdmin
-            || (me is { } uid
-                && (i.CreatedById == uid || i.OnBehalfOfUserId == uid
-                    || i.AdminAssignedToId == uid || i.CSEId == uid
-                    || approverOn.Contains(i.RemsId)));
+        // The board is the whole firm's, and so is the request's read-only page: every row here has left its
+        // draft, so every row opens (RemsRequestsController.GetById). Kept on the row for the contract's sake.
+        static bool CanView(RemsRelatedEntityItem _) => true;
 
         var rows = items.Select(i =>
         {
@@ -158,7 +147,8 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
                 i.ClientEmail, i.EntityType, i.RequestStatus,
                 RemsWorkspaceMapper.UserRef(i.AdminAssignedToId, names), i.SubmittedOnUtc,
                 parent, children, i.RelatedCount, CanView(i), CanEdit(i),
-                NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc);
+                NameOf(i.CreatedById), i.CreatedOnUtc, NameOf(i.UpdatedById), i.UpdatedOnUtc,
+                IntakeReused: i.IntakeReused);
         });
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS related entities retrieved.", page, limit, total));

@@ -3,16 +3,6 @@
 
 export const NAME_MAX_LENGTH = 100;
 
-/** The generational suffixes offered beside a name — Jr., Sr., II, III, IV. Suggestions, not a closed
-    list: these are what most people need, not all a person may have. */
-export const NAME_SUFFIXES = [
-  { value: "Jr.", label: "Jr.", caption: "Junior" },
-  { value: "Sr.", label: "Sr.", caption: "Senior" },
-  { value: "II", label: "II", caption: "The second" },
-  { value: "III", label: "III", caption: "The third" },
-  { value: "IV", label: "IV", caption: "The fourth" }
-];
-
 /** Mirrors the nvarchar(16) the suffix columns are stored in. */
 export const NAME_SUFFIX_MAX_LENGTH = 16;
 

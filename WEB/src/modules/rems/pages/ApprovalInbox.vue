@@ -1,10 +1,10 @@
 <template>
   <q-page padding>
     <app-list-header
-      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'REMS Approvals' }]"
+      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: `${siteName} Approvals` }]"
       :search="search"
       show-search
-      search-placeholder="Search REMS number or client"
+      :search-placeholder="`Search ${siteName} number or client`"
       show-filters
       :filter-count="filterChips.length"
       show-back
@@ -14,7 +14,7 @@
     >
       <template #note>
         <template v-if="seesTenant">
-          Every request of <strong>{{ tenantName }}</strong> that has been sent for approval — one row each,
+          Every request of <strong>{{ siteName }}</strong> that has been sent for approval — one row each,
           on the round it is on now, and nothing from any other tenant.
           <strong>Approval Status</strong> is where the whole request stands, and reads Approved only once
           every approver has signed; <strong>Approvers</strong> shows where each of them stands.
@@ -149,12 +149,26 @@
         </q-td>
       </template>
 
+      <!-- Whether the approved engagement has become a Maconomy job: the job number once it has, the state
+           on the way otherwise. Blank until the request is approved. -->
+      <template #body-cell-maconomyJobSync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- A LINK, not a click handler: the task is a place, so the button is written as a route and
-               renders as a real <a href> — which is what makes middle-click and "open in new tab" work. -->
-          <q-btn flat round dense color="primary" icon="o_visibility" :to="taskRoute(cell.row)">
-            <q-tooltip>{{ seesTenant ? "Open" : "Open for review" }}</q-tooltip>
+          <!-- LINKS, not click handlers: each is a place, so the button is written as a route and renders
+               as a real <a href> — which is what makes middle-click and "open in new tab" work. View reads
+               the whole request on one page, as on every other list; Review is the task itself, where the
+               checklist and the decision are. -->
+          <q-btn flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)">
+            <q-tooltip>View</q-tooltip>
+          </q-btn>
+          <q-btn flat round dense color="primary" icon="o_fact_check" :to="taskRoute(cell.row)">
+            <q-tooltip>{{ seesTenant ? "Open the task" : "Review and decide" }}</q-tooltip>
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
             <q-tooltip>Conversation</q-tooltip>
@@ -166,6 +180,19 @@
             :loading="syncingRems === cell.row.remsId" :disable="!!syncingRems" @click.stop="syncNow(cell.row)"
           >
             <q-tooltip>Sync now — post this client to Maconomy</q-tooltip>
+          </q-btn>
+          <!-- Sync job now: post the approved engagement to Maconomy as a job. Offered only while the job
+               sync is on and the request is approved without a job; blocked, with the reason, until the
+               client is in Maconomy and a template job resolves. -->
+          <q-btn
+            v-if="cell.row.maconomyJobSync?.canSyncNow || cell.row.maconomyJobSync?.blockedReason" type="a"
+            flat round dense color="primary" icon="o_work"
+            :loading="syncingJobRems === cell.row.remsId" :disable="!cell.row.maconomyJobSync?.canSyncNow || !!syncingJobRems"
+            @click.stop="syncJobNow(cell.row)"
+          >
+            <q-tooltip max-width="320px">
+              {{ cell.row.maconomyJobSync?.canSyncNow ? "Sync job now — create this engagement's job in Maconomy" : cell.row.maconomyJobSync?.blockedReason }}
+            </q-tooltip>
           </q-btn>
         </q-td>
       </template>
@@ -200,7 +227,7 @@ import { useDateFormat } from "composables/useDateFormat";
 import { useAuditColumns } from "composables/useAuditColumns";
 import { useRemsMeta, REMS_ROUND_PARTIALLY_APPROVED } from "modules/rems/useRemsMeta";
 import { useAuthStore } from "stores/auth";
-import { useTenantStore } from "stores/tenant";
+import { useSiteName } from "composables/useSiteName";
 import { useTenantScope } from "composables/useTenantScope";
 
 import AppListHeader from "components/common/AppListHeader.vue";
@@ -213,7 +240,8 @@ import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
 import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
-import { maconomySyncLabel } from "modules/rems/maconomySync";
+import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
+import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
 
 const router = useRouter();
 const notify = useNotify();
@@ -229,11 +257,10 @@ const {
 const seesTenant = computed(() => auth.roles.includes("SuperAdmin") || auth.roles.includes("TenantAdmin"));
 // The tenant the rows belong to, named in the title so the scope is never in doubt: a Tenant Admin's own
 // tenant, or the one a Super Admin has picked in the tenant selector (the API follows the same pick).
-const tenantStore = useTenantStore();
-const { canScopeTenant, isScoped, scopedTenantName } = useTenantScope();
-const tenantName = computed(() =>
-  (isScoped.value && scopedTenantName.value) || tenantStore.activeTenant?.name || "your tenant");
-const title = computed(() => (seesTenant.value ? `Approvals · ${tenantName.value}` : "My Approvals"));
+// Named as the site is (the branding's name, else the tenant's); the branding reloads with that pick.
+const { canScopeTenant } = useTenantScope();
+const siteName = useSiteName();
+const title = computed(() => (seesTenant.value ? `Approvals · ${siteName.value}` : "My Approvals"));
 // The two views keep separate column and page-size preferences: a column list saved on the personal inbox
 // would otherwise hide the Approver column the tenant-wide one adds.
 const pageKey = seesTenant.value ? "rems-approvals-tenant" : "rems-approvals";
@@ -288,9 +315,11 @@ const columns = computed(() => [
   { name: "client", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   // On by default: an approver deciding on a round needs to know who to ask about it, and the CSE is that
   // person.
-  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
+  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", userId: (r) => r.cse?.id, align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   // Whether the approved client has reached Maconomy; Sync now sits in the Actions column beside it.
-  { name: "maconomySync", label: "Maconomy", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Customer", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
+  // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
+  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the
   // reader's own decision below is not.
   {
@@ -414,6 +443,8 @@ const approverHint = (a) => {
 };
 
 const taskRoute = (row) => ({ name: "rems_approval_task", params: { taskId: row.taskId } });
+// The request itself, read-only, on one page.
+const viewRoute = (row) => ({ name: "rems_request", params: { id: row.remsId } });
 // Still a push for the ROW click, which has nowhere to hang an href.
 const openTask = (row) => router.push(taskRoute(row));
 
@@ -439,6 +470,9 @@ const syncNow = async (row) => {
     load();
   }
 };
+
+// Sync job now: the engagement posted to Maconomy as a job, with a confirmation naming what is sent.
+const { syncingJobRems, syncJobNow } = useMaconomyJobSync({ afterwards: () => load() });
 
 // ---- Conversation ----
 // The REQUEST's thread, the same one the task detail shows under the checklist — so an approver can raise

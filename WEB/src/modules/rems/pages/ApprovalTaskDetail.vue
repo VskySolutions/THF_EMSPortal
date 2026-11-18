@@ -1,7 +1,7 @@
 <template>
   <q-page padding>
     <app-detail-header :items="breadcrumbs" :back-to="{ name: 'rems_approvals' }">
-      <template #actions>
+      <template #status>
         <!-- The ENGAGEMENT's status, which is the request's answer rather than the reader's: it turns
              Approved only when the round does. -->
         <app-option-badge v-if="task" :option="engagementStatus" />
@@ -132,7 +132,7 @@
                   <div v-for="c in entityContacts" :key="c.id" class="rems-value">
                     <span class="text-weight-medium">{{ roleText(c.role) }}:</span>
                     <app-name-with-suffix :name="nameWithoutSuffix(c)" :suffix="c.suffix" />
-                    <span class="text-grey-6">({{ c.email || "no email" }} · {{ c.phone || "no phone" }})</span>
+                    <span class="text-grey-6">(<app-email :email="c.email || ''" empty="no email" /> · {{ c.phone || "no phone" }})</span>
                   </div>
                 </div>
                 <div v-else class="rems-value text-grey-6">No contacts.</div>
@@ -197,7 +197,7 @@
                 <!-- The same preview row the request form shows, minus the ✕: an approver reads the
                      packet, they do not edit it. -->
                 <div v-if="request.files && request.files.length" class="column q-gutter-xs">
-                  <app-stored-file-item v-for="f in request.files" :key="f.id" :file="f" />
+                  <app-stored-file-item v-for="f in request.files" :key="f.id" :file="f" :tag="maconomyDocumentTag(f.maconomy)" />
                 </div>
                 <div v-else class="rems-value text-grey-6">No attachments.</div>
               </q-tab-panel>
@@ -268,11 +268,10 @@
                   </q-card-section>
                 </q-card>
 
-                <!-- GCS: the purchase order the engagement is set up against, and the rate it bills at
-                     each level it is staffed at. -->
+                <!-- GCS: the purchase order the engagement is set up against. -->
                 <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
                   <q-card-section class="q-py-sm text-subtitle2 text-primary">
-                    <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
+                    <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />{{ SHOW_BILL_RATES ? "GCS — Purchase Order & Rate" : "GCS — Purchase Order" }}
                   </q-card-section>
                   <q-separator />
                   <q-card-section>
@@ -283,7 +282,7 @@
                       </div>
                     </div>
                     <!-- The rate card: what an hour bills for at each level the engagement is staffed at. -->
-                    <div class="q-mt-md">
+                    <div v-if="SHOW_BILL_RATES" class="q-mt-md">
                       <div class="rems-subhead">Bill Rate by Personnel Level</div>
                       <q-markup-table v-if="gcsRates.length" flat bordered dense separator="horizontal">
                         <thead>
@@ -309,10 +308,10 @@
                   </q-card-section>
                 </q-card>
 
-                <!-- Tax: fiscal year end, the due-date schedule, and the form checklist. -->
+                <!-- Tax: fiscal year end and the due-date schedule. -->
                 <q-card v-if="showTax" flat bordered class="rems-inner q-mt-md">
                   <q-card-section class="q-py-sm text-subtitle2 text-primary">
-                    <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year &amp; Forms
+                    <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year
                   </q-card-section>
                   <q-separator />
                   <q-card-section>
@@ -331,14 +330,6 @@
                         <div class="rems-value">{{ dateOnly(engagement.tax?.dueDates?.extendedDueDate) }}</div>
                       </div>
                     </div>
-                    <div class="rems-subhead q-mt-md">Tax Forms</div>
-                    <div v-if="taxForms.length" class="row q-gutter-xs">
-                      <q-chip
-                        v-for="f in taxForms" :key="f.id" dense square outline color="primary"
-                        :label="f.label"
-                      />
-                    </div>
-                    <div v-else class="rems-value text-grey-6">No tax forms selected.</div>
                   </q-card-section>
                 </q-card>
 
@@ -571,6 +562,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 // The REMS approval-task review screen (WO-117 Part B, AC-REMS-019/020).
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
@@ -590,6 +582,8 @@ import AppDetailHeader from "components/common/AppDetailHeader.vue";
 import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppRecordAudit from "components/common/AppRecordAudit.vue";
 import AppStoredFileItem from "components/common/AppStoredFileItem.vue";
+import { maconomyDocumentTag } from "modules/rems/maconomySync";
+import { SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 import AppTextField from "components/common/AppTextField.vue";
 // Explicit import: boot/components.js registers only the Zw* inputs globally, so without this the tag
 // resolves to nothing and the Conversation card renders empty — no error, just a blank panel.
@@ -605,7 +599,7 @@ const fmt = useDateFormat();
 const {
   typeLabel, typeHint, requestStatusOption, referralSourceLabel,
   entityTypeLabel, formStatusOption, submissionStateOption,
-  departmentLabel, serviceLineLabel, jobTemplateLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
+  departmentLabel, serviceLineLabel, jobTypeLabel, industryLabel, personnelLevelLabel, billingPeriodLabel,
   approverRoleLabel, approverRoleOption, approvalStatusOption,
   engagementStatusOption, roundStatusOption
 } = useRemsMeta();
@@ -712,7 +706,7 @@ const requestRows = computed(() => {
     // Read off the option, so the wording and the explanation are the tenant's own — the same two rows
     // the request lists render as badges.
     {
-      label: "EMS Form State",
+      label: "COP Form State",
       value: formStatusOption(r.emsFormState).label,
       hint: formStatusOption(r.emsFormState).description
     },
@@ -752,7 +746,9 @@ const setupRows = computed(() => {
     { label: "Department", value: departmentLabel(e.department) },
     { label: "Department Director", value: text(e.departmentDirector?.name) },
     { label: "Service Line", value: serviceLineLabel(e.serviceLine) },
-    { label: "Job Template", value: jobTemplateLabel(e.jobTemplate) },
+    { label: "Job Type", value: jobTypeLabel(e.jobType) },
+    // Optional, so only where one was written.
+    ...(e.jobDescription ? [{ label: "Job Description", value: e.jobDescription }] : []),
     { label: "Engagement Executive", value: text(e.engagementExecutive?.name) },
     { label: "Billing Manager", value: text(e.billingManager?.name) }
   ];
@@ -780,8 +776,6 @@ const showTax = computed(() => isTaxDepartment(department.value));
 const showBilling = computed(() => isCasDepartment(department.value));
 // The entity type is the REQUEST's, not the engagement's — same source the setup form reads it from.
 const showGovernment = computed(() => isGovernmentAudit(department.value, request.value.entityType));
-
-const taxForms = computed(() => engagement.value.tax?.taxForms || []);
 
 const attestCardTitle = computed(() =>
   (showAssurance.value ? "Assurance — Client Acceptance Form & Year End" : "Audit — Client Acceptance Form"));

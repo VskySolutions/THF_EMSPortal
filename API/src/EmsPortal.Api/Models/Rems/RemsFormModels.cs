@@ -1,6 +1,6 @@
 namespace EmsPortal.Api.Models.Rems;
 
-/// <summary>Build/save the EMS onboarding form for a REMS request (WO-112, AC-REMS-007).</summary>
+/// <summary>Build/save the COP onboarding form for a REMS request (WO-112, AC-REMS-007).</summary>
 public sealed class SaveRemsFormRequest
 {
     /// <summary>The Client Service Executive to assign to the request (User id) — required.</summary>
@@ -13,7 +13,7 @@ public sealed class SaveRemsFormRequest
     public string EntityType { get; set; } = string.Empty;
 }
 
-/// <summary>The current EMS form state on a request (WO-112).</summary>
+/// <summary>The current COP form state on a request (WO-112).</summary>
 public sealed record RemsFormInfo(
     Guid Id,
     string EntityType,
@@ -26,7 +26,7 @@ public sealed record RemsFormInfo(
     bool IsLocked);
 
 /// <summary>
-/// The EMS form build-screen model (WO-112, AC-REMS-007.1): the REMS request context plus the current
+/// The COP form build-screen model (WO-112, AC-REMS-007.1): the REMS request context plus the current
 /// form (if any).
 /// </summary>
 public sealed record RemsFormBuildScreen(
@@ -89,7 +89,7 @@ public sealed record RemsEmailLog(
     string? ClientFormLink);
 
 /// <summary>
-/// One EMS-Inbox row (WO-112, AC-REMS-009): a request with a form, its request context, form state,
+/// One COP-Inbox row (WO-112, AC-REMS-009): a request with a form, its request context, form state,
 /// creator, and the latest send/delivery/open info.
 /// </summary>
 // Trailing four: the owning request's audit trail, offered as hidden-by-default columns.

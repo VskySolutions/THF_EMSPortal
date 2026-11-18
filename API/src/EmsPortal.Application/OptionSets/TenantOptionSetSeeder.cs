@@ -5,9 +5,9 @@ namespace EmsPortal.Application.OptionSets;
 
 /// <summary>
 /// Gives a tenant its own copy of the platform's default option lists (<see cref="DefaultOptionSets"/>) at
-/// tenant creation. The copies are tenant-owned and NOT system lists, which is what makes their items
-/// add/rename/delete/re-orderable by a Super Admin or Tenant Admin — the platform-level originals stay
-/// read-only because one row is shared by every tenant.
+/// tenant creation. The copies are tenant-owned, so a Super Admin or Tenant Admin edits their values without
+/// touching another tenant's, and they stay system lists: the application reads them by key, so a copy
+/// cannot be deleted.
 /// <para>
 /// Idempotent per LIST, not per item: a tenant that already holds a list is left exactly as they edited it.
 /// So adding a whole new list to <see cref="DefaultOptionSets"/> reaches tenants created afterwards, while
@@ -24,11 +24,11 @@ public static class TenantOptionSetSeeder
     public static async Task<bool> EnsureDefaultsAsync(
         IOptionSetRepository sets, Guid tenantId, CancellationToken cancellationToken = default)
     {
-        var added = false;
+        var created = new List<OptionSet>();
 
         foreach (var def in DefaultOptionSets.All)
         {
-            if (await sets.KeyExistsAsync(tenantId, def.EntityType, def.Key, excludeId: null, cancellationToken))
+            if (await sets.KeyExistsAsync(tenantId, def.Key, excludeId: null, cancellationToken))
             {
                 continue;
             }
@@ -37,11 +37,11 @@ public static class TenantOptionSetSeeder
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                EntityType = def.EntityType,
                 Key = def.Key,
                 Name = def.Name,
                 ItemSortMode = def.ItemSortMode,
-                IsSystem = false,
+                // Still a system list: the application reads the copy by the same key.
+                IsSystem = true,
                 // A list the application branches on keeps its closed-ness through the copy: the tenant
                 // owns the row and every label on it, but the CODES are the workflow's.
                 IsClosed = def.IsClosed,
@@ -56,6 +56,7 @@ public static class TenantOptionSetSeeder
                     SortOrder = i.SortOrder,
                     IsActive = i.IsActive,
                     MetadataJson = i.MetadataJson,
+                    MaconomyNumber = i.MaconomyNumber,
                     BackgroundColor = i.BackgroundColor,
                     TextColor = i.TextColor,
                     Icon = i.Icon,
@@ -66,10 +67,16 @@ public static class TenantOptionSetSeeder
                 }).ToList(),
             };
 
-            await sets.AddSetAsync(set, cancellationToken);
-            added = true;
+            created.Add(set);
         }
 
-        return added;
+        // Linked before the sets are added, so the links are inserted along with them.
+        await DefaultOptionSets.LinkDependenciesAsync(sets, tenantId, created, cancellationToken);
+        foreach (var set in created)
+        {
+            await sets.AddSetAsync(set, cancellationToken);
+        }
+
+        return created.Count > 0;
     }
 }

@@ -25,4 +25,11 @@ public class Tenant : AuditableEntity
 
     /// <summary>UTC timestamp when the tenant was created.</summary>
     public DateTime CreatedDate { get; set; }
+
+    /// <summary>
+    /// Who the portal emails when an integration it runs for the tenant breaks — the people who look after
+    /// it, not its users. Semicolon-separated (<c>TenantDeveloperEmails</c> reads and writes it); null when
+    /// nobody is named, in which case the portal only logs.
+    /// </summary>
+    public string? DeveloperEmails { get; set; }
 }

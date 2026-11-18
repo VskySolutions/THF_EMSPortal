@@ -26,12 +26,16 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(c => c.MaconomyCustomerNumber).HasMaxLength(64);
         builder.Property(c => c.MaconomySyncStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(c => c.MaconomySyncError).HasMaxLength(1000);
+        builder.Property(c => c.IsMaconomyContactSyncPending).IsRequired();
+        builder.Property(c => c.MaconomyContactCompanyNumber).HasMaxLength(64);
         builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(c => c.TenantId);
         builder.HasOne(c => c.Person).WithMany().HasForeignKey(c => c.PersonId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(c => c.EntityType).WithMany().HasForeignKey(c => c.EntityTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(c => c.Industry).WithMany().HasForeignKey(c => c.IndustryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(c => c.ReferralSource).WithMany().HasForeignKey(c => c.ReferralSourceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<RemsRequest>().WithMany().HasForeignKey(c => c.IntakeSubmittedRemsId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<User>().WithMany().HasForeignKey(c => c.IntakeSubmittedByUserId).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(c => c.Person).AutoInclude();
         builder.Navigation(c => c.EntityType).AutoInclude();
         builder.HasIndex(c => new { c.TenantId, c.ClientNumber }).IsUnique().HasFilter("[Deleted] = 0");

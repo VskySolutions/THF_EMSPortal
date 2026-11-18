@@ -30,7 +30,7 @@ public sealed record RemsRelatedEntityRow(
     IReadOnlyList<RemsRelatedClientView> RelatedClients,
     /// <summary>How many rows <see cref="RelatedClients"/> holds — a sortable handle on a nested table.</summary>
     int RelatedCount,
-    /// <summary>Whether THIS caller may open the request at all: the rule the request page itself applies.</summary>
+    /// <summary>Whether THIS caller may open the request: always, now that the read-only page is the firm's (kept for the contract).</summary>
     bool CanView,
     /// <summary>Whether THIS caller may open the request as a form.</summary>
     bool CanEdit,
@@ -38,7 +38,9 @@ public sealed record RemsRelatedEntityRow(
     string? CreatedBy,
     DateTime CreatedOnUtc,
     string? UpdatedBy,
-    DateTime UpdatedOnUtc);
+    DateTime UpdatedOnUtc,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
+    bool IntakeReused = false);
 
 /// <summary>The head of the nested table: the client the request is FOR, plus anyone filed as the same client.</summary>
 public sealed record RemsRelatedParentView(

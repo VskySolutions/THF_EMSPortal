@@ -338,10 +338,9 @@ public sealed class BrandingController : ControllerBase
     /// <summary>A tenant that is missing or not active is shown the stock look, the same as one never customised.</summary>
     private async Task<PublicBrandingResponse> ToPublicAsync(Tenant? tenant, CancellationToken cancellationToken)
     {
-        var branding = tenant is { Status: TenantStatus.Active }
-            ? await _branding.GetByTenantAsync(tenant.Id, cancellationToken)
-            : null;
-        return new PublicBrandingResponse(BrandingThemeRules.Deserialize(branding?.ThemeJson), AssetsOf(branding));
+        var active = tenant is { Status: TenantStatus.Active } ? tenant : null;
+        var branding = active is null ? null : await _branding.GetByTenantAsync(active.Id, cancellationToken);
+        return new PublicBrandingResponse(active?.Name, BrandingThemeRules.Deserialize(branding?.ThemeJson), AssetsOf(branding));
     }
 
     /// <summary>The image type the first bytes say this is, or null. Leaves the stream at its start.</summary>

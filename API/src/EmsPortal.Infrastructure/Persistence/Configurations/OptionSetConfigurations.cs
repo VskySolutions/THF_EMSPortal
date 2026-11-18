@@ -12,8 +12,6 @@ internal sealed class OptionSetConfiguration : IEntityTypeConfiguration<OptionSe
 
         builder.HasKey(s => s.Id);
 
-        builder.Property(s => s.EntityType).HasConversion<int>().IsRequired();
-
         builder.Property(s => s.Key)
             .IsRequired()
             .HasMaxLength(100);
@@ -31,8 +29,8 @@ internal sealed class OptionSetConfiguration : IEntityTypeConfiguration<OptionSe
         builder.Property(s => s.IsClosed).IsRequired();
         builder.Property(s => s.IsActive).IsRequired();
 
-        // One list per (scope, entity, key); null tenant = the platform-standard list.
-        builder.HasIndex(s => new { s.TenantId, s.EntityType, s.Key })
+        // One list per (scope, key); null tenant = the platform-standard list.
+        builder.HasIndex(s => new { s.TenantId, s.Key })
             .IsUnique()
             .HasFilter("[Deleted] = 0");
 
@@ -68,6 +66,7 @@ internal sealed class OptionSetItemConfiguration : IEntityTypeConfiguration<Opti
 
         // Long enough for a sentence or two of explanation — it is a tooltip, not documentation.
         builder.Property(i => i.Description).HasMaxLength(512);
+        builder.Property(i => i.MaconomyNumber).HasMaxLength(64);
 
         builder.Property(i => i.SortOrder).IsRequired();
         builder.Property(i => i.IsDefault).IsRequired();
@@ -85,12 +84,27 @@ internal sealed class OptionSetItemConfiguration : IEntityTypeConfiguration<Opti
             .IsUnique()
             .HasFilter("[Deleted] = 0");
 
-        builder.HasIndex(i => i.ParentItemId);
+        builder.HasMany(i => i.Parents)
+            .WithOne()
+            .HasForeignKey(p => p.OptionSetItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
 
-        // Self-reference to a parent-set item for dependency (cascading) lists.
+internal sealed class OptionSetItemParentConfiguration : IEntityTypeConfiguration<OptionSetItemParent>
+{
+    public void Configure(EntityTypeBuilder<OptionSetItemParent> builder)
+    {
+        builder.ToTable("OptionSetItemParents");
+
+        builder.HasKey(p => new { p.OptionSetItemId, p.ParentOptionSetItemId });
+
+        builder.HasIndex(p => p.ParentOptionSetItemId);
+
+        // Restrict: SQL Server allows one cascade path into the table, and the child side has it.
         builder.HasOne<OptionSetItem>()
             .WithMany()
-            .HasForeignKey(i => i.ParentItemId)
+            .HasForeignKey(p => p.ParentOptionSetItemId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

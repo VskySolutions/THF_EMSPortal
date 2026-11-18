@@ -55,16 +55,20 @@ public sealed class OptionSetService : IOptionSetService
         var tenantId = TenantId;
         var key = input.Key.Trim();
 
-        if (await _sets.KeyExistsAsync(tenantId, input.EntityType, key, excludeId: null, cancellationToken))
+        if (await _sets.KeyExistsAsync(tenantId, key, excludeId: null, cancellationToken))
         {
-            throw new OptionSetException(OptionSetErrorCodes.DuplicateKey, $"A list with the key '{key}' already exists for this entity.");
+            throw new OptionSetException(OptionSetErrorCodes.DuplicateKey, $"A list with the key '{key}' already exists.");
+        }
+
+        if (input.ParentSetId is { } parentId)
+        {
+            await EnsureParentSetAllowedAsync(null, tenantId, parentId, cancellationToken);
         }
 
         var set = new OptionSet
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            EntityType = input.EntityType,
             Key = key,
             Name = input.Name.Trim(),
             ParentSetId = input.ParentSetId,
@@ -90,6 +94,18 @@ public sealed class OptionSetService : IOptionSetService
         set.ItemSortMode = input.ItemSortMode;
         set.IsActive = input.IsActive;
 
+        if (input.ParentSetId != set.ParentSetId)
+        {
+            if (input.ParentSetId is { } parentId)
+            {
+                await EnsureParentSetAllowedAsync(set.Id, set.TenantId, parentId, cancellationToken);
+            }
+
+            // The links named values of the old parent list, so they go with it.
+            _sets.RemoveItemParents(set.Items.SelectMany(i => i.Parents).ToList());
+            set.ParentSetId = input.ParentSetId;
+        }
+
         _sets.UpdateSet(set);
         await SaveChangesAsync(cancellationToken);
         return set;
@@ -104,6 +120,15 @@ public sealed class OptionSetService : IOptionSetService
         }
 
         EnsureDeletable(set);
+
+        if (await _sets.HasChildSetsAsync(set.Id, cancellationToken))
+        {
+            throw new OptionSetException(
+                OptionSetErrorCodes.InvalidParent,
+                $"Another list depends on '{set.Name}'. Clear its \"Depends on\" first.");
+        }
+
+        await RemoveLinksAsync(set.Items, cancellationToken);
 
         _sets.RemoveSet(set);
         await SaveChangesAsync(cancellationToken);
@@ -130,6 +155,8 @@ public sealed class OptionSetService : IOptionSetService
                 + "The values it has can be renamed, described, coloured and re-ordered.");
         }
 
+        var parentIds = await ValidParentItemIdsAsync(set, input.ParentItemIds, cancellationToken);
+
         var value = input.Value.Trim();
         if (await _sets.ItemValueExistsAsync(set.Id, tenantId, value, excludeId: null, cancellationToken))
         {
@@ -146,7 +173,6 @@ public sealed class OptionSetService : IOptionSetService
             // Match the parent list: a value added to a standard (platform) list belongs to it exactly as
             // the seeded values do, rather than being stamped with whichever tenant happened to add it.
             TenantId = set.TenantId ?? tenantId,
-            ParentItemId = input.ParentItemId,
             Value = value,
             Label = input.Label.Trim(),
             Description = NullIfBlank(input.Description),
@@ -157,9 +183,14 @@ public sealed class OptionSetService : IOptionSetService
             TextColor = NullIfBlank(input.TextColor),
             Icon = NullIfBlank(input.Icon),
             MetadataJson = NullIfBlank(input.MetadataJson),
+            MaconomyNumber = NullIfBlank(input.MaconomyNumber),
         };
 
         await _sets.AddItemAsync(item, cancellationToken);
+        foreach (var parentId in parentIds)
+        {
+            _sets.AddItemParent(new OptionSetItemParent { OptionSetItemId = item.Id, ParentOptionSetItemId = parentId });
+        }
         await SaveChangesAsync(cancellationToken);
         return item;
     }
@@ -178,6 +209,8 @@ public sealed class OptionSetService : IOptionSetService
         {
             return null;
         }
+
+        var parentIds = await ValidParentItemIdsAsync(set, input.ParentItemIds, cancellationToken);
 
         var value = input.Value.Trim();
         if (await _sets.ItemValueExistsAsync(setId, item.TenantId, value, excludeId: itemId, cancellationToken))
@@ -210,15 +243,23 @@ public sealed class OptionSetService : IOptionSetService
         item.Value = value;
         item.Label = input.Label.Trim();
         item.Description = NullIfBlank(input.Description);
-        item.ParentItemId = input.ParentItemId;
         item.IsDefault = input.IsDefault;
         item.IsActive = input.IsActive;
         item.BackgroundColor = NullIfBlank(input.BackgroundColor);
         item.TextColor = NullIfBlank(input.TextColor);
         item.Icon = NullIfBlank(input.Icon);
         item.MetadataJson = NullIfBlank(input.MetadataJson);
+        item.MaconomyNumber = NullIfBlank(input.MaconomyNumber);
 
         _sets.UpdateItem(item);
+
+        // After Update(): links tracked first are left as they are, not re-marked as modified.
+        _sets.RemoveItemParents(item.Parents.Where(p => !parentIds.Contains(p.ParentOptionSetItemId)).ToList());
+        foreach (var parentId in parentIds.Except(item.Parents.Select(p => p.ParentOptionSetItemId)).ToList())
+        {
+            _sets.AddItemParent(new OptionSetItemParent { OptionSetItemId = item.Id, ParentOptionSetItemId = parentId });
+        }
+
         await SaveChangesAsync(cancellationToken);
         return item;
     }
@@ -248,6 +289,7 @@ public sealed class OptionSetService : IOptionSetService
                 + "recolour it or re-order it instead.");
         }
 
+        await RemoveLinksAsync(new[] { item }, cancellationToken);
         _sets.RemoveItem(item);
         await SaveChangesAsync(cancellationToken);
         return true;
@@ -295,8 +337,76 @@ public sealed class OptionSetService : IOptionSetService
     {
         if (set.TenantId is null || set.IsSystem)
         {
-            throw new OptionSetException(OptionSetErrorCodes.ReadOnlyStandardSet, "A standard list cannot be deleted. Its values can be edited instead.");
+            throw new OptionSetException(OptionSetErrorCodes.ReadOnlyStandardSet, "A system list cannot be deleted: the application reads it. Its values can be edited instead.");
         }
+    }
+
+    /// <summary>Drops every link the items take part in, as the dependent value or as the parent.</summary>
+    private async Task RemoveLinksAsync(IEnumerable<OptionSetItem> items, CancellationToken cancellationToken)
+    {
+        var list = items.ToList();
+        var asParent = await _sets.ListLinksToParentsAsync(list.Select(i => i.Id).ToList(), cancellationToken);
+        _sets.RemoveItemParents(list.SelectMany(i => i.Parents).Concat(asParent).Distinct().ToList());
+    }
+
+    /// <summary>
+    /// A parent must be another list that the caller can see, and must not lead back
+    /// to this one. A standard list may only depend on a standard list: every tenant reads it.
+    /// </summary>
+    private async Task EnsureParentSetAllowedAsync(
+        Guid? setId, Guid? setTenantId, Guid parentSetId, CancellationToken cancellationToken)
+    {
+        var parent = await _sets.GetSetWithItemsAsync(parentSetId, TenantId, cancellationToken);
+        if (parent is null || parent.Id == setId)
+        {
+            throw new OptionSetException(
+                OptionSetErrorCodes.InvalidParent, "A list can only depend on another list.");
+        }
+
+        if (setTenantId is null && parent.TenantId is not null)
+        {
+            throw new OptionSetException(
+                OptionSetErrorCodes.InvalidParent, "A standard list can only depend on another standard list.");
+        }
+
+        var seen = new HashSet<Guid> { parent.Id };
+        for (var next = parent.ParentSetId; next is { } id; )
+        {
+            if (id == setId)
+            {
+                throw new OptionSetException(
+                    OptionSetErrorCodes.InvalidParent, $"'{parent.Name}' already depends on this list.");
+            }
+
+            if (!seen.Add(id))
+            {
+                break;
+            }
+
+            next = (await _sets.GetSetWithItemsAsync(id, TenantId, cancellationToken))?.ParentSetId;
+        }
+    }
+
+    /// <summary>The parent values asked for, checked against the list this one depends on.</summary>
+    private async Task<IReadOnlyList<Guid>> ValidParentItemIdsAsync(
+        OptionSet set, IReadOnlyList<Guid>? parentItemIds, CancellationToken cancellationToken)
+    {
+        var wanted = (parentItemIds ?? Array.Empty<Guid>()).Distinct().ToList();
+        if (wanted.Count == 0)
+        {
+            return wanted;
+        }
+
+        var parent = set.ParentSetId is { } parentSetId
+            ? await _sets.GetSetWithItemsAsync(parentSetId, TenantId, cancellationToken)
+            : null;
+        if (parent is null || wanted.Any(id => parent.Items.All(i => i.Id != id)))
+        {
+            throw new OptionSetException(
+                OptionSetErrorCodes.InvalidParent, "A value can only be valid under values of the list this one depends on.");
+        }
+
+        return wanted;
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

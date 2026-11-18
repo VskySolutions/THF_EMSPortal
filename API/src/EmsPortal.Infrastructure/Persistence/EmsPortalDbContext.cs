@@ -81,12 +81,16 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<MaconomyConnection> MaconomyConnections => Set<MaconomyConnection>();
     public DbSet<TenantBranding> TenantBrandings => Set<TenantBranding>();
     public DbSet<TenantEmailSettings> TenantEmailSettings => Set<TenantEmailSettings>();
+    public DbSet<EmailLog> EmailLogs => Set<EmailLog>();
+    public DbSet<UserImport> UserImports => Set<UserImport>();
+    public DbSet<UserImportRow> UserImportRows => Set<UserImportRow>();
 
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
 
     // ---- Option Sets (tenant-configurable input value lists) ----
     public DbSet<OptionSet> OptionSets => Set<OptionSet>();
     public DbSet<OptionSetItem> OptionSetItems => Set<OptionSetItem>();
+    public DbSet<OptionSetItemParent> OptionSetItemParents => Set<OptionSetItemParent>();
 
     // ---- Universal Features (Phase 14) ----
     public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
@@ -130,7 +134,6 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<RemsApprovalChecklistItem> RemsApprovalChecklistItems => Set<RemsApprovalChecklistItem>();
     public DbSet<RemsPersonnelRate> RemsPersonnelRates => Set<RemsPersonnelRate>();
     public DbSet<RemsMarketingMethod> RemsMarketingMethods => Set<RemsMarketingMethod>();
-    public DbSet<RemsTaxForm> RemsTaxForms => Set<RemsTaxForm>();
     public DbSet<RemsTaxDueDate> RemsTaxDueDates => Set<RemsTaxDueDate>();
     public DbSet<RemsChecklistTemplate> RemsChecklistTemplates => Set<RemsChecklistTemplate>();
 
@@ -163,6 +166,9 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<MaconomyConnection>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<TenantBranding>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<TenantEmailSettings>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<EmailLog>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<UserImport>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
+        modelBuilder.Entity<UserImportRow>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
         // Universal Features (Phase 14): every UF table is tenant-scoped + soft-deletable, so it
         // carries the combined ambient-tenant + soft-delete filter. FieldModifiedLog is the lone
@@ -210,7 +216,6 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<RemsApprovalChecklistItem>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<RemsPersonnelRate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<RemsMarketingMethod>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
-        modelBuilder.Entity<RemsTaxForm>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<RemsTaxDueDate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
         modelBuilder.Entity<RemsChecklistTemplate>().HasQueryFilter(e => (!_tenantContext.IsResolved || e.TenantId == _tenantContext.TenantId) && !e.Deleted);
 
@@ -442,9 +447,6 @@ public class EmsPortalDbContext : DbContext, IDataProtectionKeyContext
                     break;
                 case RemsMarketingMethod remsMarketingMethod when remsMarketingMethod.TenantId == Guid.Empty:
                     remsMarketingMethod.TenantId = _tenantContext.TenantId;
-                    break;
-                case RemsTaxForm remsTaxForm when remsTaxForm.TenantId == Guid.Empty:
-                    remsTaxForm.TenantId = _tenantContext.TenantId;
                     break;
                 case RemsTaxDueDate remsTaxDueDate when remsTaxDueDate.TenantId == Guid.Empty:
                     remsTaxDueDate.TenantId = _tenantContext.TenantId;

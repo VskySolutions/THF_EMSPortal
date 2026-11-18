@@ -3,8 +3,8 @@ namespace EmsPortal.Domain.Entities;
 /// <summary>
 /// A single selectable value within an <see cref="OptionSet"/> — e.g. "NET 30" in the Payment Terms
 /// list. A null <see cref="TenantId"/> is a standard (seeded) value; a tenant may add its own values
-/// (with its <see cref="TenantId"/>) to a standard list. For a dependency list, <see cref="ParentItemId"/>
-/// links the value to the parent item it is valid under (e.g. State "California" → Country "USA").
+/// (with its <see cref="TenantId"/>) to a standard list. For a dependency list, <see cref="Parents"/>
+/// links the value to the parent items it is valid under (e.g. Industry "Retail" → Entity Type "Commercial").
 /// Inherits the standard audit/soft-delete fields.
 /// </summary>
 public class OptionSetItem : AuditableEntity
@@ -19,9 +19,9 @@ public class OptionSetItem : AuditableEntity
     public Guid? TenantId { get; set; }
 
     /// <summary>
-    /// For a dependency list, the parent-set item this value is valid under; null for a single group.
+    /// For a dependency list, the parent-list values this one is valid under. Empty means every parent.
     /// </summary>
-    public Guid? ParentItemId { get; set; }
+    public ICollection<OptionSetItemParent> Parents { get; set; } = new List<OptionSetItemParent>();
 
     /// <summary>Stable programmatic code, unique per (set, tenant), e.g. <c>net_30</c>.</summary>
     public string Value { get; set; } = string.Empty;
@@ -75,6 +75,14 @@ public class OptionSetItem : AuditableEntity
 
     /// <summary>Optional extra metadata as a JSON object, e.g. <c>{"days":30}</c>.</summary>
     public string? MetadataJson { get; set; }
+
+    /// <summary>
+    /// The number Maconomy files this value under, where the Maconomy sync needs one: the specification 6
+    /// number on a REMS Entity Type, the specification 1 number on a REMS Industry, the template job number
+    /// on a REMS Service Line, the specification 2 value on a REMS Job Type where its label is not what
+    /// Maconomy calls it. Set by hand under Option Sets; null means Maconomy gets no value for it.
+    /// </summary>
+    public string? MaconomyNumber { get; set; }
 
     /// <summary>The owning list (navigation).</summary>
     public OptionSet? OptionSet { get; set; }

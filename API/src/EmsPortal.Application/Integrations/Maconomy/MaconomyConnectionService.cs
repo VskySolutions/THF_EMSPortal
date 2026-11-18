@@ -89,6 +89,7 @@ public sealed class MaconomyConnectionService : IMaconomyConnectionService
                 _session.ForgetToken(connection);
                 connection.LastLoginError = null;
                 connection.LastLoginErrorUtc = null;
+                connection.ConsecutiveFailureCount = 0;
             }
             _connections.Update(connection);
             await _audit.AddAsync(nameof(MaconomyConnection), connection.Id.ToString(), "MaconomyConnectionUpdated",
@@ -144,6 +145,13 @@ public sealed class MaconomyConnectionService : IMaconomyConnectionService
         connection.ContainerId = string.IsNullOrWhiteSpace(input.ContainerId) ? null : input.ContainerId.Trim();
         connection.DefaultLimit = input.DefaultLimit;
         connection.IsEnabled = input.IsEnabled;
+        if (input.IsEnabled)
+        {
+            // Switched on by an admin, whether or not the portal had switched it off: whatever run of
+            // failures there was is over, and the next one starts from nothing.
+            connection.AutoDisabledOnUtc = null;
+            connection.ConsecutiveFailureCount = 0;
+        }
     }
 
     // What the audit trail records of a change: the address and the user, never the secrets.

@@ -1,10 +1,10 @@
 <template>
   <q-page padding>
     <app-list-header
-      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'EMS Review' }]"
+      :breadcrumbs="[{ label: 'Home', icon: 'o_home', to: '/' }, { label: 'COP Review' }]"
       :search="search"
       show-search
-      search-placeholder="Search REMS number or client"
+      :search-placeholder="`Search ${siteName} number or client`"
       show-filters
       :filter-count="filterChips.length"
       show-back
@@ -23,7 +23,7 @@
     <app-data-table
       page-key="rems-ems-review"
       row-key="remsId"
-      title="EMS Review"
+      title="COP Review"
       :rows="rows"
       :columns="columns"
       :loading="loading"
@@ -60,7 +60,9 @@
             flat dense no-caps color="primary" class="text-weight-medium"
             :label="cell.row.remsNumber" :to="viewRoute(cell.row)"
           >
-            <q-tooltip>Open the request</q-tooltip>
+            <q-tooltip>
+              {{ cell.row.copiedFromRemsNumber ? `Open the request — copied from ${cell.row.copiedFromRemsNumber}` : "Open the request" }}
+            </q-tooltip>
           </q-btn>
         </q-td>
       </template>
@@ -100,10 +102,21 @@
         </q-td>
       </template>
 
+      <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved. -->
+      <template #body-cell-maconomyJobSync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <!-- Who holds the request. -->
       <template #body-cell-assignedAdmin="cell">
         <q-td :props="cell">
-          <span v-if="cell.row.assignedAdmin?.name">{{ cell.row.assignedAdmin.name }}</span>
+          <span v-if="cell.row.assignedAdmin?.name">
+            {{ cell.row.assignedAdmin.name }}
+            <app-user-card-tooltip :user-id="cell.row.assignedAdmin.id" anchor="bottom middle" self="top middle" />
+          </span>
           <q-badge v-else color="amber-8">Waiting for pickup</q-badge>
         </q-td>
       </template>
@@ -133,22 +146,47 @@
             <q-tooltip>Hand back — put this in the queue for another admin to pick up</q-tooltip>
           </q-btn>
 
-          <!-- View and Edit are the same page in two modes. -->
+          <!-- Sync job now: post the approved engagement to Maconomy as a job. Offered only while the job
+               sync is on and the request is approved without a job; blocked, with the reason, until the
+               client is in Maconomy and a template job resolves. -->
+          <q-btn
+            v-if="cell.row.maconomyJobSync?.canSyncNow || cell.row.maconomyJobSync?.blockedReason" type="a"
+            flat round dense color="primary" icon="o_work"
+            :loading="syncingJobRems === cell.row.remsId" :disable="!cell.row.maconomyJobSync?.canSyncNow || !!syncingJobRems"
+            @click.stop="syncJobNow(cell.row)"
+          >
+            <q-tooltip max-width="320px">
+              {{ cell.row.maconomyJobSync?.canSyncNow ? "Sync job now — create this engagement's job in Maconomy" : cell.row.maconomyJobSync?.blockedReason }}
+            </q-tooltip>
+          </q-btn>
+
+          <!-- Two pages. View reads the whole request on one page and is everybody's; Manage opens it as
+               the form, with the review moves in its header. -->
           <q-btn
             flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)"
           >
             <q-tooltip>View</q-tooltip>
           </q-btn>
           <q-btn
-            flat round dense color="primary" icon="o_edit" :to="editRoute(cell.row)"
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
             :disable="!!editBlocked(cell.row)"
           >
-            <q-tooltip>{{ editBlocked(cell.row) || "Edit" }}</q-tooltip>
+            <q-tooltip>{{ editBlocked(cell.row) || workAction.label }}</q-tooltip>
+          </q-btn>
+          <!-- Copy: a new draft for the same client with the setup carried over and the tax card blank. On an
+               approved request too — a return added later starts here. -->
+          <q-btn
+            v-if="cell.row.canCopy" type="a"
+            flat round dense color="primary" icon="o_file_copy"
+            :loading="copying === cell.row.remsId" @click.stop="copyRequest(cell.row)"
+          >
+            <q-tooltip>Copy — a new request for the same client with this engagement setup carried over</q-tooltip>
           </q-btn>
           <!-- What the client has been emailed about this request and what came back, plus the reminder for
-               one who still has not answered. -->
+               one who still has not answered. Not on a request that reused the client's intake on file:
+               nothing was sent. -->
           <q-btn
-            v-if="canReadEmailLog" type="a"
+            v-if="canReadEmailLog && !cell.row.intakeReused" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
           >
             <q-tooltip>Email log</q-tooltip>
@@ -181,7 +219,7 @@
           <div>
             {{ assignment === "mine"
               ? "Switch to All to see the requests waiting for an admin to pick them up."
-              : "A request appears here once its initiator has sent the intake form to their client." }}
+              : "A request appears here once its initiator has sent the intake form to their client, or submitted it for review on an intake already on file." }}
           </div>
         </div>
       </template>
@@ -193,10 +231,13 @@
 </template>
 
 <script setup>
+import AppUserCardTooltip from "components/common/AppUserCardTooltip.vue";
 import { ref, computed, watch, toRef, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { debounce } from "quasar";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { useSiteName } from "composables/useSiteName";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useRowPersonalisation, MAX_PINS_PER_TYPE } from "composables/uf/useRowPersonalisation";
@@ -221,18 +262,22 @@ import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
-import { maconomySyncLabel } from "modules/rems/maconomySync";
+import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
+import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
 
 const notify = useNotify();
+const siteName = useSiteName();
+// Only for Copy: the new draft opens for editing at once.
+const router = useRouter();
 const { confirm } = useConfirm();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
 const { has } = usePermissions();
 const {
-  requestStatusOption, submissionStateOption, statusFilterOptions, engagementOwnerDenial
+  requestStatusOption, submissionStateOption, statusFilterOptions, engagementOwnerDenial, workAction
 } = useRemsMeta();
 
-// The "EMS State" column is a boolean on the row.
+// The "COP State" column is a boolean on the row.
 const submittedOption = (submitted) => submissionStateOption(submitted ? "Submitted" : "AwaitingCustomer");
 const submittedFilterOptions = computed(() => [
   { label: submittedOption(true).label, value: "true" },
@@ -278,15 +323,17 @@ const editBlocked = (row) => {
 const columns = computed(() => [
   { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
   { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
-  { name: "submitted", label: "EMS State", field: "submitted", align: "left", sortable: true, default: true, filterOptions: submittedFilterOptions.value },
+  { name: "submitted", label: "COP State", field: "submitted", align: "left", sortable: true, default: true, filterOptions: submittedFilterOptions.value },
   // On by default now. It is where a row says "Waiting for pickup", which is the one thing an admin
   // opening this list is looking for.
   { name: "requestStatus", label: "Request Status", field: "requestStatus", align: "left", sortable: true, default: true, filterOptions: statusFilterOptions.value },
   { name: "submittedOnUtc", label: "Received On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
-  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
+  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", userId: (r) => r.cse?.id, align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
+  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
+  // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
+  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
@@ -408,7 +455,7 @@ const handingBack = ref(null);
 const handBack = async (row) => {
   const ok = await confirm({
     title: "Hand back to the queue",
-    message: `${row.remsNumber} goes back to EMS Review as waiting for pickup, and its engagement setup ` +
+    message: `${row.remsNumber} goes back to COP Review as waiting for pickup, and its engagement setup ` +
       "goes read-only to you. Any admin can take it from there — including you. Continue?",
     confirmLabel: "Hand back"
   });
@@ -431,6 +478,30 @@ const handBack = async (row) => {
 // The review surface IS the form: it opens both the client's answers and the engagement setup.
 const viewRoute = (row) => ({ name: "rems_request", params: { id: row.remsId } });
 const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.remsId } });
+
+// ---- Copy ----
+// A new draft for the same client with the setup carried over. It opens for editing at once, on the setup
+// tab: the tax card on it is blank and is the first thing to fill.
+const copying = ref(null);
+const copyRequest = async (row) => {
+  const ok = await confirm({
+    title: "Copy this request",
+    message: `A new draft for ${row.clientName} with ${row.remsNumber}'s engagement setup carried over — team, ` +
+      "fees, marketing tags, commission and files. Its fiscal year end and due dates start blank. Continue?",
+    confirmLabel: "Copy"
+  });
+  if (!ok) return;
+  copying.value = row.remsId;
+  try {
+    const copy = await remsApi.copy(row.remsId);
+    notify.success(`${copy.remsNumber} created from ${row.remsNumber}.`);
+    router.push({ name: "rems_request_edit", params: { id: copy.id }, query: { tab: "setup" } });
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    copying.value = null;
+  }
+};
 
 // ---- Conversation ----
 // The REQUEST's thread, the same one every other REMS surface opens — so a message left here reaches the
@@ -457,4 +528,7 @@ const openEmailLog = (row) => {
 };
 
 const rowLabel = (row) => [row.remsNumber, row.clientName].filter(Boolean).join(" — ");
+
+// Sync job now: the engagement posted to Maconomy as a job, with a confirmation naming what is sent.
+const { syncingJobRems, syncJobNow } = useMaconomyJobSync({ afterwards: () => load() });
 </script>

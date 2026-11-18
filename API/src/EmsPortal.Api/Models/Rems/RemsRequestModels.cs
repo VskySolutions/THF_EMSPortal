@@ -27,6 +27,9 @@ public sealed class CreateRemsRequestRequest
     /// </summary>
     public string? ClientNameSuffix { get; set; }
 
+    /// <summary>An individual client's middle name. Omitted leaves the record's alone; "" clears it.</summary>
+    public string? ClientMiddleName { get; set; }
+
     /// <summary>Request type (option-set <c>REMS.Type</c> code, e.g. <c>brand_new_client</c>).</summary>
     public string Type { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -51,7 +54,7 @@ public sealed class CreateRemsRequestRequest
 
     /// <summary>
     /// The <c>REMSAdditionalEntity</c> row this request was raised from, when the initiator used the
-    /// Create EMS action on another business the client named.
+    /// Create COP action on another business the client named.
     /// </summary>
     public Guid? FromAdditionalEntityId { get; set; }
 }
@@ -74,6 +77,9 @@ public sealed class UpdateRemsRequestRequest
 
     /// <summary>The client's generational suffix.</summary>
     public string? ClientNameSuffix { get; set; }
+
+    /// <inheritdoc cref="CreateRemsRequestRequest.ClientMiddleName"/>
+    public string? ClientMiddleName { get; set; }
 
     public string? CustomerEmail { get; set; }
     public string? CustomerMobileNumber { get; set; }
@@ -133,13 +139,18 @@ public sealed record RemsSendBackView(
 /// <summary>A user reference (id + display name) for the assigned admin / CSE columns.</summary>
 public sealed record RemsUserRef(Guid Id, string Name);
 
+/// <summary>Another request, by id and number: the one a copy was made from.</summary>
+public sealed record RemsRequestRef(Guid Id, string RemsNumber);
+
 /// <summary>Which row actions the caller may perform on a request (drives the dashboard action menu).</summary>
 public sealed record RemsRowActions(
     bool CanView,
     bool CanEdit,
     /// <summary>The caller may claim this request as its reviewing admin.</summary>
     bool CanPickUp,
-    bool CanDelete);
+    bool CanDelete,
+    /// <summary>The caller may raise a new request from this one's engagement setup.</summary>
+    bool CanCopy = false);
 
 /// <summary>Dashboard list row for a REMS request (WO-111).</summary>
 public sealed record RemsRequestRow(
@@ -172,7 +183,13 @@ public sealed record RemsRequestRow(
     /// <summary>Set when the client is a Maconomy customer.</summary>
     string? MaconomyCustomerNumber = null,
     /// <summary>Where posting the client to Maconomy has got to; null on a request whose client is not posted.</summary>
-    RemsMaconomySyncView? MaconomySync = null);
+    RemsMaconomySyncView? MaconomySync = null,
+    /// <summary>Where posting the engagement to Maconomy as a job has got to.</summary>
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
+    /// <summary>The request this one was copied from, when it was made with Copy.</summary>
+    RemsRequestRef? CopiedFrom = null,
+    /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
+    bool IntakeReused = false);
 
 /// <summary>An attached file on a request detail (linked media).</summary>
 public sealed record RemsFileRef(
@@ -181,7 +198,9 @@ public sealed record RemsFileRef(
     string? FileName,
     string? MimeType,
     long? FileSize,
-    string? Url);
+    string? Url,
+    /// <summary>Where uploading the file to Maconomy has got to; null while there is nothing to say.</summary>
+    RemsMaconomyDocumentView? Maconomy = null);
 
 /// <summary>Full REMS request detail (WO-111).</summary>
 public sealed record RemsRequestDetail(
@@ -192,6 +211,8 @@ public sealed record RemsRequestDetail(
     string ClientName,
     /// <summary>The generational particle, so a cell can draw it in bold at the end of the name.</summary>
     string? ClientNameSuffix,
+    /// <summary>An individual client's middle name, null when they have none.</summary>
+    string? ClientMiddleName,
     /// <summary>
     /// The name in PARTS, which is how the form asks for it: two boxes for an individual, one for an
     /// organisation.
@@ -226,7 +247,37 @@ public sealed record RemsRequestDetail(
     /// <summary>The client is a Maconomy customer and Maconomy could not be read, so the name is a stand-in and the contact details are missing.</summary>
     bool MaconomyUnavailable = false,
     /// <summary>Where posting the client to Maconomy has got to; null on a request whose client is not posted.</summary>
-    RemsMaconomySyncView? MaconomySync = null);
+    RemsMaconomySyncView? MaconomySync = null,
+    /// <summary>Where posting the engagement to Maconomy as a job has got to.</summary>
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
+    /// <summary>The request this one was copied from, when it was made with Copy.</summary>
+    RemsRequestRef? CopiedFrom = null,
+    /// <summary>
+    /// Submit for review is offered: a draft the caller may finish, handed to the admins without a form
+    /// because its client's intake is on file (or on its way in on another request).
+    /// </summary>
+    bool CanSubmitForReview = false,
+    /// <summary>Why the offered Submit for review is not possible yet: the client's intake is not in yet.</summary>
+    string? SubmitForReviewBlockedReason = null,
+    /// <summary>Submit to Client is offered: a draft the caller may finish, for a client the form has to go to.</summary>
+    bool CanSendToClient = false,
+    /// <summary>The client's intake on file, from whichever request it came in on; null for a client who has not filled it.</summary>
+    RemsIntakeOnFileView? IntakeOnFile = null,
+    /// <summary>The request reused that intake instead of sending its own form: nothing was emailed, there is nothing to remind.</summary>
+    bool IntakeReused = false,
+    /// <summary>The intake form has been emailed to the client on this request.</summary>
+    bool FormSent = false,
+    /// <summary>The form is out with the client, unanswered, and THIS caller may complete it for them.</summary>
+    bool CanCompleteIntake = false,
+    /// <summary>The user who completed this request's form for the client; null when the client did.</summary>
+    string? IntakeCompletedBy = null);
+
+/// <summary>A client's intake on file: when it was completed, on which request, and by whom if not the client.</summary>
+public sealed record RemsIntakeOnFileView(
+    DateTime SubmittedOnUtc,
+    Guid? RemsId,
+    string? RemsNumber,
+    string? CompletedBy);
 
 /// <summary>A client-lookup result (WO-111).</summary>
 public sealed record RemsClientLookupItem(
@@ -301,7 +352,9 @@ public sealed record ClientDetails(
     string? FirstName = null,
     string? LastName = null,
     /// <summary>The legal name, for an ORGANISATION client.</summary>
-    string? CorporateName = null)
+    string? CorporateName = null,
+    /// <summary>An individual's middle name: null leaves the record's alone, "" clears it.</summary>
+    string? MiddleName = null)
 {
     /// <summary>Whether these details describe a company rather than a human.</summary>
     public bool IsOrganisation => !string.IsNullOrWhiteSpace(CorporateName);

@@ -10,7 +10,7 @@
       show-filters
       :filter-count="allChips.length"
       :show-add="canCreate"
-      add-label="New REMS Request"
+      :add-label="`New ${siteName} Request`"
       show-back
       @update:search="search = $event"
       @filters="filterOpen = true"
@@ -34,7 +34,7 @@
     <app-data-table
       page-key="rems-partner"
       row-key="id"
-      title="My REMS requests"
+      :title="`My ${siteName} requests`"
       :rows="rows"
       :columns="columns"
       :loading="loading"
@@ -46,8 +46,8 @@
       @request="onRequest"
       @refresh="load"
     >
-      <!-- The admins' second reading of this list first, on the row of counted shortcuts where EMS Review
-           keeps its own pair; then the shortcuts over the Status and EMS State filters, each of which IS
+      <!-- The admins' second reading of this list first, on the row of counted shortcuts where COP Review
+           keeps its own pair; then the shortcuts over the Status and COP State filters, each of which IS
            the drawer's filter. -->
       <template #quick-filters>
         <quick-filter-bar :active-count="allChips.length" @clear="onClearFilters">
@@ -59,7 +59,7 @@
             v-model="filters.status" label="Status" :options="statusQuick" :counts="quickCounts?.status"
           />
           <quick-filter-group
-            v-model="filters.emsFormState" label="EMS" :options="emsQuick" :counts="quickCounts?.emsFormState"
+            v-model="filters.emsFormState" label="COP" :options="emsQuick" :counts="quickCounts?.emsFormState"
           />
         </quick-filter-bar>
       </template>
@@ -114,6 +114,15 @@
         </q-td>
       </template>
 
+      <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved;
+           read-only here, since Sync job now lives on the Approvals list and COP Review. -->
+      <template #body-cell-maconomyJobSync="cell">
+        <q-td :props="cell">
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <template v-else>—</template>
+        </q-td>
+      </template>
+
       <!-- What kind of entity the client is, as the badge Related Entities draws for the same value — the
            tenant's word for it in the tenant's colour, rather than the stored code. -->
       <template #body-cell-entityType="cell">
@@ -125,15 +134,24 @@
 
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- View and Edit are the same page in two modes. -->
+          <!-- Two pages. View reads the whole request on one page and is everybody's; the other opens it as
+               the form, with every move in its header — Edit to the initiator, Manage to an admin. -->
           <q-btn flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)">
             <q-tooltip>View</q-tooltip>
           </q-btn>
           <q-btn
             v-if="cell.row.actions?.canEdit"
-            flat round dense color="primary" icon="o_edit" :to="editRoute(cell.row)"
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
           >
-            <q-tooltip>Edit</q-tooltip>
+            <q-tooltip>{{ workAction.label }}</q-tooltip>
+          </q-btn>
+          <!-- Copy: a new draft for the same client with the setup carried over and the tax card blank. -->
+          <q-btn
+            v-if="cell.row.actions?.canCopy" type="a"
+            flat round dense color="primary" icon="o_file_copy"
+            :loading="copying === cell.row.id" @click.stop="copyRequest(cell.row)"
+          >
+            <q-tooltip>Copy — a new request for the same client with this engagement setup carried over</q-tooltip>
           </q-btn>
           <!-- What has been emailed to the client about this request, and the way to chase them again. -->
           <q-btn
@@ -164,13 +182,13 @@
       <template #no-data>
         <div class="full-width column flex-center q-pa-xl text-grey-6">
           <q-icon name="o_assignment" size="40px" class="q-mb-sm" />
-          <div class="text-subtitle1 q-mb-xs">No REMS requests yet</div>
+          <div class="text-subtitle1 q-mb-xs">No {{ siteName }} requests yet</div>
           <div class="q-mb-md">
             {{ isRemsAdmin && ownership === "mine"
               ? "Create your first request, or switch to All to see everybody else's."
               : "Create your first request to start onboarding a client." }}
           </div>
-          <q-btn v-if="canCreate" unelevated no-caps color="primary" icon="o_add" label="New REMS Request" @click="openCreate" />
+          <q-btn v-if="canCreate" unelevated no-caps color="primary" icon="o_add" :label="`New ${siteName} Request`" @click="openCreate" />
         </div>
       </template>
     </app-data-table>
@@ -181,7 +199,7 @@
 
     <conversation-dialog v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle" />
 
-    <!-- A sent reminder adds an email event and nothing else, but the row's EMS State and Updated On are
+    <!-- A sent reminder adds an email event and nothing else, but the row's COP State and Updated On are
          what the list shows of it, so it reloads on the way out. -->
     <email-log-dialog v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load" />
   </q-page>
@@ -193,7 +211,9 @@ import { debounce } from "quasar";
 import { useRouter } from "vue-router";
 import { remsApi, getApiErrorMessage, EntityType } from "services/api";
 import { useAuthStore } from "stores/auth";
+import { useSiteName } from "composables/useSiteName";
 import { usePermissions, Permissions } from "composables/usePermissions";
+import { useConfirm } from "composables/useConfirm";
 import { useNotify } from "composables/useNotify";
 import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
@@ -210,7 +230,7 @@ import AppOptionBadge from "components/common/AppOptionBadge.vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
 import ActingAsBanner from "modules/rems/components/ActingAsBanner.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
-import { maconomySyncLabel } from "modules/rems/maconomySync";
+import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
 import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -224,9 +244,11 @@ import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 
 const router = useRouter();
+const siteName = useSiteName();
 const auth = useAuthStore();
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
+const { confirm } = useConfirm();
 const { has } = usePermissions();
 const fmt = useDateFormat();
 const auditColumns = useAuditColumns();
@@ -235,7 +257,7 @@ const auditColumns = useAuditColumns();
 const {
   typeLabel, typeHint, requestStatusOption, formStatusOption, submissionStateLabel, emsFormActivity,
   entityTypeLabel, entityTypeOption, entityTypeOptions, statusFilterOptions, formStateFilterOptions,
-  submissionStateFilterOptions, typeOptions
+  submissionStateFilterOptions, typeOptions, workAction
 } = useRemsMeta();
 
 const canCreate = computed(() => has(Permissions.RemsRequestsCreate));
@@ -294,6 +316,7 @@ const columns = computed(() => [
     // Says which of the two silences an empty cell is: nobody has taken the request yet, versus there
     // being no admin stage in sight because it is still with its initiator or the client.
     field: (r) => r.assignedAdmin?.name || (r.status === REMS_STATUS.ADMIN_REVIEW ? "Waiting for pickup" : "—"),
+    userId: (r) => r.assignedAdmin?.id,
     align: "left",
     sortable: true,
     default: true,
@@ -305,13 +328,15 @@ const columns = computed(() => [
     name: "cse",
     label: "CSE",
     field: (r) => r.cse?.name || "—",
+    userId: (r) => r.cse?.id,
     align: "left",
     sortable: true,
     default: true,
     ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
   },
-  { name: "emsFormState", label: "EMS State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
+  { name: "emsFormState", label: "COP State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
+  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.
   { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", sortable: true, default: false, filterable: false },
@@ -429,6 +454,30 @@ watch(rows, (list) => {
 // Straight to the form.
 const viewRoute = (row) => ({ name: "rems_request", params: { id: row.id } });
 const editRoute = (row) => ({ name: "rems_request_edit", params: { id: row.id } });
+
+// ---- Copy ----
+// A new draft for the same client with the setup carried over; it opens on the setup tab, where the blank
+// tax card is the first thing to fill.
+const copying = ref(null);
+const copyRequest = async (row) => {
+  const ok = await confirm({
+    title: "Copy this request",
+    message: `A new draft for ${row.clientName} with ${row.remsNumber}'s engagement setup carried over — team, ` +
+      "fees, marketing tags, commission and files. Its fiscal year end and due dates start blank. Continue?",
+    confirmLabel: "Copy"
+  });
+  if (!ok) return;
+  copying.value = row.id;
+  try {
+    const copy = await remsApi.copy(row.id);
+    notify.success(`${copy.remsNumber} created from ${row.remsNumber}.`);
+    router.push({ name: "rems_request_edit", params: { id: copy.id }, query: { tab: "setup" } });
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    copying.value = null;
+  }
+};
 
 // ---- Create ----
 // The same page as Edit, on its own path.

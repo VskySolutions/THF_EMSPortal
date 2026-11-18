@@ -112,7 +112,7 @@ const props = defineProps({
   mode: { type: String, default: "send" }
 });
 // The "View Email Log" hand-off went with the dialog it opened: the email log had no screen left once the
-// EMS Inbox and the engagement workspace were replaced by the request page.
+// COP Inbox and the engagement workspace were replaced by the request page.
 const emit = defineEmits(["update:modelValue", "sent"]);
 
 const notify = useNotify();
@@ -164,10 +164,10 @@ const copy = computed(() => (isReminder.value
       "send another reminder whenever you need to."
   }
   : {
-    title: "Send EMS Form",
+    title: "Send COP Form",
     sentTitle: "Form sent",
     action: "Confirm & Send",
-    sentHeadline: "The EMS Form link was emailed to the client.",
+    sentHeadline: "The COP Form link was emailed to the client.",
     sentNote: "The industry group and link are now locked. Delivery and open status will appear in the " +
       "Email Log as the provider reports them."
   }));
@@ -203,7 +203,7 @@ const confirmSend = async () => {
     else await remsApi.sendForm(props.remsId, payload);
     sentTo.value = recipients.value.join(", ");
     phase.value = "sent";
-    notify.success(isReminder.value ? "Reminder sent to the client." : "EMS Form link sent to the client.");
+    notify.success(isReminder.value ? "Reminder sent to the client." : "COP Form link sent to the client.");
     emit("sent");
   } catch (err) {
     notify.error(getApiErrorMessage(err));

@@ -19,7 +19,6 @@ public interface IOptionSetService
 }
 
 public sealed record CreateOptionSetInput(
-    EntityType EntityType,
     string Key,
     string Name,
     Guid? ParentSetId,
@@ -28,31 +27,34 @@ public sealed record CreateOptionSetInput(
 public sealed record UpdateOptionSetInput(
     string Name,
     OptionItemSortMode ItemSortMode,
-    bool IsActive);
+    bool IsActive,
+    Guid? ParentSetId);
 
 public sealed record CreateOptionItemInput(
     Guid OptionSetId,
     string Value,
     string Label,
     string? Description,
-    Guid? ParentItemId,
+    IReadOnlyList<Guid>? ParentItemIds,
     bool IsDefault,
     string? BackgroundColor,
     string? TextColor,
     string? Icon,
-    string? MetadataJson);
+    string? MetadataJson,
+    string? MaconomyNumber);
 
 public sealed record UpdateOptionItemInput(
     string Value,
     string Label,
     string? Description,
-    Guid? ParentItemId,
+    IReadOnlyList<Guid>? ParentItemIds,
     bool IsDefault,
     bool IsActive,
     string? BackgroundColor,
     string? TextColor,
     string? Icon,
-    string? MetadataJson);
+    string? MetadataJson,
+    string? MaconomyNumber);
 
 /// <summary>Stable error codes raised by <see cref="IOptionSetService"/> for the API to map to HTTP.</summary>
 public static class OptionSetErrorCodes
@@ -62,6 +64,9 @@ public static class OptionSetErrorCodes
     public const string ReadOnlyStandardSet = "OPTION_SET_READ_ONLY";
     public const string NoActiveTenant = "OPTION_SET_NO_TENANT";
     public const string InvalidReorder = "OPTION_SET_INVALID_REORDER";
+
+    /// <summary>The parent list or parent value named is not one this list may depend on.</summary>
+    public const string InvalidParent = "OPTION_SET_INVALID_PARENT";
 
     /// <summary>The list is one the application branches on: no value may be added to or removed from it.</summary>
     public const string ClosedSet = "OPTION_SET_CLOSED";

@@ -94,6 +94,8 @@ public static class DependencyInjection
         services.AddScoped<IMaconomyConnectionRepository, MaconomyConnectionRepository>();
         services.AddScoped<ITenantBrandingRepository, TenantBrandingRepository>();
         services.AddScoped<ITenantEmailSettingsRepository, TenantEmailSettingsRepository>();
+        services.AddScoped<IEmailLogRepository, EmailLogRepository>();
+        services.AddScoped<IUserImportRepository, UserImportRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
         services.AddScoped<IOptionSetRepository, OptionSetRepository>();
 
@@ -152,6 +154,12 @@ public static class DependencyInjection
         // The Maconomy customer sync is queued the same way; the job class lives here so Workers can run it.
         services.AddScoped<IMaconomyCustomerSyncQueue, Jobs.MaconomyCustomerSyncQueue>();
         services.AddScoped<Jobs.MaconomyCustomerSyncJob>();
+        // The job sync follows: queued on approval, or once the customer sync has made the client a customer.
+        services.AddScoped<IMaconomyJobSyncQueue, Jobs.MaconomyJobSyncQueue>();
+        services.AddScoped<Jobs.MaconomyJobSyncJob>();
+        // The request's files follow both: attachments once the customer is there, the CAF and purchase order once the job is.
+        services.AddScoped<IMaconomyDocumentSyncQueue, Jobs.MaconomyDocumentSyncQueue>();
+        services.AddScoped<Jobs.MaconomyDocumentSyncJob>();
         return services;
     }
 
@@ -165,6 +173,10 @@ public static class DependencyInjection
         services.AddHttpClient(Integrations.Maconomy.MaconomyGateway.HttpClientName)
             .ConfigureHttpClient((sp, client) => client.Timeout = TimeSpan.FromSeconds(
                 Math.Max(1, sp.GetRequiredService<IOptions<MaconomyOptions>>().Value.TimeoutSeconds)));
+        // A document upload carries megabytes, so it gets a longer wait than a search does.
+        services.AddHttpClient(Integrations.Maconomy.MaconomyGateway.UploadHttpClientName)
+            .ConfigureHttpClient((sp, client) => client.Timeout = TimeSpan.FromSeconds(
+                Math.Max(1, sp.GetRequiredService<IOptions<MaconomyOptions>>().Value.UploadTimeoutSeconds)));
         services.AddSingleton<IMaconomyGateway, Integrations.Maconomy.MaconomyGateway>();
         services.AddSingleton<Integrations.Maconomy.MaconomyClientInterceptor>();
         return services;

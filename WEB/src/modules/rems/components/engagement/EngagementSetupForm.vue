@@ -5,9 +5,9 @@
       <div class="row q-col-gutter-md">
         <!-- ── Where the work sits, who heads that, and what the firm does ──────────────────────── -->
         <!-- In this order because each narrows the next: the department decides which service lines are
-             offered, and the department and line together which job templates. -->
+             offered, and the department and line together which job types. -->
         <app-select
-          :model-value="core.department" :options="deptOptions" label="Department" required class="col-12 col-sm-6"
+          :model-value="core.department" :options="offeredDepartments" label="Department" required class="col-12 col-sm-6"
           :readonly="!editable" :rules="[requiredRule('a Department')]"
           info="From the REMS Department option list (Administration → Option Sets). The choice decides what else this form asks — CAS is asked how it is billed, Audit needs a signed CAF, Tax a fiscal year end — and which service lines are offered."
           @update:model-value="onDepartmentPicked"
@@ -25,23 +25,29 @@
           info="From the REMS Service Line option list (Administration → Option Sets), narrowed to the lines the selected Department offers. What the firm is actually engaged to do."
           @update:model-value="onServiceLinePicked"
         />
+        <!-- Narrowed by the Service Line above it, as that is by the Department. -->
         <app-select
-          :model-value="core.jobTemplate" :options="offeredJobTemplates" label="Job Template" class="col-12 col-sm-6"
-          :readonly="!editable" :hint="jobTemplateHint"
-          info="From the REMS Job Template option list (Administration → Option Sets), narrowed to the templates the selected Department and Service Line are set up from. Finer than the service line."
-          @update:model-value="onJobTemplatePicked"
+          :model-value="core.jobType" :options="offeredJobTypes" label="Job Type" required class="col-12 col-sm-6"
+          :readonly="!editable" :rules="[jobTypeRule]" :hint="jobTypeHint"
+          info="From the REMS Job Type option list (Administration → Option Sets), narrowed to the job types the selected Service Line offers. The kind of job the engagement is set up as; it is part of the Maconomy job's name."
+          @update:model-value="onJobTypePicked"
+        />
+        <!-- A short plain-text tag for the job, under its job type. Optional. -->
+        <app-text-field
+          v-model="core.jobDescription" label="Job Description" class="col-12" :readonly="!editable"
+          :maxlength="JOB_DESCRIPTION_MAX" :hint="`Up to ${JOB_DESCRIPTION_MAX} characters`"
         />
 
         <!-- ── The two people who run it ────────────────────────────────────────────────────────── -->
         <!-- Each is scoped to the ROLE of its own name. -->
         <app-select
-          v-model="core.engagementExecutiveId" :options="executiveOptions" label="Engagement Executive"
+          v-model="core.engagementExecutiveId" user-cards :options="executiveOptions" label="Engagement Executive"
           required class="col-12 col-sm-6" :readonly="!editable"
           :rules="[requiredRule('an Engagement Executive')]" :hint="executiveHint"
           info="Lists users holding the &quot;Engagement Executive&quot; role, assigned on a user's page in Administration → Users."
         />
         <app-select
-          v-model="core.billingManagerId" :options="billingManagerOptions" label="Billing Manager"
+          v-model="core.billingManagerId" user-cards :options="billingManagerOptions" label="Billing Manager"
           required class="col-12 col-sm-6" :readonly="!editable"
           :rules="[requiredRule('a Billing Manager')]" :hint="billingManagerHint"
           info="Lists users holding the &quot;Billing Manager&quot; role, assigned on a user's page in Administration → Users."
@@ -125,7 +131,8 @@
           <!-- The document itself, not just the claim that one exists: the same preview row every other
                saved file gets, and a click opens it in a new tab. -->
           <app-stored-file-item
-            v-if="hasCaf" :file="storedCaf" :removable="editable" :disable="removingCaf" class="q-mt-sm"
+            v-if="hasCaf" :file="storedCaf" :tag="maconomyDocumentTag(cafDetail?.maconomyDocument)"
+            :removable="editable" :disable="removingCaf" class="q-mt-sm"
             @remove="removeCaf"
           />
 
@@ -175,11 +182,10 @@
         </q-card-section>
       </q-card>
 
-      <!-- Conditional: GCS → the purchase order the engagement is set up against, and the rate it bills
-           at each level it is staffed at. -->
+      <!-- Conditional: GCS → the purchase order the engagement is set up against. -->
       <q-card v-if="showGcs" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
-          <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />GCS — Purchase Order &amp; Rate
+          <q-icon name="o_request_quote" size="18px" class="q-mr-xs" />{{ SHOW_BILL_RATES ? "GCS — Purchase Order & Rate" : "GCS — Purchase Order" }}
         </q-card-section>
         <q-separator />
         <q-card-section>
@@ -207,7 +213,7 @@
             <!-- The rate card and the order it bills against, side by side. The card lists every level on
                  the REMS Personnel Level list with the hourly rate this engagement bills it at; a level left
                  blank is one the engagement is not staffed at. -->
-            <div class="col-12 col-sm-6">
+            <div v-if="SHOW_BILL_RATES" class="col-12 col-sm-6">
               <div class="section-subhead gcs-block__title">
                 Bill Rate by Personnel Level
                 <q-icon name="o_info" size="14px" color="grey-6" class="q-ml-xs">
@@ -250,7 +256,7 @@
             <!-- The purchase order itself, in the same order as the CAF card above: what is on file, the
                  picker, then the document at the bottom — which is where the picker previews an unsaved
                  one. The column's heading is the picker's label, so the two halves start level. -->
-            <div class="col-12 col-sm-6">
+            <div :class="SHOW_BILL_RATES ? 'col-12 col-sm-6' : 'col-12'">
               <div class="section-subhead gcs-block__title">{{ purchaseOrderTitle }}</div>
               <q-banner v-if="hasPurchaseOrderFile && poFile" dense class="bg-teal-1 text-teal-9 rounded-borders q-mb-sm">
                 <template #avatar><q-icon name="o_swap_horiz" color="teal-9" /></template>
@@ -269,7 +275,8 @@
               <!-- The ✕ takes it back off the engagement, as it does on the CAF above: uploading again
                    replaces the order. -->
               <app-stored-file-item
-                v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder" :removable="editable"
+                v-if="hasPurchaseOrderFile" :file="storedPurchaseOrder"
+                :tag="maconomyDocumentTag(govDetail?.purchaseOrderMaconomyDocument)" :removable="editable"
                 :disable="removingPurchaseOrder" :class="{ 'q-mt-sm': editable }" @remove="removePurchaseOrder"
               />
             </div>
@@ -277,17 +284,15 @@
         </q-card-section>
       </q-card>
 
-      <!-- Conditional: Tax → fiscal year end + calculated due dates + tax-form checklist
-           (AC-REMS-014.14). -->
+      <!-- Conditional: Tax → fiscal year end + calculated due dates (AC-REMS-014.14). -->
       <q-card v-if="showTax" flat bordered class="rems-inner q-mt-md">
         <q-card-section class="q-py-sm text-subtitle2 text-primary">
-          <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year &amp; Forms
+          <q-icon name="o_receipt_long" size="18px" class="q-mr-xs" />Tax — Fiscal Year
         </q-card-section>
         <q-separator />
         <q-card-section>
           <!-- The two due dates follow from the fiscal year end — the 15th of the fourth month after it,
-               and six months past that — and are then EDITABLE. All three are owed, as is at least one
-               form below: the whole card is what a Tax engagement is set up from. -->
+               and six months past that — and are then EDITABLE. All three are owed. -->
           <div class="row q-col-gutter-md">
             <app-date-field
               v-model="tax.fiscalYearEnd" label="Fiscal Year End" required class="col-12 col-sm-4"
@@ -303,22 +308,6 @@
             />
           </div>
 
-          <div class="section-subhead">Tax Forms <span class="text-negative">*</span></div>
-          <!-- Beside the list, not in its place: the list has to stay on screen for the caption to be
-               answerable. -->
-          <div v-if="!taxFormUnavailable && !tax.taxFormIds.length" class="text-caption text-negative q-mb-xs">
-            Select at least one tax form.
-          </div>
-          <div v-if="taxFormUnavailable" class="text-caption text-grey-6">
-            The tax-form list could not be loaded for your account.
-          </div>
-          <!-- Three across on a desktop, two on a tablet, one on a phone. -->
-          <div v-else class="row q-col-gutter-x-md">
-            <q-checkbox
-              v-for="opt in taxFormOptions" :key="opt.value" v-model="tax.taxFormIds" :val="opt.value"
-              :label="opt.label" :disable="!editable" class="col-12 col-sm-6 col-md-4"
-            />
-          </div>
         </q-card-section>
       </q-card>
     </q-form>
@@ -337,7 +326,8 @@ import { MAX_UPLOAD_MB } from "composables/useFileDrop";
 import {
   useRemsMeta, isTaxDepartment, isGovernmentAudit, isCasDepartment, isAssuranceDepartment,
   isGcsDepartment, requiresClientAcceptanceForm,
-  remsServiceLineOptions, remsServiceLineFitsDepartment, remsJobTemplateOptions, remsJobTemplateFitsServiceLine
+  remsDependentOptions, remsFitsParent,
+  REMS_HIDDEN_DEPARTMENTS, REMS_HIDDEN_SERVICE_LINES, remsWithoutHidden
 } from "modules/rems/useRemsMeta";
 import AppSelect from "components/common/AppSelect.vue";
 import AppTextField from "components/common/AppTextField.vue";
@@ -345,15 +335,15 @@ import AppDateField from "components/common/AppDateField.vue";
 import AppReadonlyField from "components/common/AppReadonlyField.vue";
 import AppSingleFileUpload from "components/common/AppSingleFileUpload.vue";
 import AppStoredFileItem from "components/common/AppStoredFileItem.vue";
+import { maconomyDocumentTag } from "modules/rems/maconomySync";
+import { SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 
 const props = defineProps({
   engagement: { type: Object, required: true },
   deptOptions: { type: Array, default: () => [] },
   // Rendered as "Service Line"; still named for the data behind it. See the note at the top of useRemsMeta.
   serviceLineOptions: { type: Array, default: () => [] },
-  jobTemplateOptions: { type: Array, default: () => [] },
-  taxFormOptions: { type: Array, default: () => [] },
-  taxFormUnavailable: { type: Boolean, default: false },
+  jobTypeOptions: { type: Array, default: () => [] },
   billingPeriodOptions: { type: Array, default: () => [] },
   // The levels a GCS engagement can be staffed at (REMS.PersonnelLevel) — the rows of its rate card.
   personnelLevelOptions: { type: Array, default: () => [] },
@@ -407,7 +397,8 @@ const buildCore = (e) => ({
   department: e.department || null,
   // No `industry`: the industry is asked on the Client Information tab and written by the page.
   serviceLine: e.serviceLine || null,
-  jobTemplate: e.jobTemplate || null,
+  jobType: e.jobType || null,
+  jobDescription: e.jobDescription ?? "",
   engagementExecutiveId: e.engagementExecutive?.id || null,
   billingManagerId: e.billingManager?.id || null,
   firstYearFeeEstimate: e.firstYearFeeEstimate ?? "",
@@ -450,17 +441,16 @@ const buildTax = (t) => {
   return {
     fiscalYearEnd,
     originalDueDate: t?.originalDueDate || derived.originalDueDate,
-    firstExtensionDueDate: t?.firstExtensionDueDate || derived.firstExtensionDueDate,
-    taxFormIds: [...(t?.taxFormIds || [])]
+    firstExtensionDueDate: t?.firstExtensionDueDate || derived.firstExtensionDueDate
   };
 };
 const tax = ref(buildTax(props.engagement.tax));
 
-// What just happened to a stored Service Line or Job Template the new choice above it does not offer. A
-// field that empties itself with no explanation reads as data lost rather than as an answer that stopped
-// applying. Set and read further down, beside the pickers they belong to.
+// What just happened to a stored Service Line the department chosen above it does not offer. A field that
+// empties itself with no explanation reads as data lost rather than as an answer that stopped applying.
+// Set and read further down, beside the picker it belongs to.
 const serviceLineCleared = ref("");
-const jobTemplateCleared = ref("");
+const jobTypeCleared = ref("");
 
 // Re-sync every local form when the parent adopts a fresh engagement view.
 watch(() => props.engagement, (e) => {
@@ -472,7 +462,7 @@ watch(() => props.engagement, (e) => {
   cafOverride.value = undefined;
   govOverride.value = undefined;
   serviceLineCleared.value = "";
-  jobTemplateCleared.value = "";
+  jobTypeCleared.value = "";
   nextTick(() => { syncing = false; });
 });
 
@@ -485,73 +475,69 @@ watch(() => tax.value.fiscalYearEnd, (fye, previous) => {
   tax.value.firstExtensionDueDate = derived.firstExtensionDueDate;
 });
 
-// ---- Service Line and Job Template, narrowed by what sits above them ----
-// The department decides which lines are offered, and the department and line together which templates
-// (REMS_SERVICE_LINES_BY_DEPARTMENT / REMS_JOB_TEMPLATES_BY_SERVICE_LINE). The labels are for the notes below.
-const { departmentLabel, serviceLineLabel, jobTemplateLabel } = useRemsMeta();
-const offeredServiceLines = computed(() =>
-  remsServiceLineOptions(props.serviceLineOptions, core.value.department, core.value.serviceLine));
-const offeredJobTemplates = computed(() =>
-  remsJobTemplateOptions(props.jobTemplateOptions, core.value.department, core.value.serviceLine, core.value.jobTemplate));
+// ---- Service Line, narrowed by the department above it ----
+// The department decides which lines are offered, and the line which job types — both from the option
+// lists' "Valid under" (Administration → Option Sets). The labels are for the notes below.
+const { departmentLabel, serviceLineLabel, jobTypeLabel } = useRemsMeta();
+const offeredDepartments = computed(() =>
+  remsWithoutHidden(props.deptOptions, REMS_HIDDEN_DEPARTMENTS, core.value.department));
+const offeredServiceLines = computed(() => remsWithoutHidden(
+  remsDependentOptions(props.serviceLineOptions, props.deptOptions, core.value.department, core.value.serviceLine),
+  REMS_HIDDEN_SERVICE_LINES, core.value.serviceLine));
+const offeredJobTypes = computed(() =>
+  remsDependentOptions(props.jobTypeOptions, props.serviceLineOptions, core.value.serviceLine, core.value.jobType));
+
+const jobTypeHint = computed(() =>
+  jobTypeCleared.value ||
+  (core.value.serviceLine ? "" : "Choose a Service Line first — it decides which job types are offered."));
+
+// Every change of service line comes through here, so the job type beneath it is checked either way.
+const setServiceLine = (value) => {
+  core.value.serviceLine = value;
+  jobTypeCleared.value = "";
+  const jobType = core.value.jobType;
+  if (!jobType) return;
+  if (!value) {
+    core.value.jobType = null;
+  } else if (!remsFitsParent(props.jobTypeOptions, props.serviceLineOptions, value, jobType)) {
+    jobTypeCleared.value =
+      `Job Type cleared — ${jobTypeLabel(jobType)} is not offered under ${serviceLineLabel(value)}.`;
+    core.value.jobType = null;
+  }
+};
+
+const onJobTypePicked = (value) => {
+  core.value.jobType = value;
+  jobTypeCleared.value = "";
+};
 
 // The cleared note when there is one, otherwise the reason an empty picker is empty.
 const serviceLineHint = computed(() =>
   serviceLineCleared.value ||
   (core.value.department ? "" : "Choose a Department first — it decides which service lines are offered."));
-const jobTemplateHint = computed(() => {
-  if (jobTemplateCleared.value) return jobTemplateCleared.value;
-  if (!core.value.serviceLine) return "Choose a Service Line first — it decides which job templates are offered.";
-  if (!offeredJobTemplates.value.length) return `No job template applies to ${serviceLineLabel(core.value.serviceLine)}.`;
-  return "";
-});
-
-// Drops a job template the department and service line no longer offer, and says so — unless there is no
-// service line at all, when the hint under the box already says what to choose first.
-const reconcileJobTemplate = () => {
-  const template = core.value.jobTemplate;
-  const line = core.value.serviceLine;
-  if (!template) return;
-  if (line && remsJobTemplateFitsServiceLine(core.value.department, line, template)) return;
-  core.value.jobTemplate = null;
-  if (!line) return;
-  jobTemplateCleared.value =
-    `Job Template cleared — ${jobTemplateLabel(template)} is not offered for ${serviceLineLabel(line)} ` +
-    `in ${departmentLabel(core.value.department)}.`;
-};
 
 const onDepartmentPicked = (value) => {
   core.value.department = value;
   serviceLineCleared.value = "";
-  jobTemplateCleared.value = "";
   const line = core.value.serviceLine;
   if (!value) {
-    // Removing the department empties the chain beneath it, quietly: the hints under the two boxes say
-    // what to choose first, and neither box is at fault.
-    core.value.serviceLine = null;
-    core.value.jobTemplate = null;
+    // Removing the department empties the service line beneath it, quietly: the hint under the box says
+    // what to choose first, and the box is not at fault.
+    setServiceLine(null);
     return;
   }
-  if (line && !remsServiceLineFitsDepartment(value, line)) {
+  if (line && !remsFitsParent(props.serviceLineOptions, props.deptOptions, value, line)) {
     // The note first, so the required rule that fires on the change below already has it to show.
     serviceLineCleared.value =
       `Service Line cleared — ${serviceLineLabel(line)} is not offered under ${departmentLabel(value)}.`;
-    core.value.serviceLine = null;
+    setServiceLine(null);
   }
-  reconcileJobTemplate();
 };
 
-// A note has done its job the moment a value is chosen beneath it; removing the service line takes the job
-// template with it.
+// A note has done its job the moment a value is chosen beneath it.
 const onServiceLinePicked = (value) => {
-  core.value.serviceLine = value;
+  setServiceLine(value);
   serviceLineCleared.value = "";
-  jobTemplateCleared.value = "";
-  reconcileJobTemplate();
-};
-
-const onJobTemplatePicked = (value) => {
-  core.value.jobTemplate = value;
-  jobTemplateCleared.value = "";
 };
 
 // ---- Conditional visibility keys off the LOCALLY selected department (immediate) ----
@@ -728,7 +714,7 @@ const removePurchaseOrder = async () => {
 
 // Service Line, Department, the engagement team and % Realization are mandatory, and so is what the chosen
 // department asks: the first-year fee estimate on Tax and CAS, the billing pair on CAS, the engagement fee,
-// the client's year end on Assurance, the whole fiscal-year card on Tax. The boxes are
+// the client's year end on Assurance, the whole fiscal-year card on Tax. So is the Job Type. The boxes are
 // marked and ruled here; the page still auto-saves whatever is typed, and the send-for-approval check on
 // the server (RemsApprovalController) is what refuses an engagement with any of them blank.
 const requiredRule = (what) => (v) => (v !== null && v !== undefined && v !== "") || `Select ${what}`;
@@ -740,6 +726,10 @@ const requiredValue = (what) => (v) => (v !== null && v !== undefined && v !== "
 const serviceLineRule = (v) =>
   requiredRule("a Service Line")(v) === true || !core.value.department || serviceLineCleared.value ||
   "Select a Service Line";
+// The Job Type under its Service Line, the same way.
+const jobTypeRule = (v) =>
+  requiredRule("a Job Type")(v) === true || !core.value.serviceLine || jobTypeCleared.value ||
+  "Select a Job Type";
 
 // Money: blank is "not known yet", a negative is wrong however early it is typed. One rule, four boxes.
 const amountRule = (v) => v === "" || v === null || v === undefined || Number(v) >= 0 || "Enter a valid amount";
@@ -796,6 +786,8 @@ const setupProblem = () => {
 // A description of how the client is billed, not a treatise. Mirrors the column and the API validator.
 // Owed, because the box is only shown on CAS, where it is.
 const BILLING_DESCRIPTION_MAX = 1000;
+// The box stops typing here. Mirrors the column and the API validator.
+const JOB_DESCRIPTION_MAX = 6;
 const billingDescriptionRules = [
   requiredValue("how the client is billed"),
   (v) => (v ?? "").length <= BILLING_DESCRIPTION_MAX ||
@@ -828,11 +820,12 @@ const saveSetup = async (engagementId, remsId = null) => {
   }
 
   let view = (await remsApi.updateEngagement(engagementId, {
-    // Empty string rather than null for the three clearable ones: the endpoint reads null as "leave this
+    // Empty string rather than null for the four clearable ones: the endpoint reads null as "leave this
     // field alone" and only an empty value clears.
     department: core.value.department ?? "",
     serviceLine: core.value.serviceLine ?? "",
-    jobTemplate: core.value.jobTemplate ?? "",
+    jobType: core.value.jobType ?? "",
+    jobDescription: core.value.jobDescription ?? "",
     engagementExecutiveId: core.value.engagementExecutiveId,
     billingManagerId: core.value.billingManagerId,
     // One fee question per engagement, and only the one that was asked is written. Omitted — not blanked —
@@ -857,11 +850,13 @@ const saveSetup = async (engagementId, remsId = null) => {
     view = await remsApi.updateGovernment(engagementId, {
       ...gov.value,
       purchaseOrderAmount: toNum(gov.value.purchaseOrderAmount),
-      // The rate card as rows, and only the levels given a rate: a blank is "not staffed at this level",
-      // which is the absence of a row rather than a row with nothing in it.
-      personnelRates: rateRows.value
-        .map((row) => ({ personnelLevel: row.value, billRatePerHour: toNum(gov.value.personnelRates[row.value]) }))
-        .filter((r) => r.billRatePerHour !== null)
+      // The rate card as rows, and only the levels given a rate. Not sent at all while the card is hidden:
+      // the API leaves the stored one alone.
+      personnelRates: SHOW_BILL_RATES
+        ? rateRows.value
+          .map((row) => ({ personnelLevel: row.value, billRatePerHour: toNum(gov.value.personnelRates[row.value]) }))
+          .filter((r) => r.billRatePerHour !== null)
+        : undefined
     });
   }
   if (showAssurance.value) {
@@ -875,8 +870,7 @@ const saveSetup = async (engagementId, remsId = null) => {
     view = await remsApi.updateTax(engagementId, {
       fiscalYearEnd: tax.value.fiscalYearEnd || null,
       originalDueDate: tax.value.originalDueDate || null,
-      firstExtensionDueDate: tax.value.firstExtensionDueDate || null,
-      taxFormIds: tax.value.taxFormIds
+      firstExtensionDueDate: tax.value.firstExtensionDueDate || null
     });
   }
   if (cafFile.value) {
@@ -916,7 +910,8 @@ const validateFormats = () => {
   return (!showFeeEstimate.value || positive(core.value.firstYearFeeEstimate)) &&
     (!showEngagementFee.value || positive(core.value.engagementFee)) &&
     inRange(core.value.realizationPercentage, 0, 100) &&
-    (!showGcs.value || (positive(gov.value.purchaseOrderAmount) && Object.values(gov.value.personnelRates).every(positive))) &&
+    (!showGcs.value || (positive(gov.value.purchaseOrderAmount) &&
+      (!SHOW_BILL_RATES || Object.values(gov.value.personnelRates).every(positive)))) &&
     (!showBilling.value || (core.value.billingProcessDescription ?? "").length <= BILLING_DESCRIPTION_MAX);
 };
 

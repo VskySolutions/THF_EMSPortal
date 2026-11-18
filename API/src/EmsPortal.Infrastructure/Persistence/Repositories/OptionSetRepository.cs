@@ -14,17 +14,10 @@ internal sealed class OptionSetRepository : IOptionSetRepository
         _dbContext = dbContext;
     }
 
-    public async Task<IReadOnlyList<OptionSet>> ListSetsForScopeAsync(Guid? tenantId, EntityType? entityType, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<OptionSet>> ListSetsForScopeAsync(Guid? tenantId, CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.OptionSets
-            .Where(s => s.TenantId == null || s.TenantId == tenantId);
-
-        if (entityType is { } et)
-        {
-            query = query.Where(s => s.EntityType == et);
-        }
-
-        return await query
+        return await _dbContext.OptionSets
+            .Where(s => s.TenantId == null || s.TenantId == tenantId)
             .OrderByDescending(s => s.UpdatedOnUtc)
             .ThenBy(s => s.Name)
             .Take(_dbContext.MaxRows)
@@ -34,7 +27,7 @@ internal sealed class OptionSetRepository : IOptionSetRepository
     public async Task<OptionSet?> GetSetWithItemsAsync(Guid id, Guid? tenantId, CancellationToken cancellationToken = default)
     {
         var set = await _dbContext.OptionSets
-            .Include(s => s.Items)
+            .Include(s => s.Items).ThenInclude(i => i.Parents)
             .FirstOrDefaultAsync(s => s.Id == id && (s.TenantId == null || s.TenantId == tenantId), cancellationToken);
 
         if (set is not null)
@@ -47,14 +40,37 @@ internal sealed class OptionSetRepository : IOptionSetRepository
         return set;
     }
 
-    public Task<OptionSet?> GetEffectiveSetAsync(Guid? tenantId, EntityType entityType, string key, CancellationToken cancellationToken = default)
+    public Task<OptionSet?> GetEffectiveSetAsync(Guid? tenantId, string key, CancellationToken cancellationToken = default)
         => _dbContext.OptionSets
-            .Include(s => s.Items)
-            .Where(s => s.EntityType == entityType && s.Key == key && s.IsActive
+            .Include(s => s.Items).ThenInclude(i => i.Parents)
+            .Where(s => s.Key == key && s.IsActive
                 && (s.TenantId == tenantId || s.TenantId == null))
             // Prefer the tenant's own list over the standard one.
             .OrderByDescending(s => s.TenantId != null)
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, (int WithNumber, int Missing)>> CountMaconomyNumbersAsync(
+        IReadOnlyCollection<Guid> setIds, CancellationToken cancellationToken = default)
+    {
+        if (setIds.Count == 0)
+        {
+            return new Dictionary<Guid, (int, int)>();
+        }
+
+        var counts = await _dbContext.OptionSetItems
+            .Where(i => setIds.Contains(i.OptionSetId))
+            .GroupBy(i => i.OptionSetId)
+            .Select(g => new
+            {
+                SetId = g.Key,
+                WithNumber = g.Count(i => i.MaconomyNumber != null && i.MaconomyNumber != ""),
+                // A hidden value is not one anybody is waiting on.
+                Missing = g.Count(i => i.IsActive && (i.MaconomyNumber == null || i.MaconomyNumber == "")),
+            })
+            .ToListAsync(cancellationToken);
+
+        return counts.ToDictionary(c => c.SetId, c => (c.WithNumber, c.Missing));
+    }
 
     public async Task<IReadOnlyDictionary<Guid, int>> CountItemsAsync(IReadOnlyCollection<Guid> setIds, CancellationToken cancellationToken = default)
     {
@@ -72,17 +88,19 @@ internal sealed class OptionSetRepository : IOptionSetRepository
         return counts.ToDictionary(c => c.SetId, c => c.Count);
     }
 
-    public Task<bool> KeyExistsAsync(Guid? tenantId, EntityType entityType, string key, Guid? excludeId, CancellationToken cancellationToken = default)
+    public Task<bool> KeyExistsAsync(Guid? tenantId, string key, Guid? excludeId, CancellationToken cancellationToken = default)
         => _dbContext.OptionSets
-            .AnyAsync(s => s.TenantId == tenantId && s.EntityType == entityType && s.Key == key
+            .AnyAsync(s => s.TenantId == tenantId && s.Key == key
                 && (excludeId == null || s.Id != excludeId), cancellationToken);
 
     public Task<OptionSetItem?> GetItemAsync(Guid itemId, Guid setId, CancellationToken cancellationToken = default)
         => _dbContext.OptionSetItems
+            .Include(i => i.Parents)
             .FirstOrDefaultAsync(i => i.Id == itemId && i.OptionSetId == setId, cancellationToken);
 
     public async Task<IReadOnlyList<OptionSetItem>> ListItemsAsync(Guid setId, CancellationToken cancellationToken = default)
         => await _dbContext.OptionSetItems
+            .Include(i => i.Parents)
             .Where(i => i.OptionSetId == setId)
             .OrderBy(i => i.SortOrder)
             .Take(_dbContext.MaxRows)
@@ -114,4 +132,25 @@ internal sealed class OptionSetRepository : IOptionSetRepository
     public void RemoveSet(OptionSet set) => _dbContext.OptionSets.Remove(set);
 
     public void RemoveItem(OptionSetItem item) => _dbContext.OptionSetItems.Remove(item);
+
+    public async Task<IReadOnlyList<OptionSetItemParent>> ListLinksToParentsAsync(
+        IReadOnlyCollection<Guid> parentItemIds, CancellationToken cancellationToken = default)
+        => parentItemIds.Count == 0
+            ? Array.Empty<OptionSetItemParent>()
+            : await _dbContext.OptionSetItemParents
+                .Where(p => parentItemIds.Contains(p.ParentOptionSetItemId))
+                .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>> ListParentIdsAsync(Guid itemId, CancellationToken cancellationToken = default)
+        => await _dbContext.OptionSetItemParents
+            .Where(p => p.OptionSetItemId == itemId)
+            .Select(p => p.ParentOptionSetItemId)
+            .ToListAsync(cancellationToken);
+
+    public Task<bool> HasChildSetsAsync(Guid setId, CancellationToken cancellationToken = default)
+        => _dbContext.OptionSets.AnyAsync(s => s.ParentSetId == setId, cancellationToken);
+
+    public void AddItemParent(OptionSetItemParent link) => _dbContext.OptionSetItemParents.Add(link);
+
+    public void RemoveItemParents(IEnumerable<OptionSetItemParent> links) => _dbContext.OptionSetItemParents.RemoveRange(links);
 }

@@ -31,7 +31,7 @@
             <q-item-section>
               <q-item-label>
                 <app-option-badge :option="emailEventOption(ev.eventType)" />
-                <span class="q-ml-sm text-grey-8">{{ ev.recipientEmail || "—" }}</span>
+                <span class="q-ml-sm text-grey-8"><app-email :email="ev.recipientEmail || ''" /></span>
               </q-item-label>
               <q-item-label caption>
                 {{ fmt.formatDateTime(ev.occurredOnUtc) }}
@@ -98,7 +98,7 @@
         <div class="col">
           <div class="text-subtitle1 text-primary">{{ emailEventOption(previewing.eventType).label }} email</div>
           <div class="text-caption text-grey-7">
-            To {{ previewing.recipientEmail || "—" }} · {{ fmt.formatDateTime(previewing.occurredOnUtc) }}
+            To <app-email :email="previewing.recipientEmail || ''" /> · {{ fmt.formatDateTime(previewing.occurredOnUtc) }}
           </div>
         </div>
         <q-btn flat round dense icon="o_close" color="grey-7" @click="previewOpen = false" />
@@ -127,6 +127,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 import { ref, computed, watch } from "vue";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
 import { useNotify } from "composables/useNotify";

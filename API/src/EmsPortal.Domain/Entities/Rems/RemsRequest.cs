@@ -1,3 +1,5 @@
+using EmsPortal.Domain.Enums;
+
 namespace EmsPortal.Domain.Entities;
 
 /// <summary>
@@ -32,7 +34,7 @@ public class RemsRequest : AuditableEntity
     // ---- Engagement setup ----
     public Guid? DepartmentId { get; set; }
     public Guid? ServiceLineId { get; set; }
-    public Guid? JobTemplateId { get; set; }
+    public Guid? JobTypeId { get; set; }
     public Guid? BillingPeriodId { get; set; }
     public Guid? DepartmentDirectorId { get; set; }
     public Guid? EngagementExecutiveId { get; set; }
@@ -41,6 +43,8 @@ public class RemsRequest : AuditableEntity
     public decimal? EngagementFee { get; set; }
     public decimal? RealizationPercentage { get; set; }
     public string? BillingProcessDescription { get; set; }
+    /// <summary>A short plain-text description of the job from the setup form, at most 6 characters.</summary>
+    public string? JobDescription { get; set; }
 
     // ---- Government only: the firm's side of the contract the client declared ----
     public Guid? ContractId { get; set; }
@@ -49,18 +53,43 @@ public class RemsRequest : AuditableEntity
     public decimal? PurchaseOrderAmount { get; set; }
     public bool? IsFloridaOnePercentFeeApplicable { get; set; }
 
+    // ---- Maconomy job: the engagement posted to Maconomy as a job, by itself once the client is there, or from a list's Sync job now ----
+    public string? MaconomyJobNumber { get; set; }
+    public RemsMaconomyJobSyncStatus MaconomyJobSyncStatus { get; set; } = RemsMaconomyJobSyncStatus.NotSynced;
+    /// <summary>Who pressed the sync that created the job (null when it ran by itself), and when.</summary>
+    public Guid? MaconomyJobSyncedById { get; set; }
+    public DateTime? MaconomyJobSyncedOnUtc { get; set; }
+    public string? MaconomyJobSyncError { get; set; }
+    // The template job somebody picked for this request, when the Service Line named none in Maconomy.
+    public string? MaconomyTemplateJobNumber { get; set; }
+    // The job is in Maconomy but its budget's fee line is not set yet: the next sync does only that.
+    public bool IsMaconomyJobBudgetSyncPending { get; set; }
+
+    /// <summary>The tax engagement's fiscal year end. The client's own year end stays on the client, for Assurance.</summary>
+    public DateOnly? FiscalYearEnd { get; set; }
+
+    /// <summary>The request this one was made from with Copy, or null.</summary>
+    public Guid? CopiedFromRemsId { get; set; }
+
+    // ---- Intake reuse: a returning client is not sent the form again ----
+    /// <summary>The request the client's intake came in on, when this one reused it instead of sending a form.</summary>
+    public Guid? IntakeOnFileFromRemsId { get; set; }
+    /// <summary>The user who completed the form for the client on this request; null when the client submitted it.</summary>
+    public Guid? IntakeCompletedByUserId { get; set; }
+
     // ---- Navigations ----
     public OptionSetItem? Type { get; set; }
     public OptionSetItem? Status { get; set; }
     public Client? Client { get; set; }
     public ClientContract? Contract { get; set; }
+    public RemsRequest? CopiedFrom { get; set; }
     public User? CSE { get; set; }
     public User? AdminAssignedTo { get; set; }
     public User? OnBehalfOfUser { get; set; }
     public User? InviteSentByUser { get; set; }
     public OptionSetItem? Department { get; set; }
     public OptionSetItem? ServiceLine { get; set; }
-    public OptionSetItem? JobTemplate { get; set; }
+    public OptionSetItem? JobType { get; set; }
     public OptionSetItem? BillingPeriod { get; set; }
     public User? DepartmentDirector { get; set; }
     public User? EngagementExecutive { get; set; }
@@ -73,6 +102,5 @@ public class RemsRequest : AuditableEntity
     public ICollection<RemsApprovalTask> ApprovalTasks { get; set; } = new List<RemsApprovalTask>();
     public ICollection<RemsPersonnelRate> PersonnelRates { get; set; } = new List<RemsPersonnelRate>();
     public ICollection<RemsMarketingMethod> MarketingMethods { get; set; } = new List<RemsMarketingMethod>();
-    public ICollection<RemsTaxForm> TaxForms { get; set; } = new List<RemsTaxForm>();
     public ICollection<RemsTaxDueDate> TaxDueDates { get; set; } = new List<RemsTaxDueDate>();
 }

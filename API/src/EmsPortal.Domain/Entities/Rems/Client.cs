@@ -36,11 +36,24 @@ public class Client : AuditableEntity
     public Guid? ReferralSourceId { get; set; }
     public string? ReferralSourceDetail { get; set; }
 
+    // ---- Intake: a client fills the form once, and every later request reads it off these ----
+    /// <summary>When the intake was completed; null until it is. THE flag a request's Submit for review reads.</summary>
+    public DateTime? IntakeSubmittedOnUtc { get; set; }
+    /// <summary>The request the intake came in on.</summary>
+    public Guid? IntakeSubmittedRemsId { get; set; }
+    /// <summary>The user who completed the form for the client; null when the client did.</summary>
+    public Guid? IntakeSubmittedByUserId { get; set; }
+
     // ---- Maconomy ----
     public string? MaconomyCustomerNumber { get; set; }
     public RemsMaconomyCustomerSyncStatus MaconomySyncStatus { get; set; } = RemsMaconomyCustomerSyncStatus.NotSynced;
     public DateTime? MaconomySyncedOnUtc { get; set; }
     public string? MaconomySyncError { get; set; }
+    // The contact company made for the client, ahead of its customer and under the same number. Kept as soon
+    // as Maconomy has it, so a second attempt does not make a second company.
+    public string? MaconomyContactCompanyNumber { get; set; }
+    // The customer is in Maconomy but the contact persons under its contact company are still to be added.
+    public bool IsMaconomyContactSyncPending { get; set; }
 
     // ---- Navigations ----
     public Person? Person { get; set; }
@@ -62,6 +75,10 @@ public class Client : AuditableEntity
 
     [NotMapped]
     public bool IsOrganisation => PersonId is null;
+
+    /// <summary>Whether the client has completed the intake form, on any request: they are not sent it again.</summary>
+    [NotMapped]
+    public bool IsIntakeOnFile => IntakeSubmittedOnUtc is not null;
 
     /// <summary>Whether this client is a Maconomy customer; the directory, not the row, then holds the name and contact.</summary>
     [NotMapped]

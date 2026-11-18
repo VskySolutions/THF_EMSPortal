@@ -1,11 +1,11 @@
 <template>
   <q-dialog v-model="open" persistent :maximized="maximized" @show="load">
     <q-card class="esf">
-      <!-- Head: what is being corrected, and the way out. -->
+      <!-- Head: what is being written, and the way out. -->
       <q-card-section class="esf__head row items-center no-wrap q-gutter-sm">
         <q-icon name="o_edit_document" size="22px" color="primary" />
         <div class="col">
-          <div class="text-subtitle1 text-weight-medium">Edit Client Form</div>
+          <div class="text-subtitle1 text-weight-medium">{{ completing ? "Complete Client Form" : "Edit Client Form" }}</div>
           <div class="text-caption text-grey-7">{{ subtitle }}</div>
         </div>
         <q-btn flat round dense icon="o_close" color="grey-8" aria-label="Close" @click="onClose" />
@@ -24,8 +24,15 @@
           <!-- What this dialog IS, said once. -->
           <q-banner dense class="esf__note q-mb-md rounded-borders">
             <template #avatar><q-icon name="o_info" color="primary" /></template>
-            These are the client's own answers. Corrections replace them and are recorded against your
-            name — the client is not asked again and is not notified.
+            <template v-if="completing">
+              The client has not answered yet; what they have saved so far is filled in below. Saving submits
+              the form on their behalf, under your name: the request moves to COP Review and the client's own
+              link reports it as submitted.
+            </template>
+            <template v-else>
+              These are the client's own answers. Corrections replace them and are recorded against your
+              name — the client is not asked again and is not notified.
+            </template>
           </q-banner>
 
           <!-- Server-side validation summary — surfaced field-by-field below too. -->
@@ -64,7 +71,8 @@
       <q-card-actions align="right" class="esf__actions">
         <q-btn flat no-caps color="grey-8" label="Cancel" :disable="saving" @click="onClose" />
         <q-btn
-          unelevated no-caps color="primary" icon="o_save" label="Save corrections"
+          unelevated no-caps color="primary" :icon="completing ? 'o_send' : 'o_save'"
+          :label="completing ? 'Submit for the client' : 'Save corrections'"
           :disable="!!loadError || loading || !!issues.length" :loading="saving" @click="save"
         >
           <q-tooltip v-if="issues.length">Complete the required fields first.</q-tooltip>
@@ -75,7 +83,8 @@
 </template>
 
 <script setup>
-// The Admin's correction of a client's submitted intake form (Phase 16).
+// The client's intake form, written by staff: the Admin's correction of a submitted one (Phase 16), or — in
+// "complete" mode, while the form is out with the client — a completion on their behalf, which submits it.
 import { ref, computed } from "vue";
 import { useQuasar } from "quasar";
 import { remsApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
@@ -92,8 +101,11 @@ const open = defineModel({ type: Boolean, default: false });
 const props = defineProps({
   remsId: { type: String, required: true },
   // "REMS-000123 — Acme Holdings", for the head. The page has it already.
-  subtitle: { type: String, default: "" }
+  subtitle: { type: String, default: "" },
+  // "correct" (a submitted form, by an admin) or "complete" (a form out with the client, submitted for them).
+  mode: { type: String, default: "correct" }
 });
+const completing = computed(() => props.mode === "complete");
 
 // `saved` carries the refreshed view, so the page can reload the panel behind this one without asking
 // the server a second time for what it has just been handed.
@@ -185,13 +197,22 @@ async function onConfirmClearIndividuals (applyClear) {
 
 async function save () {
   if (issues.value.length) return;
+  // Completing is the client's own submit, made for them: it moves the request on, so it is asked twice.
+  if (completing.value && !(await confirm({
+    title: "Submit on the client's behalf",
+    message: "This submits the intake form as the client's answers. The request moves to COP Review for an " +
+      "admin to pick up, and the client's own link reports the form as submitted. Continue?",
+    confirmLabel: "Submit for the client"
+  }))) {
+    return;
+  }
   saving.value = true;
   errors.value = {};
   serverSummary.value = [];
   try {
     const view = await remsApi.updateSubmission(
       props.remsId, buildIntakePayload(payload.value, entityType.value));
-    notify.success("The client's form has been updated.");
+    notify.success(completing.value ? "Submitted on the client's behalf." : "The client's form has been updated.");
     emit("saved", view);
     open.value = false;
   } catch (err) {

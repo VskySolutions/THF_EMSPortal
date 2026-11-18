@@ -11,6 +11,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using EmsPortal.Api.RateLimiting;
+using EmsPortal.Application.Integrations.Maconomy;
+using EmsPortal.Application.Integrations.Maconomy.Mapping;
+using EmsPortal.Shared.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace EmsPortal.Api.Controllers;
 
@@ -37,6 +41,11 @@ public sealed class MaconomyController : ControllerBase
     private readonly ITenantRepository _tenants;
     private readonly IUserRepository _users;
     private readonly IMaconomyCustomerSyncService _customerSync;
+    private readonly IMaconomyJobSyncService _jobSync;
+    private readonly IMaconomyDocumentSyncService _documents;
+    private readonly IMaconomyClientDirectory _directory;
+    private readonly IMaconomyNumberMaps _numbers;
+    private readonly MaconomyOptions _options;
 
     public MaconomyController(
         IMaconomyConnectionService connections,
@@ -44,7 +53,12 @@ public sealed class MaconomyController : ControllerBase
         IMaconomySessionManager session,
         ITenantRepository tenants,
         IUserRepository users,
-        IMaconomyCustomerSyncService customerSync)
+        IMaconomyCustomerSyncService customerSync,
+        IMaconomyJobSyncService jobSync,
+        IMaconomyDocumentSyncService documents,
+        IMaconomyClientDirectory directory,
+        IMaconomyNumberMaps numbers,
+        IOptions<MaconomyOptions> options)
     {
         _connections = connections;
         _customers = customers;
@@ -52,6 +66,11 @@ public sealed class MaconomyController : ControllerBase
         _tenants = tenants;
         _users = users;
         _customerSync = customerSync;
+        _jobSync = jobSync;
+        _documents = documents;
+        _directory = directory;
+        _numbers = numbers;
+        _options = options.Value;
     }
 
     // ---- The customer sync ----
@@ -201,6 +220,218 @@ public sealed class MaconomyController : ControllerBase
             overview.Connected, overview.Enabled, overview.ChangedOnUtc, changedBy,
             overview.Synced, overview.Linked, overview.Failed, overview.NotSynced, overview.Pending);
     }
+
+    // ---- The job sync ----
+    //
+    // Also ALWAYS the caller's own tenant, for the same reason as the customer sync above: the rows are
+    // REMS requests. An approved request is posted by itself once its client is in Maconomy; Sync job now,
+    // from the lists and from here, is for the ones that failed or were approved while the sync was off.
+
+    /// <summary>The Job tab: whether it is on, who last moved it, the settings, the counts and the template map.</summary>
+    [HttpGet("job-sync")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyJobSyncOverviewResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetJobSync(CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        return Ok(ApiResponseFactory.Success(await JobSyncOverviewAsync(tenant, cancellationToken), "Job sync retrieved."));
+    }
+
+    /// <summary>Post approved engagements as jobs from now on. Posts nothing already approved: that is synced by hand.</summary>
+    [HttpPost("job-sync/start")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyJobSyncOverviewResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public Task<IActionResult> StartJobSync(CancellationToken cancellationToken)
+        => SetJobSyncAsync(enabled: true, cancellationToken);
+
+    /// <summary>Stop posting and hide Sync job now everywhere. An attempt already under way finishes; a queued one goes back to waiting.</summary>
+    [HttpPost("job-sync/stop")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyJobSyncOverviewResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public Task<IActionResult> StopJobSync(CancellationToken cancellationToken)
+        => SetJobSyncAsync(enabled: false, cancellationToken);
+
+    /// <summary>The Job tab's table: every approved request and where its job stands, newest change first.</summary>
+    [HttpGet("job-sync/requests")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<MaconomyJobSyncRow>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListJobSyncRequests(CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var context = await _jobSync.GetContextAsync(tenant, cancellationToken);
+        var documents = await _documents.GetContextAsync(tenant, cancellationToken);
+        var requests = await _jobSync.ListApprovedAsync(cancellationToken);
+        var names = await _users.GetFullNamesAsync(
+            requests.Where(r => r.MaconomyJobSyncedById.HasValue).Select(r => r.MaconomyJobSyncedById!.Value), cancellationToken);
+        var rows = new List<MaconomyJobSyncRow>(requests.Count);
+        foreach (var r in requests)
+        {
+            // A Maconomy-picked client's name is Maconomy's to give.
+            await _directory.HydrateAsync(r.Client, cancellationToken);
+            var syncedBy = r.MaconomyJobSyncedById is { } by && names.TryGetValue(by, out var n) ? n : null;
+            rows.Add(new MaconomyJobSyncRow(
+                r.Id, r.RemsNumber, r.Client?.ClientName ?? string.Empty, r.Client?.MaconomyCustomerNumber,
+                r.ServiceLine?.Label, r.JobType?.Label, r.Department?.Label, r.UpdatedOnUtc,
+                RemsMaconomyJobSyncViews.For(r, context, _jobSync.IsStale(r), canManage: true, syncedBy),
+                RemsMaconomyDocumentViews.Of(MaconomyDocumentSyncRules.Summarise(r, documents, _documents.IsStale))));
+        }
+        return Ok(ApiResponseFactory.Success<IReadOnlyList<MaconomyJobSyncRow>>(rows, $"{rows.Count} approved request(s)."));
+    }
+
+    /// <summary>Sync job now from the settings page: one attempt, inline, in the caller's own tenant.</summary>
+    [HttpPost("job-sync/{remsId:guid}/run")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<RemsMaconomyJobSyncView>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunJobSync(Guid remsId, [FromBody] RemsMaconomyJobSyncRequest? body, CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        try
+        {
+            var request = await _jobSync.SyncNowAsync(remsId, tenant, me, body?.TemplateJobNumber, cancellationToken);
+            var context = await _jobSync.GetContextAsync(tenant, cancellationToken);
+            var names = await _users.GetFullNamesAsync(new[] { me }, cancellationToken);
+            var view = RemsMaconomyJobSyncViews.For(
+                request, context, _jobSync.IsStale(request), canManage: true, names.TryGetValue(me, out var name) ? name : null);
+            return Ok(ApiResponseFactory.Success(view, RemsMaconomyJobSyncViews.MessageFor(view)));
+        }
+        catch (MaconomyJobSyncException ex)
+        {
+            return RemsMaconomyJobSyncController.RefusalFor(this, ex);
+        }
+    }
+
+    private async Task<IActionResult> SetJobSyncAsync(bool enabled, CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        try
+        {
+            await _jobSync.SetEnabledAsync(tenant, enabled, me, cancellationToken);
+        }
+        catch (MaconomyJobSyncException ex)
+        {
+            return RemsMaconomyJobSyncController.RefusalFor(this, ex);
+        }
+        return Ok(ApiResponseFactory.Success(
+            await JobSyncOverviewAsync(tenant, cancellationToken),
+            enabled ? "Job sync started. Sync job now is offered on approved requests." : "Job sync stopped. Sync job now is hidden."));
+    }
+
+    private async Task<MaconomyJobSyncOverviewResponse> JobSyncOverviewAsync(Guid tenant, CancellationToken cancellationToken)
+    {
+        var overview = await _jobSync.GetOverviewAsync(tenant, cancellationToken);
+        string? changedBy = null;
+        if (overview.ChangedById is { } changedById)
+        {
+            var names = await _users.GetFullNamesAsync(new[] { changedById }, cancellationToken);
+            names.TryGetValue(changedById, out changedBy);
+        }
+
+        // Every value of the tenant's REMS Service Line list, and every offered value of its REMS Department
+        // list, with the Maconomy number it carries, so the tab can say how many still lack one. The
+        // numbers are edited under Option Sets.
+        var numbers = await _numbers.GetAsync(tenant, cancellationToken);
+        var serviceLines = numbers.ServiceLines
+            .Select(l => new MaconomyServiceLineRow(l.ItemId, l.Code, l.Label, l.Number))
+            .ToList();
+        var departments = numbers.Departments
+            .Where(d => d.IsActive)
+            .Select(d => new MaconomyDepartmentRow(d.ItemId, d.Code, d.Label, d.Number))
+            .ToList();
+
+        return new MaconomyJobSyncOverviewResponse(
+            overview.Connected, overview.Enabled, overview.ChangedOnUtc, changedBy,
+            overview.ProjectManagerNumber, overview.DefaultTemplateNumber,
+            overview.Synced, overview.Failed, overview.Syncing, overview.Waiting, serviceLines, departments);
+    }
+
+    // ---- The documents ----
+
+    /// <summary>
+    /// Upload documents from the settings page: every file of the request not yet in Maconomy whose
+    /// customer or job is there, inline, in the caller's own tenant. A failed upload is a 200 with the
+    /// failure counted; only "nothing can go" is a refusal.
+    /// </summary>
+    [HttpPost("documents/{remsId:guid}/run")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<RemsMaconomyDocumentsView>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunDocumentSync(Guid remsId, CancellationToken cancellationToken)
+    {
+        var (tenant, error) = OwnTenant();
+        if (error is not null)
+        {
+            return error;
+        }
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        try
+        {
+            var request = await _documents.UploadNowAsync(remsId, tenant, me, cancellationToken);
+            var view = RemsMaconomyDocumentViews.Of(MaconomyDocumentSyncRules.Summarise(
+                request, await _documents.GetContextAsync(tenant, cancellationToken), _documents.IsStale));
+            return Ok(ApiResponseFactory.Success(view, RemsMaconomyDocumentViews.MessageFor(view)));
+        }
+        catch (MaconomyDocumentSyncException ex)
+        {
+            return ex.Refusal switch
+            {
+                MaconomyCustomerSyncRefusal.NotFound => NotFound(ApiResponseFactory.NotFound(ex.Message)),
+                MaconomyCustomerSyncRefusal.NotConnected => Conflict(ApiResponseFactory.Error(ApiErrorCodes.MaconomyNotConfigured, "Maconomy is not connected.", ex.Message)),
+                _ => Conflict(ApiResponseFactory.Error(ApiErrorCodes.MaconomySyncNotEligible, "No document of this request can be uploaded to Maconomy now.", ex.Message)),
+            };
+        }
+    }
+
+    // ---- The mapping ----
+
+    /// <summary>
+    /// How the portal fills the customer card and the job card, in words, for the Customer and Job tabs.
+    /// The same for every tenant: the mapping is code, the containers server configuration.
+    /// </summary>
+    [HttpGet("mapping")]
+    [RequirePermission(Permissions.IntegrationsMaconomyManage)]
+    [ProducesResponseType<ApiResponse<MaconomyMappingResponse>>(StatusCodes.Status200OK)]
+    public IActionResult GetMapping()
+        => Ok(ApiResponseFactory.Success(
+            new MaconomyMappingResponse(
+                MaconomyCustomerDataMapping.Describe(_options.CustomerCard.Container),
+                MaconomyJobDataMapping.Describe(_options.JobCard.Container)),
+            "Maconomy mapping retrieved."));
 
     // ---- The connection ----
 
@@ -403,6 +634,8 @@ public sealed class MaconomyController : ControllerBase
             token,
             c.LastLoginError,
             c.LastLoginErrorUtc,
+            c.ConsecutiveFailureCount,
+            c.AutoDisabledOnUtc,
             c.CreatedById is { } cid && names.TryGetValue(cid, out var creator) ? creator : null,
             c.CreatedOnUtc,
             c.UpdatedById is { } uid && names.TryGetValue(uid, out var updater) ? updater : null,

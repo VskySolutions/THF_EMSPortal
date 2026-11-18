@@ -16,7 +16,7 @@ public static class RemsMaconomySyncStatuses
 
 /// <summary>
 /// Where posting the request's client to Maconomy has got to. Present on a request whose client is
-/// posted (a Brand New Client request, once approved); null on every other request.
+/// posted (an approved request whose client is not in Maconomy yet); null on every other request.
 /// </summary>
 public sealed record RemsMaconomySyncView(
     /// <summary>Null when the request is eligible but nothing has recorded a row yet.</summary>
@@ -93,7 +93,7 @@ public static class RemsMaconomySyncViews
 
     /// <summary>
     /// The view for a request, or null when its client is not one that is posted. A client that has been
-    /// recorded says what happened; an approved Brand New Client request whose client was never recorded
+    /// recorded says what happened; an approved request of any type whose client was never recorded
     /// reads as Not synced, and Sync now records it.
     /// </summary>
     public static RemsMaconomySyncView? For(RemsRequest request, bool stale, bool enabled, bool canManage)
@@ -107,8 +107,7 @@ public static class RemsMaconomySyncViews
         {
             return From(client, stale, enabled, canManage);
         }
-        var eligible = string.Equals(request.Type?.Value, RemsRequestTypes.BrandNewClient, StringComparison.Ordinal)
-            && string.Equals(request.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal);
+        var eligible = string.Equals(request.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal);
         return eligible
             ? new RemsMaconomySyncView(null, RemsMaconomySyncStatuses.NotSynced, null, 0, null, null, null, enabled, canManage && enabled)
             : null;

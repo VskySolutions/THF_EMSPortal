@@ -31,13 +31,13 @@ public enum EmailTemplateKey
     ReminderDue = 12,
 
     /// <summary>
-    /// REMS external email sent to a client with the secure link to complete an EMS form for a request
+    /// REMS external email sent to a client with the secure link to complete an COP form for a request
     /// (REMS, WO-124). On the email allowlist. Rendered/dispatched via <c>IRemsEmailNotifier</c>.
     /// </summary>
     RemsFormLink = 13,
 
     /// <summary>
-    /// REMS external email sent to the assigned Admin + CSE confirming a client submitted their EMS form
+    /// REMS external email sent to the assigned Admin + CSE confirming a client submitted their COP form
     /// (REMS, WO-124). On the email allowlist. Rendered/dispatched via <c>IRemsEmailNotifier</c>.
     /// </summary>
     RemsFormSubmitted = 14,
@@ -46,10 +46,22 @@ public enum EmailTemplateKey
     PasswordResetLink = 15,
 
     /// <summary>
-    /// REMS external email nudging a client who has been sent their EMS form link but has not submitted
+    /// REMS external email nudging a client who has been sent their COP form link but has not submitted
     /// it yet (REMS). Its own template rather than a second send of <see cref="RemsFormLink"/>: the third
     /// copy of "You have been asked to complete a form" reads as a system fault, not a reminder. On the
     /// email allowlist. Rendered/dispatched via <c>IRemsEmailNotifier</c>.
     /// </summary>
     RemsFormReminder = 16,
+
+    /// <summary>
+    /// The portal switched a tenant's Maconomy connection off after repeated refused logins or timeouts.
+    /// Sent to the developer addresses named on the tenant, never to its users. On the email allowlist.
+    /// </summary>
+    MaconomyConnectionDisabled = 17,
+
+    /// <summary>
+    /// REMS external email to the client, confirming the COP form they have just submitted was received.
+    /// Sent only when the client submits it themselves. On the email allowlist.
+    /// </summary>
+    RemsFormReceived = 18,
 }

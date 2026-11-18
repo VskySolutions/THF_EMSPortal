@@ -10,16 +10,16 @@
     <!-- Add recipient (searchable CSE-group picker; excludes those already added). -->
     <div v-if="editable" class="row items-center q-col-gutter-md q-mb-md">
       <app-select
-        v-model="pick" :options="availableRecipients" label="Add recipient" class="col-12 col-sm"
-        use-input :disable="splits.length >= 10" :hint="recipientHint"
+        v-model="pick" user-cards :options="availableRecipients" label="Add recipient" class="col-12 col-sm"
+        use-input :disable="splits.length >= MAX_RECIPIENTS" :hint="recipientHint"
         info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded; the CSE, the Department Director and the Shareholders approve this request instead, so they are greyed out."
         @update:model-value="addRecipient"
       />
       <!-- The cap said as a count, not only as a picker that stops responding. -->
       <div class="col-auto q-pb-sm">
-        <div class="rems-commission__count" :class="{ 'rems-commission__count--full': splits.length >= 10 }">
+        <div class="rems-commission__count" :class="{ 'rems-commission__count--full': splits.length >= MAX_RECIPIENTS }">
           <span class="rems-commission__count-n">{{ splits.length }}</span>
-          <span class="rems-commission__count-of">/ 10</span>
+          <span class="rems-commission__count-of">/ {{ MAX_RECIPIENTS }}</span>
         </div>
       </div>
     </div>
@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-// The engagement commission splits (AC-REMS-016): up to ten recipients holding the CSE role, each with an
+// The engagement commission splits (AC-REMS-016): up to three recipients holding the CSE role, each with an
 // editable percentage (> 0 and ≤ 100), individually removable.
 import { ref, computed, watch, nextTick } from "vue";
 import { remsApi } from "services/api";
@@ -76,6 +76,9 @@ const props = defineProps({
 });
 // The page saves this section for the user, so every change to the splits is announced.
 const emit = defineEmits(["change"]);
+
+// The most recipients one engagement may name. The API enforces the same number.
+const MAX_RECIPIENTS = 3;
 
 const buildSplits = (e) => (e.commissionSplits || []).map((s) => ({
   employeeId: s.employee.id,
@@ -110,7 +113,7 @@ const recipientHint = computed(() => (props.recipientOptions.length
   : "Nobody holds the \"CSE\" role — assign it on a user's page in Administration → Users."));
 
 const addRecipient = (value) => {
-  if (!value || splits.value.length >= 10 || reservedReason.value.has(value)) { pick.value = null; return; }
+  if (!value || splits.value.length >= MAX_RECIPIENTS || reservedReason.value.has(value)) { pick.value = null; return; }
   const option = props.recipientOptions.find((s) => s.value === value);
   if (option && !splits.value.some((x) => x.employeeId === value)) {
     splits.value.push({ employeeId: value, name: option.label, percentage: "" });
@@ -189,8 +192,7 @@ defineExpose({ saveCommission });
 
 <style scoped>
 /* The recipient count, beside the picker. Bordered and set in the ink colour because it is the only thing
-   on the row that says there is a ceiling at all — as grey caption text it read as decoration, and the
-   picker greying out at ten arrived as a bug report instead of as the rule being met. */
+   on the row that says there is a ceiling at all — as grey caption text it read as decoration, and the picker greying out at the limit arrived as a bug report instead of as the rule being met. */
 .rems-commission__count {
   display: inline-flex;
   align-items: baseline;

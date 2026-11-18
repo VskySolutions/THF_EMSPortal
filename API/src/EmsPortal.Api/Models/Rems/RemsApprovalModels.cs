@@ -79,6 +79,8 @@ public sealed record RemsApprovalTaskRow(
     /// approver reading it.
     /// </summary>
     RemsMaconomySyncView? MaconomySync = null,
+    /// <summary>Where posting the engagement to Maconomy as a job has got to; Sync job now lives on this list too.</summary>
+    RemsMaconomyJobSyncView? MaconomyJobSync = null,
     /// <summary>
     /// Whose task carries the row: the caller on their own inbox; on the tenant-wide one, the approver who
     /// last acted on the round, with everyone on it in <see cref="Approvers"/>.
@@ -154,7 +156,7 @@ public sealed record RemsApprovalEngagementView(
     string Status,
     string? Department,
     string? ServiceLine,
-    string? JobTemplate,
+    string? JobType,
     string? Industry,
     RemsApprovalClientView Client,
     RemsApprovalEntityView Entity,
@@ -172,6 +174,8 @@ public sealed record RemsApprovalEngagementView(
     /// </summary>
     string? BillingPeriod,
     string? BillingProcessDescription,
+    /// <summary>The short plain-text job description from the setup form.</summary>
+    string? JobDescription,
     RemsApprovalAuditDetailView? Audit,
     RemsGovernmentDetailView? Government,
     RemsApprovalTaxDetailView? Tax,
@@ -241,13 +245,12 @@ public sealed record RemsApprovalAuditDetailView(
     string? Url,
     DateOnly? ClientFiscalYearEnd);
 
-/// <summary>Tax detail with the due-date schedule deserialized and the form checklist resolved to labels.</summary>
+/// <summary>Tax detail with the due-date schedule deserialized.</summary>
 public sealed record RemsApprovalTaxDetailView(
     Guid Id,
     DateOnly? FiscalYearEnd,
     /// <summary>Derived from the fiscal year end, then whatever was typed over it.</summary>
-    RemsTaxDueDateSet? DueDates,
-    IReadOnlyList<RemsApprovalOptionRef> TaxForms);
+    RemsTaxDueDateSet? DueDates);
 
 /// <summary>
 /// The approval round this task belongs to, with every approver's decision — the approver-side

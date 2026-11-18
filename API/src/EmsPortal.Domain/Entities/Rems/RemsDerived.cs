@@ -30,6 +30,12 @@ public static class RemsDerived
 
     public static bool IsFormSubmitted(RemsRequest request) => request.FormSubmittedOnUtc is not null;
 
+    /// <summary>The form is with the client: sent and not answered.</summary>
+    public static bool IsFormOut(RemsRequest request) => request.InviteSentOnUtc is not null && request.FormSubmittedOnUtc is null;
+
+    /// <summary>The request reused the client's intake instead of sending its own form.</summary>
+    public static bool IsIntakeReused(RemsRequest request) => request.IntakeOnFileFromRemsId is not null;
+
     /// <summary>The engagement's state as the UI reads it, taken from the request status code.</summary>
     public static RemsEngagementStatus EngagementStatusOf(string? requestStatusCode) => requestStatusCode switch
     {

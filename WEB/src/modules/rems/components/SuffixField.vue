@@ -48,7 +48,7 @@
 // The generational particle on a name — Jr., Sr., II, III, IV — typed freely or picked off the shortlist.
 // One component for every box that asks it, so they all open and suggest the same way.
 import { ref } from "vue";
-import { CLIENT_NAME_SUFFIXES } from "modules/rems/remsContactRoles";
+import { useNameSuffixes } from "composables/useNameSuffixes";
 import AppTextField from "components/common/AppTextField.vue";
 
 defineProps({
@@ -65,7 +65,8 @@ defineProps({
 // `picked` says the answer is complete, which a typed one is only once the box is left.
 const emit = defineEmits(["update:modelValue", "blur", "picked"]);
 
-const SUFFIX_OPTIONS = CLIENT_NAME_SUFFIXES;
+// The Person.NameSuffix option list.
+const SUFFIX_OPTIONS = useNameSuffixes();
 const menuOpen = ref(false);
 
 const openMenu = () => { menuOpen.value = true; };

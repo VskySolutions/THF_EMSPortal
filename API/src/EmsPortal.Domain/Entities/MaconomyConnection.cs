@@ -50,6 +50,18 @@ public class MaconomyConnection : AuditableEntity
     /// <summary>Switches the lookup off without losing the credentials.</summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Refused logins and unanswered calls in a row since Maconomy last answered. Back to zero on an answer,
+    /// and on an admin's save with the connection on.
+    /// </summary>
+    public int ConsecutiveFailureCount { get; set; }
+
+    /// <summary>
+    /// When the portal itself switched the connection off, the failures having reached
+    /// <c>Maconomy:FailuresBeforeDisable</c>. Null while it has not, and again once an admin switches it on.
+    /// </summary>
+    public DateTime? AutoDisabledOnUtc { get; set; }
+
     // ---- The customer sync: posting a fully approved brand-new client to Maconomy ----
 
     /// <summary>Whether a request's approval queues its new client for posting. Off by default; Start/Stop on the settings page.</summary>
@@ -58,4 +70,18 @@ public class MaconomyConnection : AuditableEntity
     public DateTime? CustomerSyncChangedOnUtc { get; set; }
 
     public Guid? CustomerSyncChangedById { get; set; }
+
+    // ---- The job sync: posting an approved engagement to Maconomy as a job, once its client is there ----
+    // The project manager and the default template job are platform configuration (Maconomy:JobCard);
+    // the template numbers live on the REMS Service Line option items.
+
+    /// <summary>
+    /// Whether approved engagements are posted as jobs: by themselves once the client is in Maconomy, and by
+    /// Sync job now. Off by default; Start/Stop on the Job tab. While off, nothing is queued and the action is hidden.
+    /// </summary>
+    public bool JobSyncEnabled { get; set; }
+
+    public DateTime? JobSyncChangedOnUtc { get; set; }
+
+    public Guid? JobSyncChangedById { get; set; }
 }

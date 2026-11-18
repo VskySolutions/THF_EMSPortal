@@ -1,3 +1,5 @@
+using EmsPortal.Application.Abstractions.Persistence;
+using EmsPortal.Domain.Entities;
 using EmsPortal.Domain.Enums;
 
 namespace EmsPortal.Application.OptionSets;
@@ -61,7 +63,15 @@ public static class DefaultOptionSets
         /// which is the difference between retiring a value and deleting one. A tenant can put it back
         /// in Administration → Option Sets, so this is a starting position like every other field here.
         /// </summary>
-        bool IsActive = true);
+        bool IsActive = true,
+        /// <summary>
+        /// The number Maconomy files the value under, where the Maconomy sync needs one: the specification 6
+        /// number on an entity type, the specification 1 number on an industry, the template job number on a
+        /// service line, the location number on a department. Seeded so the sync works on a new tenant; a
+        /// Tenant Admin edits it under Option Sets
+        /// like any other field here.
+        /// </summary>
+        string? MaconomyNumber = null);
 
     /// <summary>
     /// Two different kinds of protection, because two different things can be true of a list.
@@ -80,7 +90,6 @@ public static class DefaultOptionSets
     /// icon, the order — stays theirs on both.
     /// </summary>
     public sealed record Definition(
-        EntityType EntityType,
         string Key,
         string Name,
         OptionItemSortMode ItemSortMode,
@@ -95,14 +104,13 @@ public static class DefaultOptionSets
     /// <summary>
     /// The platform-standard option lists to seed. Most of the REMS lists keyed to
     /// <see cref="EntityType.Rems"/> are CODE-valued — the chosen item's <c>Value</c> is what gets stored
-    /// on the REMS / REMSForm / REMSEngagement row. Two are not: the grouped marketing-methods list and the
-    /// tax-form checklist are referenced by item ID, as foreign keys from
-    /// <c>REMSEngagementMarketingMethod</c> and <c>REMSEngagementTaxForm</c>. Each marketing item carries
+    /// on the REMS / REMSForm / REMSEngagement row. One is not: the grouped marketing-methods list is referenced by item ID,
+    /// as a foreign key from <c>REMSEngagementMarketingMethod</c>. Each marketing item carries
     /// its group and behaviour flags in <see cref="ItemDefinition.MetadataJson"/>.
     /// </summary>
     public static IReadOnlyList<Definition> All { get; } = new[]
     {
-        new Definition(EntityType.Rems, "REMS.Type", "REMS Type", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.Type", "REMS Type", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             // Two ways a referral can relate to THF's records, and only two: every new engagement for a
             // client on file is both "new engagement" and "existing client", and a subsidiary of one is
@@ -117,10 +125,10 @@ public static class DefaultOptionSets
         // REMS_TYPE_EXISTING_CLIENT), so neither may be deleted or re-coded. The list itself stays open —
         // a firm that classifies a referral a third way is welcome to say so.
         }, LockSeededValues: true),
-        // How the client heard about THF, asked on the public EMS form. The descriptions double as the
+        // How the client heard about THF, asked on the public COP form. The descriptions double as the
         // examples the client needs to place themselves, so they carry the "Friend, Family, or Colleague"
         // detail rather than crowding it into the label.
-        new Definition(EntityType.Rems, "REMS.ReferralSource", "REMS Referral Source", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.ReferralSource", "REMS Referral Source", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("referral", "Referral", 1, Description: "Friend, Family, or Colleague."),
             new ItemDefinition("search_engine", "Search Engine", 2, Description: "Google, Bing, Yahoo."),
@@ -134,7 +142,7 @@ public static class DefaultOptionSets
                 "Mentioned in an article, forum (e.g., Reddit), or guest post."),
             new ItemDefinition("other", "Other", 7, Description: "Anything not covered above."),
         }),
-        new Definition(EntityType.Rems, "REMS.Status", "REMS Status", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.Status", "REMS Status", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             // The request lifecycle, in stage order — each value names who the request is waiting on.
             // See RemsRequestStatuses for the transitions.
@@ -189,13 +197,13 @@ public static class DefaultOptionSets
         // values, so a firm that tracks a fifth position — declined, on hold, not applicable — can add it
         // and every row can be set to it. The four seeded codes are locked against deletion and re-coding
         // all the same: `not_initiated` is the value the server writes for a row nobody has answered for.
-        new Definition(EntityType.Rems, "REMS.RelatedEntityStatus", "REMS Related Entity Status", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.RelatedEntityStatus", "REMS Related Entity Status", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("not_initiated", "Not Initiated", 1, Description:
                 "Nothing has been raised for this related client yet. Every row starts here.",
                 BackgroundColor: Grey, TextColor: OnDark),
-            new ItemDefinition("rems_initiated", "REMS Initiated", 2, Description:
-                "A REMS request has been raised for this related client and is being worked.",
+            new ItemDefinition("rems_initiated", "COP Initiated", 2, Description:
+                "A COP request has been raised for this related client and is being worked.",
                 BackgroundColor: Teal, TextColor: OnDark),
             new ItemDefinition("pending_approval", "Pending Approval", 3, Description:
                 "Their request has reached the approvers and is waiting on their decisions.",
@@ -204,7 +212,7 @@ public static class DefaultOptionSets
                 "Their engagement is approved — the end of the road for this row.",
                 BackgroundColor: Brand, TextColor: OnDark),
         }, LockSeededValues: true),
-        new Definition(EntityType.Rems, "REMS.BillingPeriod", "REMS Billing Period", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.BillingPeriod", "REMS Billing Period", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             // How often the client is billed. Pairs with the engagement's Description of Billing Process,
             // which is where a schedule that does not reduce to a frequency gets written out.
@@ -222,7 +230,7 @@ public static class DefaultOptionSets
         // business, a government body. An "audit" department for a "government"
         // entity is a Government Audit and additionally requires a contract number + Florida 1%
         // state-fee flag (RemsEngagementCodes.IsGovernmentAudit).
-        new Definition(EntityType.Rems, "REMS.EntityType", "REMS Entity Type", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.EntityType", "REMS Entity Type", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             // "Business" was split into the three kinds THF actually onboards. All three ask the client
             // exactly the same questions the old single group did (EIN, CEO/CFO/AP, banker, lawyer) — see
@@ -233,23 +241,23 @@ public static class DefaultOptionSets
             // ramp: these are categories, not stages. Like every colour here they are a STARTING point,
             // recolourable in Administration → Option Sets.
             new ItemDefinition("individual", "Individual", 1,
-                BackgroundColor: Teal, TextColor: OnDark),
+                BackgroundColor: Teal, TextColor: OnDark, MaconomyNumber: "1"),
             new ItemDefinition("not_for_profit", "Not-for-Profit", 2,
-                BackgroundColor: Purple, TextColor: OnDark),
+                BackgroundColor: Purple, TextColor: OnDark, MaconomyNumber: "3"),
             new ItemDefinition("insurance", "Insurance", 3,
-                BackgroundColor: Brand, TextColor: OnDark),
+                BackgroundColor: Brand, TextColor: OnDark, MaconomyNumber: "4"),
             new ItemDefinition("commercial", "Commercial", 4,
-                BackgroundColor: Blue, TextColor: OnDark),
+                BackgroundColor: Blue, TextColor: OnDark, MaconomyNumber: "5"),
             new ItemDefinition("government", "Government", 5,
-                BackgroundColor: Slate, TextColor: OnDark),
+                BackgroundColor: Slate, TextColor: OnDark, MaconomyNumber: "2"),
             // A trust or an estate is a legal entity with a name, a tax number and people who act for it,
             // so it is asked exactly what the three business groups are asked (see IsBusinessGroup) —
             // an EIN and the primary / financial / billing contacts. What it is NOT is an individual:
             // filing one as its trustee is what put the trust's affairs under a person's own name.
-            new ItemDefinition("trust_estate", "Trust and Estate", 6, Description:
+            new ItemDefinition("trust_estate", "Trust/Estate", 6, Description:
                 "A trust or a decedent's estate. Asked the same questions as a business — it has an EIN " +
                 "and is acted for by trustees or personal representatives rather than by an individual.",
-                BackgroundColor: Brown, TextColor: OnDark),
+                BackgroundColor: Brown, TextColor: OnDark, MaconomyNumber: "6"),
         // The client's intake form is SHAPED by these codes: individual asks for a spouse, the business
         // family for an EIN and three contacts, government for a finance director and a contract block
         // (RemsFormPayloadValidator). Deleting or re-coding one would leave submitted forms nobody can
@@ -258,12 +266,12 @@ public static class DefaultOptionSets
         // The client's trade. Unlike the entity type — which decides which questions the client's
         // intake form asks and is therefore frozen once that form goes out — this is an internal
         // classification only, so it stays editable for as long as the setup does. One list, which the
-        // picker narrows to the trades the chosen entity type is in (REMS_INDUSTRIES_BY_ENTITY_TYPE in
-        // useRemsMeta.js) rather than one list per entity type: the two do not partition cleanly (a
+        // picker narrows to the trades the chosen entity type is in (Dependencies below)
+        // rather than one list per entity type: the two do not partition cleanly (a
         // hospital is Health Care whether it is Commercial or Not-for-Profit), and a tenant adding a trade
         // should not have to say which entity types may see it. Within each entity type's set the order
         // below is THF's.
-        new Definition(EntityType.Rems, "REMS.Industry", "REMS Industry", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.Industry", "REMS Industry", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("affordable_housing", "Affordable Housing", 1),
             new ItemDefinition("agribusiness", "Agribusiness", 2),
@@ -272,40 +280,44 @@ public static class DefaultOptionSets
             new ItemDefinition("entertainment", "Entertainment", 5),
             new ItemDefinition("financial_institutions_banking", "Financial Institutions/Banking", 6),
             new ItemDefinition("hospitality", "Hospitality", 7),
-            new ItemDefinition("manufacturing", "Manufacturing", 8),
-            new ItemDefinition("professional_service_firms", "Professional Service Firms", 9),
-            new ItemDefinition("real_estate", "Real Estate", 10),
-            new ItemDefinition("retail", "Retail", 11),
-            new ItemDefinition("health_care", "Health Care", 12),
-            new ItemDefinition("oil_gas_distribution", "Oil & Gas Distribution", 13),
-            new ItemDefinition("wholesale", "Wholesale", 14),
-            new ItemDefinition("technology", "Technology", 15),
-            new ItemDefinition("state_government", "State Government", 16),
-            new ItemDefinition("local_government", "Local Government", 17),
-            new ItemDefinition("federal_government", "Federal Government", 18),
-            new ItemDefinition("educational_institutions", "Educational Institutions", 19),
+            new ItemDefinition("manufacturing", "Manufacturing", 8, MaconomyNumber: "17"),
+            new ItemDefinition("professional_service_firms", "Professional Service Firms", 9, MaconomyNumber: "18"),
+            new ItemDefinition("real_estate", "Real Estate", 10, MaconomyNumber: "19"),
+            new ItemDefinition("retail", "Retail", 11, MaconomyNumber: "20"),
+            new ItemDefinition("health_care", "Health Care", 12, MaconomyNumber: "21"),
+            new ItemDefinition("oil_gas_distribution", "Oil & Gas Distribution", 13, MaconomyNumber: "22"),
+            new ItemDefinition("wholesale", "Wholesale", 14, MaconomyNumber: "23"),
+            new ItemDefinition("technology", "Technology", 15, MaconomyNumber: "24"),
+            new ItemDefinition("state_government", "State Government", 16, MaconomyNumber: "25"),
+            new ItemDefinition("local_government", "Local Government", 17, MaconomyNumber: "26"),
+            new ItemDefinition("federal_government", "Federal Government", 18, MaconomyNumber: "27"),
+            new ItemDefinition("educational_institutions", "Educational Institutions", 19, MaconomyNumber: "28"),
             // The four insurance trades, with no "Insurance -" on the front: the entity type beside the
             // picker already says Insurance. The VALUES keep the prefix — they are the codes engagements
             // are recorded against — and "Health" is deliberately not the "Health Care" above, which is
             // the trade a hospital is in. The two only ever meet in the option-set admin.
-            new ItemDefinition("insurance_health", "Health", 20),
-            new ItemDefinition("insurance_property_casualty", "Property and Casualty", 21),
-            new ItemDefinition("insurance_life", "Life", 22),
-            new ItemDefinition("insurance_other", "Other", 23),
-            new ItemDefinition("trade_associations", "Trade Associations", 24),
-            new ItemDefinition("charitable_organizations_foundations", "Charitable Organizations or Foundations", 25),
-            new ItemDefinition("other_not_for_profit", "Other Not-for-Profit", 26),
-            // RETIRED, not removed: a government client is filed as state, local or federal, and this
-            // unqualified value is only what a few were recorded under before that was settled. Hidden
-            // keeps those reading correctly; a firm that wants it back turns it on in Administration →
-            // Option Sets, and the picker offers it under Government.
-            new ItemDefinition("government", "Government", 27, IsActive: false),
+            new ItemDefinition("insurance_health", "Health", 20, MaconomyNumber: "29"),
+            new ItemDefinition("insurance_property_casualty", "Property and Casualty", 21, MaconomyNumber: "30"),
+            new ItemDefinition("insurance_life", "Life", 22, MaconomyNumber: "31"),
+            new ItemDefinition("insurance_other", "Other", 23, MaconomyNumber: "32"),
+            new ItemDefinition("trade_associations", "Trade Associations", 24, MaconomyNumber: "33"),
+            new ItemDefinition("charitable_organizations_foundations", "Charitable Organizations or Foundations", 25, MaconomyNumber: "34"),
+            new ItemDefinition("other_not_for_profit", "Other Not-for-Profit", 26, MaconomyNumber: "35"),
             new ItemDefinition("individual", "Individual", 28),
             new ItemDefinition("distribution", "Distribution", 29),
             // The one trade a Trust and Estate entity is in.
             new ItemDefinition("trust_estate", "Trust/Estate", 30),
         }),
-        new Definition(EntityType.Rems, "REMSMarketing_MarketingMethods.MarketingMethodId", "REMS Marketing Methods", OptionItemSortMode.Custom, new[]
+        // The headings the marketing methods are offered under on Engagement Setup. Marketing Methods
+        // depends on this list (Dependencies below); a method under no group is listed under "Other".
+        new Definition("REMS.MarketingGroup", "REMS Marketing Group", OptionItemSortMode.AlphabeticalAsc, new[]
+        {
+            new ItemDefinition("global", "Global", 1),
+            new ItemDefinition("geography", "Geography", 2),
+            new ItemDefinition("service_education", "Service / Education", 3),
+            new ItemDefinition("event", "Event", 4),
+        }),
+        new Definition("REMSMarketing_MarketingMethods.MarketingMethodId", "REMS Marketing Methods", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             // Global — not auto-suggested, not editable.
             new ItemDefinition("all", "All", 1, MarketingMetadata("Global", autoSuggested: false, editable: false)),
@@ -328,10 +340,13 @@ public static class DefaultOptionSets
         // Engagement department (WO-114). The code drives the conditional engagement detail: an "audit"
         // engagement carries an audit detail (signed CAF), a "tax" engagement a tax detail (fiscal year
         // end + calculated due dates + form checklist). Also the key for the department-to-director map.
-        new Definition(EntityType.Rems, "REMS.Department", "REMS Department", OptionItemSortMode.Custom, new[]
+        // The Maconomy number is the location a job under the department is created in (THF's location
+        // table, 7 Nov 2026). Audit, retired, carries none, so a job still filed under it keeps the
+        // template job's location.
+        new Definition("REMS.Department", "REMS Department", OptionItemSortMode.AlphabeticalAsc, new[]
         {
-            new ItemDefinition("cas", "CAS", 1),
-            new ItemDefinition("tax", "Tax", 2),
+            new ItemDefinition("cas", "CAS", 1, MaconomyNumber: "5"),
+            new ItemDefinition("tax", "Tax", 2, MaconomyNumber: "2"),
             // RETIRED, not removed. The firm does not place new engagements in Audit — Assurance below is
             // where attest work goes — but the code is branched on all over the setup (the signed CAF, the
             // government contract block, the approval prerequisites) and engagements are already filed
@@ -339,18 +354,18 @@ public static class DefaultOptionSets
             // new can be booked into it; deleting it would strand them. A firm that wants it back turns it
             // on in Administration → Option Sets.
             new ItemDefinition("audit", "Audit", 3, IsActive: false),
-            new ItemDefinition("gcs", "GCS", 4),
+            new ItemDefinition("gcs", "GCS", 4, MaconomyNumber: "4"),
             // Attest work priced for the engagement rather than for its first year. It is asked the signed
             // client-acceptance form the Audit department is, plus the client's fiscal year end and whether
             // administrative fees are charged — see RemsEngagementCodes.IsAssurance.
-            new ItemDefinition("assurance", "Assurance", 5),
+            new ItemDefinition("assurance", "Assurance", 5, MaconomyNumber: "1"),
             // The firm's own internal work, booked as an engagement so it routes through the same setup and
             // approval as client work. Carries no conditional detail: the audit and tax cards key off the
             // "audit" and "tax" codes specifically, so an Admin engagement asks for neither a signed CAF
             // nor a fiscal year end.
             // Retired for a while, as Audit above still is; offered again since September 2026, alongside
             // the Non-Chargeable Internal service line it pairs with.
-            new ItemDefinition("admin", "Admin", 6),
+            new ItemDefinition("admin", "Admin", 6, MaconomyNumber: "3"),
         // Everything conditional on the engagement setup keys off these codes by name — the signed CAF on
         // audit and assurance, the fiscal year end on tax, the purchase order on gcs, the billing pair on
         // cas, and the approval prerequisites behind all of them (RemsEngagementCodes). So the seeded six
@@ -358,7 +373,7 @@ public static class DefaultOptionSets
         }, LockSeededValues: true),
         // How a GCS engagement is staffed. The setup lists every level here with a bill rate beside it —
         // the engagement's rate card — and a level left blank is one the engagement is not staffed at.
-        new Definition(EntityType.Rems, "REMS.PersonnelLevel", "REMS Personnel Level", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.PersonnelLevel", "REMS Personnel Level", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("principal", "Principal", 1),
             new ItemDefinition("senior_consultant", "Senior Consultant", 2),
@@ -370,94 +385,88 @@ public static class DefaultOptionSets
         // The service actually being sold. A classification field: what the firm is engaged to do, for
         // reporting and for the billing/marketing view. Non-Chargeable Internal is the firm's own work,
         // booked as an engagement so the same setup and approval route covers it. The picker narrows the
-        // list to the lines the chosen department offers (REMS_SERVICE_LINES_BY_DEPARTMENT in
-        // useRemsMeta.js); a line a firm adds is offered under every department.
-        new Definition(EntityType.Rems, "REMS.ServiceLine", "REMS Service Line", OptionItemSortMode.Custom, new[]
+        // list to the lines the chosen department offers (Dependencies below).
+        // The service the firm is engaged for. Each value's Maconomy number is the template job the Maconomy
+        // job is created from (the user, 11 Nov 2026: the template follows the service line, the job type goes
+        // to specification 2). THF's template jobs on thmasd01 are numbered "ZZ" + the job's name (the probe of
+        // the same day); seeded from THF's department table where a line had one template. Assurance Services
+        // (six candidates) and Non-Chargeable Internal (sixteen) are left for the tenant to set.
+        new Definition("REMS.ServiceLine", "REMS Service Line", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("attest_services", "Assurance Services", 1),
-            new ItemDefinition("tax_compliance", "Tax Compliance", 2),
-            new ItemDefinition("client_accounting_services", "Client Accounting Services", 3),
-            new ItemDefinition("consulting", "Consulting", 4),
-            // RETIRED: on THF's department table Business Valuation and Peer Review are JOB TEMPLATES
-            // (under Tax › Consulting and Assurance › Assurance Services), not lines of their own, so no
-            // department offers them. Hidden rather than removed in case an engagement records one.
-            new ItemDefinition("business_valuation", "Business Valuation", 5, IsActive: false),
-            new ItemDefinition("it_services", "IT Services", 6),
-            new ItemDefinition("plan_administration", "Plan Administration", 7),
-            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 8),
-            new ItemDefinition("peer_review", "Peer Review", 9, IsActive: false),
+            new ItemDefinition("tax_compliance", "Tax Compliance", 2, MaconomyNumber: "ZZTax Compliance"),
+            new ItemDefinition("client_accounting_services", "Client Accounting Services", 3, MaconomyNumber: "ZZClient Accounting Services"),
+            new ItemDefinition("consulting", "Consulting", 4, MaconomyNumber: "ZZConsulting Engagement"),
+            // Business Valuation and Peer Review carry no template job yet: the tenant sets it under Option Sets.
+            new ItemDefinition("business_valuation", "Business Valuation", 5),
+            new ItemDefinition("it_services", "IT Services", 6, MaconomyNumber: "ZZInformation Technology Services"),
+            new ItemDefinition("plan_administration", "Employee Benefits Plan Administration", 7, MaconomyNumber: "ZZPension Administration and Tax Compliance"),
+            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 8, MaconomyNumber: "ZZMergers and Acquisitions"),
+            new ItemDefinition("peer_review", "Peer Review", 9),
             new ItemDefinition("soc", "SOC", 10, Description:
-                "System and Organization Controls reporting (SOC 1 / SOC 2)."),
-            new ItemDefinition("employee_benefits", "Employee Benefits", 11),
-            new ItemDefinition("estate_planning", "Estate Planning", 12),
-            new ItemDefinition("litigation_support", "Litigation Support", 13),
-            new ItemDefinition("forensic_accounting", "Forensic Accounting", 14),
+                "System and Organization Controls reporting (SOC 1 / SOC 2).", MaconomyNumber: "ZZSOC"),
+            new ItemDefinition("employee_benefits", "Employee Benefits Audit", 11, MaconomyNumber: "ZZPension Administration and Tax Compliance"),
+            new ItemDefinition("estate_planning", "Estate Planning", 12, MaconomyNumber: "ZZTax Compliance"),
+            new ItemDefinition("litigation_support", "Litigation Support", 13, MaconomyNumber: "ZZLitigation"),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 14, MaconomyNumber: "ZZForensic Accounting"),
             new ItemDefinition("non_chargeable_internal", "Non-Chargeable Internal", 15),
         }),
-        // The job template the engagement is set up from: the kind of work, finer than the service line
-        // and the department beside it. Classification only, so nothing branches on it. The list as THF
-        // supplied it, in its order; the picker narrows it to the templates THF's table pairs with the
-        // chosen department and service line (REMS_JOB_TEMPLATES_BY_SERVICE_LINE in useRemsMeta.js).
-        new Definition(EntityType.Rems, "REMS.JobTemplate", "REMS Job Template", OptionItemSortMode.Custom, new[]
+        // The kind of job the engagement is set up as, finer than the service line beside it: THF's list of
+        // 46 in its order, narrowed by the service line since 16 Nov 2026 (Dependencies below). Nothing on the
+        // server branches on a value. On the job card the value goes to
+        // specification 2 (MaconomyJobDataMapping.JobTypeField): its label, which is what Maconomy's job type
+        // list calls it, or the item's Maconomy number where a tenant sets one to say it differently. The
+        // template job is the Service Line's, not the job type's (the user, 11 Nov 2026). The tax-form codes
+        // are reused where a value is the same form. Replaced REMS.JobTemplate, which the AddRemsJobType
+        // migration retired.
+        new Definition("REMS.JobType", "REMS Job Type", OptionItemSortMode.AlphabeticalAsc, new[]
         {
-            new ItemDefinition("tax_compliance", "Tax Compliance", 1),
-            new ItemDefinition("consulting_engagement", "Consulting Engagement", 2),
-            new ItemDefinition("mergers_acquisitions", "Mergers and Acquisitions", 3),
-            new ItemDefinition("pension_administration_tax_compliance", "Pension Administration and Tax Compliance", 4),
-            new ItemDefinition("business_valuation", "Business Valuation", 5),
-            new ItemDefinition("agreed_upon_procedures", "Agreed Upon Procedures", 6),
-            new ItemDefinition("audit", "Audit", 7),
-            new ItemDefinition("examination", "Examination", 8),
-            new ItemDefinition("compilation", "Compilation", 9),
-            new ItemDefinition("review", "Review", 10),
-            new ItemDefinition("peer_review", "Peer Review", 11),
-            new ItemDefinition("information_technology_services", "Information Technology Services", 12),
-            new ItemDefinition("soc", "SOC", 13),
-            new ItemDefinition("litigation", "Litigation", 14),
-            new ItemDefinition("forensic_accounting", "Forensic Accounting", 15),
-            new ItemDefinition("governmental_consulting_services", "Governmental Consulting Services", 16),
-            new ItemDefinition("client_accounting_services", "Client Accounting Services", 17),
-        }),
-        // Engagement tax forms (WO-114): the checklist values referenced by foreign key from
-        // REMSEngagementTaxForm.TaxFormId on a tax engagement's tax detail.
-        //
-        // Ordered as a preparer reads a return shelf rather than alphabetically or by popularity: the
-        // 1040 family, then the 1041s, then the entity returns in form-number order, then the exempt and
-        // plan returns, and finally the four that are not a federal form at all. A checklist is scanned,
-        // not searched, and scanning it is far quicker when the numbers run in order.
-        //
-        // Every label is "form number — who files it", because the number alone is the part staff know
-        // and the gloss is the part that settles which of two similar numbers is meant — 1041 (Trust) and
-        // 1041 (Estate) are the same IRS form filed by two different kinds of client, and the whole
-        // reason they are two rows here is that THF tracks them apart.
-        new Definition(EntityType.Rems, "REMS.TaxForm", "REMS Tax Form", OptionItemSortMode.Custom, new[]
-        {
-            new ItemDefinition("1040", "1040 — Individual", 1),
-            new ItemDefinition("1040_es", "1040-ES — Estimated Tax", 2),
-            // One IRS form, two codes. A trust and a decedent's estate file the same 1041 but are
-            // different engagements with different deadlines and different people to chase, so the
-            // checklist says which — and the codes have to differ because each is its own row.
-            new ItemDefinition("1041_trust", "1041 — Trust", 3),
-            new ItemDefinition("1041_estate", "1041 — Estate", 4),
-            new ItemDefinition("1065", "1065 — Partnership", 5),
-            new ItemDefinition("1120", "1120 — C Corporation", 6),
-            new ItemDefinition("1120_pc", "1120-PC — Property & Casualty Insurance", 7),
-            new ItemDefinition("1120_pol", "1120-POL — Political Organization", 8),
-            new ItemDefinition("1120_s", "1120-S — S Corporation", 9),
-            new ItemDefinition("990", "990 — Tax-Exempt", 10),
-            new ItemDefinition("990_t", "990-T — Exempt Organization Business Income", 11),
-            new ItemDefinition("5500", "5500 — Employee Benefit Plan", 12),
-            // The last four are not federal income-tax forms. They are on the same checklist because
-            // they are the same question — what does this engagement actually file? — and a tax
-            // engagement that files a tangible-property return and a payroll return had nowhere to say
-            // so.
-            new ItemDefinition("tpp", "TPP — Tangible Personal Property", 13),
-            new ItemDefinition("payroll", "Payroll", 14),
-            // Deliberately last, and deliberately vague: "Other" is the row that keeps a return nobody
-            // listed from being left off the checklist altogether, and "States" covers whichever state
-            // returns this engagement files.
-            new ItemDefinition("other", "Other", 15),
-            new ItemDefinition("states", "States", 16),
+            new ItemDefinition("agreed_upon_procedures", "Agreed Upon Procedures", 1),
+            new ItemDefinition("audit", "Audit", 2),
+            new ItemDefinition("examination", "Examination", 3),
+            new ItemDefinition("compilation", "Compilation", 4),
+            new ItemDefinition("review", "Review", 5),
+            new ItemDefinition("soc", "SOC", 6),
+            new ItemDefinition("1040", "1040 - Individual", 7),
+            new ItemDefinition("1041_estate", "1041 - Estate", 8),
+            new ItemDefinition("1120_pc", "1120-PC - Property & Casualty Insurance", 9),
+            new ItemDefinition("990", "990 - Tax-Exempt", 10),
+            new ItemDefinition("1065", "1065 - Partnership", 11),
+            new ItemDefinition("1041_trust", "1041 - Trust", 12),
+            new ItemDefinition("1120", "1120 - C Corporation", 13),
+            new ItemDefinition("1120_s", "1120-S - S Corporation", 14),
+            new ItemDefinition("ebp_audit", "EBP Audit", 15),
+            new ItemDefinition("tax_other", "Tax Other", 16),
+            new ItemDefinition("706", "706 - Estate", 17),
+            new ItemDefinition("709", "709 - Gift", 18),
+            new ItemDefinition("8752", "8752 - Tax", 19),
+            new ItemDefinition("estate_planning", "Estate Planning", 20),
+            new ItemDefinition("consulting", "Consulting", 21),
+            new ItemDefinition("governmental_consulting_services", "Governmental Consulting Services", 22),
+            new ItemDefinition("plan_administration_and_5500", "EBP Administration and 5500", 23),
+            new ItemDefinition("client_accounting_services", "Client Accounting Services", 24),
+            new ItemDefinition("litigation_support", "Litigation Support", 25),
+            new ItemDefinition("forensic_accounting", "Forensic Accounting", 26),
+            new ItemDefinition("business_valuation", "Business Valuation", 27),
+            new ItemDefinition("it_services", "IT Services", 28),
+            new ItemDefinition("mergers_acquisitions", "Mergers & Acquisitions", 29),
+            new ItemDefinition("peer_review", "Peer Review", 30),
+            new ItemDefinition("nonchargeable_administrative", "Nonchargeable - Administrative", 31),
+            new ItemDefinition("nonchargeable_internal_firm_accounting", "NONCHARGEABLE - INTERNAL FIRM ACCOUNTING", 32),
+            new ItemDefinition("nonchargeable_leave_time", "Nonchargeable - Leave Time", 33),
+            new ItemDefinition("nonchargeable_personnel", "Nonchargeable - Personnel", 34),
+            new ItemDefinition("nonchargeable_internal_it", "NONCHARGEABLE - INTERNAL IT", 35),
+            new ItemDefinition("nonchargeable_recruiting", "Nonchargeable - Recruiting", 36),
+            new ItemDefinition("nonchargeable_education", "Nonchargeable - Education", 37),
+            new ItemDefinition("nonchargeable_professional", "Nonchargeable - Professional", 38),
+            new ItemDefinition("nonchargeable_marketing", "Nonchargeable - Marketing", 39),
+            new ItemDefinition("nonchargeable_chamber_of_commerce_conference", "Nonchargeable - Chamber of Commerce Conference", 40),
+            new ItemDefinition("nonchargeable_client_social", "Nonchargeable - Client Social", 41),
+            new ItemDefinition("nonchargeable_finrep", "Nonchargeable - FINREP", 42),
+            new ItemDefinition("nonchargeable_firm_forum", "Nonchargeable - Firm Forum", 43),
+            new ItemDefinition("nonchargeable_synergy", "Nonchargeable - Synergy", 44),
+            new ItemDefinition("nonchargeable_shareholder_meetings", "Nonchargeable - Shareholder Meetings", 45),
+            new ItemDefinition("nonchargeable_holiday_party", "Nonchargeable - Holiday Party", 46),
         }),
 
         // ---------------------------------------------------------------------------------------------
@@ -479,7 +488,7 @@ public static class DefaultOptionSets
         // Draft and Saved are STORED values that the dashboard never shows: both mean the client has not
         // been written to, so RemsWorkspaceMapper.FormState folds them into Not started. They stay on the
         // list because REMSForm.Status still holds them and they are what the send guard reads.
-        new Definition(EntityType.Rems, "REMS.FormStatus", "REMS Form Status", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.FormStatus", "REMS Form Status", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("NotStarted", "Not started", 1, Description:
                 "The intake form has not gone out to the client yet — whether or not staff have prepared it.",
@@ -503,7 +512,7 @@ public static class DefaultOptionSets
 
         // Whether the client's answers are in hand. Derived from the form status rather than stored, but
         // rendered as a value of its own on the request lists — so it is a list of its own.
-        new Definition(EntityType.Rems, "REMS.ClientSubmissionState", "REMS Client Submission", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.ClientSubmissionState", "REMS Client Submission", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("AwaitingCustomer", "Awaiting customer", 1, Description:
                 "The intake form is out with the client and they have not answered yet.",
@@ -515,7 +524,7 @@ public static class DefaultOptionSets
 
         // RemsApproverRole — what puts somebody on an engagement's approver list. The icon is part of the
         // value here: the approver list and the inbox are read down their left edge.
-        new Definition(EntityType.Rems, "REMS.ApproverRole", "REMS Approver Role", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.ApproverRole", "REMS Approver Role", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("Shareholder", "Shareholder", 1, Description:
                 "A holder of the Shareholder role — on every engagement's list by standing, and not removable.",
@@ -536,7 +545,7 @@ public static class DefaultOptionSets
 
         // RemsApprovalTaskStatus — ONE approver's decision, which is not the request's outcome. The
         // description on Approved says so, because that is the confusion this list exists to end.
-        new Definition(EntityType.Rems, "REMS.ApprovalStatus", "REMS Approval Decision", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.ApprovalStatus", "REMS Approval Decision", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("Pending", "Pending", 1, Description:
                 "Waiting on this approver's decision.",
@@ -558,7 +567,7 @@ public static class DefaultOptionSets
         // the enum does not have: a round is Pending from the moment it is sent until the last signature,
         // which cannot tell "nobody has looked at this" from "everybody but you has signed". The
         // application decides when to show it; its wording, colour and explanation live here like the rest.
-        new Definition(EntityType.Rems, "REMS.ApprovalRoundStatus", "REMS Approval Status", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.ApprovalRoundStatus", "REMS Approval Status", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("Pending", "Pending", 1, Description:
                 "Routed to the approvers. Nobody has signed yet.",
@@ -575,7 +584,7 @@ public static class DefaultOptionSets
         }, IsClosed: true),
 
         // RemsEngagementStatus — the engagement's own lifecycle, shown beside the request's.
-        new Definition(EntityType.Rems, "REMS.EngagementStatus", "REMS Engagement Status", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.EngagementStatus", "REMS Engagement Status", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("Draft", "Draft", 1, Description:
                 "Being set up. It has not been routed to the approvers.",
@@ -593,7 +602,7 @@ public static class DefaultOptionSets
 
         // RemsFormEmailEventType — what the provider reported about the client's intake email. These are
         // never synthesised: the log shows exactly what came back.
-        new Definition(EntityType.Rems, "REMS.EmailEvent", "REMS Email Event", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.EmailEvent", "REMS Email Event", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("Sent", "Sent", 1, Description:
                 "The intake form was emailed to the client.",
@@ -615,43 +624,191 @@ public static class DefaultOptionSets
         // REMS data model v2: the codes the client layer used to store as strings, now referenced by id from
         // Client_Address, Client_Contact and Client_Relationship. Existing tenants got these from the
         // rems-v2-migrate.sql script; tenants created afterwards get them here.
-        new Definition(EntityType.Rems, "REMS.AddressType", "REMS Address Type", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.AddressType", "REMS Address Type", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("physical", "Physical", 1),
             new ItemDefinition("mailing", "Mailing", 2),
             new ItemDefinition("billing", "Billing", 3),
         }, LockSeededValues: true),
-        new Definition(EntityType.Rems, "REMS.ContactRole", "REMS Contact Role", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.ContactRole", "REMS Contact Role", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("self", "Self", 1),
             new ItemDefinition("spouse", "Spouse", 2),
-            new ItemDefinition("primary_client_contact", "Primary Client Contact", 3),
-            new ItemDefinition("financial_contact", "Financial Contact", 4),
+            // The descriptions are the tooltip beside each role on the client's intake form.
+            new ItemDefinition("primary_client_contact", "Primary Client Contact", 3, Description:
+                "Who we speak to about this engagement — the main person on your side."),
+            new ItemDefinition("financial_contact", "Financial Contact", 4, Description:
+                "Who we speak to about your finances and reporting."),
             new ItemDefinition("billing_contact", "Billing Contact", 5),
-            new ItemDefinition("other_contact", "Other Contact", 6),
-            new ItemDefinition("finance_director", "Finance Director", 7),
-            new ItemDefinition("trust_estate_contact", "Trust and Estate Contact", 8),
+            new ItemDefinition("other_contact", "Other Contact", 6, Description:
+                "Anyone else you would like us to have on file."),
+            new ItemDefinition("finance_director", "Finance Director", 7, Description:
+                "The finance director for this entity."),
+            new ItemDefinition("trust_estate_contact", "Trust and Estate Contact", 8, Description:
+                "The trustee or personal representative who acts for the trust or estate."),
             new ItemDefinition("banker", "Banker", 9),
             new ItemDefinition("lawyer", "Lawyer", 10),
         }, LockSeededValues: true),
-        new Definition(EntityType.Rems, "REMS.RelationType", "REMS Relation Type", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.RelationType", "REMS Relation Type", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("spouse", "Spouse", 1),
             new ItemDefinition("child", "Child", 2),
             new ItemDefinition("other", "Other Individual", 3),
             new ItemDefinition("related_entity", "Related Entity", 4),
         }, LockSeededValues: true),
-        new Definition(EntityType.Rems, "REMS.FilingType", "REMS Filing Type", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.FilingType", "REMS Filing Type", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("joint", "Joint", 1),
             new ItemDefinition("individual", "Individual", 2),
         }, LockSeededValues: true),
-        new Definition(EntityType.Rems, "REMS.BillingPreference", "REMS Billing Preference", OptionItemSortMode.Custom, new[]
+        new Definition("REMS.BillingPreference", "REMS Billing Preference", OptionItemSortMode.AlphabeticalAsc, new[]
         {
             new ItemDefinition("primary", "Bill the primary client", 1),
             new ItemDefinition("separate", "Bill separately", 2),
         }, LockSeededValues: true),
+
+        // The two person lists every name and person form offers. A person's record holds the value as
+        // text, so the codes are the words already stored. Nothing branches on either.
+        new Definition("Person.Gender", "Gender", OptionItemSortMode.AlphabeticalAsc, new[]
+        {
+            new ItemDefinition("Male", "Male", 1),
+            new ItemDefinition("Female", "Female", 2),
+            new ItemDefinition("Other", "Other", 3),
+            new ItemDefinition("Prefer not to say", "Prefer not to say", 4),
+        }),
+        // Suggestions beside a name box that still takes free text; the description is the caption.
+        new Definition("Person.NameSuffix", "Name Suffix", OptionItemSortMode.AlphabeticalAsc, new[]
+        {
+            new ItemDefinition("Jr.", "Jr.", 1, Description: "Junior"),
+            new ItemDefinition("Sr.", "Sr.", 2, Description: "Senior"),
+            new ItemDefinition("II", "II", 3, Description: "The second"),
+            new ItemDefinition("III", "III", 4, Description: "The third"),
+            new ItemDefinition("IV", "IV", 5, Description: "The fourth"),
+        }),
     };
+
+    /// <summary>A list whose values are offered by the value picked on another: parent code → child codes.</summary>
+    public sealed record Dependency(
+        string ChildKey,
+        string ParentKey,
+        IReadOnlyDictionary<string, string[]> ChildrenByParent);
+
+    /// <summary>
+    /// THF's dependent dropdowns (16 Nov 2026), seeded with a new list and editable under Option Sets
+    /// afterwards. A child value named under no parent is offered under every one.
+    /// </summary>
+    public static IReadOnlyList<Dependency> Dependencies { get; } = new[]
+    {
+        new Dependency("REMS.Industry", "REMS.EntityType", new Dictionary<string, string[]>
+        {
+            ["individual"] = new[] { "individual" },
+            ["government"] = new[] { "state_government", "local_government", "federal_government" },
+            ["not_for_profit"] = new[]
+            {
+                "health_care", "educational_institutions", "trade_associations",
+                "charitable_organizations_foundations", "other_not_for_profit",
+            },
+            ["insurance"] = new[] { "insurance_health", "insurance_property_casualty", "insurance_life", "insurance_other" },
+            ["commercial"] = new[]
+            {
+                "affordable_housing", "agribusiness", "auto_dealers", "construction", "entertainment",
+                "financial_institutions_banking", "hospitality", "manufacturing", "professional_service_firms",
+                "real_estate", "retail", "health_care", "oil_gas_distribution", "wholesale", "technology",
+                "educational_institutions", "distribution",
+            },
+            ["trust_estate"] = new[] { "trust_estate" },
+        }),
+        new Dependency("REMS.ServiceLine", "REMS.Department", new Dictionary<string, string[]>
+        {
+            ["assurance"] = new[]
+            {
+                "attest_services", "consulting", "business_valuation", "it_services", "mergers_acquisitions",
+                "peer_review", "soc", "employee_benefits", "litigation_support", "forensic_accounting",
+            },
+            ["cas"] = new[]
+            {
+                "client_accounting_services", "consulting", "business_valuation", "it_services", "mergers_acquisitions",
+            },
+            ["tax"] = new[]
+            {
+                "tax_compliance", "consulting", "business_valuation", "it_services", "plan_administration",
+                "estate_planning", "litigation_support", "forensic_accounting", "mergers_acquisitions",
+            },
+            ["gcs"] = new[] { "consulting", "business_valuation", "it_services", "mergers_acquisitions" },
+            ["admin"] = new[] { "non_chargeable_internal" },
+        }),
+        new Dependency("REMS.JobType", "REMS.ServiceLine", new Dictionary<string, string[]>
+        {
+            ["attest_services"] = new[] { "agreed_upon_procedures", "audit", "examination", "compilation", "review" },
+            ["tax_compliance"] = new[]
+            {
+                "1040", "1041_estate", "1120_pc", "990", "1065", "1041_trust", "1120", "1120_s", "tax_other",
+                "706", "709", "8752",
+            },
+            ["client_accounting_services"] = new[] { "client_accounting_services" },
+            ["consulting"] = new[] { "consulting", "governmental_consulting_services" },
+            ["business_valuation"] = new[] { "business_valuation" },
+            ["it_services"] = new[] { "it_services" },
+            ["plan_administration"] = new[] { "plan_administration_and_5500" },
+            ["mergers_acquisitions"] = new[] { "mergers_acquisitions" },
+            ["peer_review"] = new[] { "peer_review" },
+            ["soc"] = new[] { "soc" },
+            ["employee_benefits"] = new[] { "ebp_audit" },
+            ["estate_planning"] = new[] { "estate_planning" },
+            ["litigation_support"] = new[] { "litigation_support" },
+            ["forensic_accounting"] = new[] { "forensic_accounting" },
+            ["non_chargeable_internal"] = new[]
+            {
+                "nonchargeable_administrative", "nonchargeable_internal_firm_accounting", "nonchargeable_leave_time",
+                "nonchargeable_personnel", "nonchargeable_internal_it", "nonchargeable_recruiting",
+                "nonchargeable_education", "nonchargeable_professional", "nonchargeable_marketing",
+                "nonchargeable_chamber_of_commerce_conference", "nonchargeable_client_social", "nonchargeable_finrep",
+                "nonchargeable_firm_forum", "nonchargeable_synergy", "nonchargeable_shareholder_meetings",
+                "nonchargeable_holiday_party",
+            },
+        }),
+        new Dependency("REMSMarketing_MarketingMethods.MarketingMethodId", "REMS.MarketingGroup", new Dictionary<string, string[]>
+        {
+            ["global"] = new[] { "all", "active_clients" },
+            ["geography"] = new[] { "tallahassee", "panama_city_bay_county", "lakeland_dade_city", "tampa" },
+            ["service_education"] = new[] { "tax", "audit_nfp", "audit_insurance", "gcs", "cas" },
+            ["event"] = new[] { "tax_event", "finrep_conference" },
+        }),
+    };
+
+    /// <summary>
+    /// Links the lists just created to their parents. Only a list made in this pass is touched, so a
+    /// dependency a tenant has since changed or cleared is never put back.
+    /// </summary>
+    public static async Task LinkDependenciesAsync(
+        IOptionSetRepository sets, Guid? tenantId, IReadOnlyCollection<OptionSet> created, CancellationToken cancellationToken)
+    {
+        foreach (var dependency in Dependencies)
+        {
+            var child = created.FirstOrDefault(s => s.Key == dependency.ChildKey);
+            if (child is null)
+            {
+                continue;
+            }
+
+            var parent = created.FirstOrDefault(s => s.Key == dependency.ParentKey)
+                ?? await sets.GetEffectiveSetAsync(tenantId, dependency.ParentKey, cancellationToken);
+            if (parent is null)
+            {
+                continue;
+            }
+
+            child.ParentSetId = parent.Id;
+            foreach (var (parentCode, childCodes) in dependency.ChildrenByParent)
+            {
+                var parentItem = parent.Items.FirstOrDefault(i => i.Value == parentCode);
+                foreach (var item in child.Items.Where(i => parentItem is not null && childCodes.Contains(i.Value)))
+                {
+                    item.Parents.Add(new OptionSetItemParent { OptionSetItemId = item.Id, ParentOptionSetItemId = parentItem!.Id });
+                }
+            }
+        }
+    }
 
     /// <summary>Builds the <c>MetadataJson</c> for a REMS marketing-method item: its group and behaviour flags.</summary>
     private static string MarketingMetadata(string group, bool autoSuggested, bool editable)

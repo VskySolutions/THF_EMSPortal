@@ -345,6 +345,12 @@ body {
   color: var(--q-primary);
 }
 
+/* A title on a coloured bar (drawer / dialog header) keeps the bar's text colour: a tenant's heading
+   colour is usually its primary, which would paint the title the same colour as the bar. */
+.text-white :is(h1, h2, h3, h4, h5, h6, .text-h1, .text-h2, .text-h3, .text-h4, .text-h5, .text-h6, .text-subtitle1) {
+  color: inherit;
+}
+
 .text-subtitle2 {
   font-size: 15px;
 }

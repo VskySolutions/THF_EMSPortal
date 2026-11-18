@@ -108,6 +108,7 @@ import { computed, reactive, ref, onBeforeUnmount } from "vue";
 import { LocalStorage } from "quasar";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
+import { useSiteName } from "composables/useSiteName";
 import { Permissions } from "composables/usePermissions";
 import { STICKY_NOTES_ENABLED } from "shared/features";
 
@@ -118,6 +119,7 @@ defineProps({
 
 const authStore = useAuthStore();
 const router = useRouter();
+const siteName = useSiteName();
 
 // Which group is showing its children beside the rail. One at a time — they would overlap otherwise.
 const flyoutKey = ref(null);
@@ -160,14 +162,14 @@ const sections = [
   {
     // REMS (Phase 15).
     key: "rems",
-    label: "REMS",
+    label: () => siteName.value,
     icon: "o_business_center",
     // Three lists, one per role, plus the shared Related Entities board.
     items: [
       // Open to everyone, like Approvals: the list shows the requests you raised or are named on, so a
       // user with no REMS work sees an empty list rather than a menu that hides the page from them.
       { label: "My Requests", icon: "o_space_dashboard", to: "/rems/partner", permissions: null },
-      { label: "EMS Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage] },
+      { label: "COP Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage] },
       // Open to everyone too, and for a different reason from the two above: this list is not scoped to the
       // caller's own work at all.
       { label: "Related Entities", icon: "o_account_tree", to: "/rems/related-entities", permissions: null },
@@ -178,6 +180,7 @@ const sections = [
     key: "administration",
     label: "Administration",
     icon: "o_corporate_fare",
+    startCollapsed: true,
     items: [
       { label: "Tenants", icon: "o_apartment", to: "/tenants", permissions: [Permissions.TenantsWrite] },
       { label: "Person", icon: "o_badge", to: "/persons", permissions: [Permissions.PersonsRead] },
@@ -187,6 +190,7 @@ const sections = [
     key: "access-management",
     label: "Access Management",
     icon: "o_lock",
+    startCollapsed: true,
     items: [
       { label: "Permission Groups", icon: "o_workspaces", to: "/permission-groups", permissions: [Permissions.GroupsManage] },
       { label: "Roles", icon: "o_admin_panel_settings", to: "/roles", permissions: [Permissions.RolesWrite] },
@@ -203,6 +207,7 @@ const sections = [
     items: [
       { label: "Email Accounts", icon: "o_mail", to: "/smtp-accounts", permissions: [Permissions.EmailManage] },
       { label: "Email Templates", icon: "o_drafts", to: "/email-templates", permissions: [Permissions.EmailManage] },
+      { label: "Email Log", icon: "o_mark_email_read", to: "/email-log", permissions: [Permissions.EmailManage] },
       { label: "Branding", icon: "o_palette", to: "/settings/branding", permissions: [Permissions.BrandingManage] },
       { label: "Maconomy", icon: "o_hub", to: "/settings/maconomy", permissions: [Permissions.IntegrationsMaconomyManage] },
       // Gated on MANAGE, not read: Partner and REMS Admin hold optionSets.read so their dropdowns resolve,
@@ -240,13 +245,18 @@ const canSee = (permissions) => !permissions || authStore.hasAnyPermission(permi
 
 const visibleSections = computed(() =>
   sections
-    .map((section) => ({ ...section, items: section.items.filter((item) => !item.hidden && canSee(item.permissions)) }))
+    .map((section) => ({
+      ...section,
+      label: typeof section.label === "function" ? section.label() : section.label,
+      items: section.items.filter((item) => !item.hidden && canSee(item.permissions))
+    }))
     .filter((section) => section.items.length));
 
 // Per-group collapse state, persisted to LocalStorage so the user's expand/collapse choices survive a
 // page refresh. The stored object holds the groups the user has set by hand ({ [sectionKey]: true =
-// collapsed, false = expanded }); a group not in it follows its own default. Tenant Settings and
-// Account start collapsed, so the drawer opens on the work rather than on the housekeeping.
+// collapsed, false = expanded }); a group not in it follows its own default. Administration, Access
+// Management, Tenant Settings and Account start collapsed (user, 31 Oct 2026), so the drawer opens on
+// the work rather than on the housekeeping.
 const STORAGE_KEY = "appMenuCollapsed";
 const collapsed = reactive(LocalStorage.getItem(STORAGE_KEY) || {});
 const isOpen = (section) =>

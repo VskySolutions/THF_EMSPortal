@@ -49,7 +49,7 @@
         <q-separator />
         <q-card-section>
           <app-select
-            v-model="selectedToAdd" :options="candidateOptions" label="Users" multiple
+            v-model="selectedToAdd" user-cards :options="candidateOptions" label="Users" multiple
             :loading="loadingCandidates"
             info="Everyone in this tenant who does not hold the role yet. Somebody with no role here at all gets their first one on the Users page."
           />

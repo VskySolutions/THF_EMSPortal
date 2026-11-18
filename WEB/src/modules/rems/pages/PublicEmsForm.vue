@@ -35,7 +35,7 @@
         <q-icon name="o_check_circle" size="56px" color="positive" />
         <div class="text-h5 q-mt-md">Thank you{{ thankYouName ? `, ${thankYouName}` : "" }}!</div>
         <div class="text-body1 text-grey-8 q-mt-sm" style="max-width: 480px;">
-          Your EMS onboarding form has been submitted successfully. Our team has been notified and will be in
+          Your {{ formTitle }} has been submitted successfully. Our team has been notified and will be in
           touch with you shortly.
         </div>
         <div class="text-caption text-grey-6 q-mt-md">You can safely close this window.</div>
@@ -48,7 +48,7 @@
       <!-- The entity type is NOT shown. -->
       <div class="pef-head">
         <div class="row items-center q-gutter-sm">
-          <div class="text-h5 text-weight-bold col">EMS Onboarding Form</div>
+          <div class="text-h5 text-weight-bold col">{{ formTitle }}</div>
         </div>
         <div class="text-body2 text-grey-7 q-mt-xs">
           Please review and complete the details below. Your progress saves automatically as you go.
@@ -137,29 +137,42 @@
 </template>
 
 <script setup>
-// Public, anonymous REMS client EMS form (WO-116, Part B).
+// Public, anonymous REMS client COP form (WO-116, Part B).
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { debounce } from "quasar";
 import { remsPublicApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { useNotify } from "composables/useNotify";
 import { useConfirm } from "composables/useConfirm";
+import { useBrandingStore } from "stores/branding";
 import {
   blankIntakePayload, buildIntakePayload, intakeClientName, intakeIssues, parseIntakeFieldErrors,
   seedIntakePayload
 } from "modules/rems/useRemsIntakeForm";
 
+import { fillRemsOptions } from "modules/rems/useRemsOptionCatalog";
+import { setNameSuffixes } from "composables/useNameSuffixes";
 import ClientIntakeFields from "modules/rems/components/ClientIntakeFields.vue";
 import RemsReviewSummary from "modules/rems/components/RemsReviewSummary.vue";
 
 const route = useRoute();
 const notify = useNotify();
 const { confirm } = useConfirm();
+const branding = useBrandingStore();
 const inviteCode = route.params.inviteCode;
+
+// The form is named after the site that sent it: "<site title> Form". The route owns the wording, so
+// the tab and this heading cannot drift apart.
+const formTitle = computed(() => route.meta.title(branding.appName));
 
 // The referral-source list, as the SERVER sends it with the form — the tenant's own wording, in their own
 // order, with the descriptions that become each option's caption.
 const referralSources = ref([]);
+
+// No session here, so the suffix boxes must never ask for their list: it is handed over with the form.
+setNameSuffixes([]);
+const nameSuffixesIn = (lists) =>
+  Object.entries(lists || {}).find(([key]) => key.toLowerCase() === "person.namesuffix")?.[1];
 
 // ---- Screen state ----
 const loading = ref(true);
@@ -247,7 +260,9 @@ async function load () {
   loading.value = true;
   loadFailed.value = false;
   try {
-    const res = await remsPublicApi.load(inviteCode);
+    // The site's branding is waited for with the form, so the title is never drawn under a stand-in
+    // name. It never rejects, and it is the same request the layout makes.
+    const [res] = await Promise.all([remsPublicApi.load(inviteCode), branding.loadForInvite(inviteCode)]);
     state.value = res?.state || "Invalid";
     if (res?.state === "Submitted") {
       thankYouName.value = res.clientName || "";
@@ -256,6 +271,9 @@ async function load () {
       // The tenant's own REMS.ReferralSource list, resolved server-side because this page has no
       // session to resolve it with. Absent (an emptied or missing list) leaves the built-in copy.
       if (res.referralSources?.length) referralSources.value = res.referralSources;
+      // The other option lists the form asks from, handed over for the same reason.
+      fillRemsOptions(res.optionLists);
+      setNameSuffixes(nameSuffixesIn(res.optionLists));
       seed(res.prefill, res.draftPayload);
     }
   } catch {

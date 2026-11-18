@@ -23,6 +23,8 @@ public sealed class CreateUserRequest
     /// active SMTP account).
     /// </summary>
     public bool SendInvitation { get; set; }
+    /// <summary>Optional employee number in Maconomy.</summary>
+    public string? MaconomyNumber { get; set; }
 }
 
 public sealed class UpdateUserRequest
@@ -34,6 +36,8 @@ public sealed class UpdateUserRequest
     public string? PhoneNumber { get; set; }
     public string? DisplayName { get; set; }
     public string? Email { get; set; }
+    /// <summary>Their employee number in Maconomy; "" clears it, omitted leaves it alone.</summary>
+    public string? MaconomyNumber { get; set; }
 }
 
 public sealed class UpdateProfileRequest
@@ -97,6 +101,9 @@ public sealed class SetUserDepartmentRequest
     /// <summary>True to make this user the department's head.</summary>
     public bool IsHead { get; set; }
 }
+
+/// <summary>What a user dropdown shows about one user on hover, in the caller's tenant.</summary>
+public sealed record UserCardDto(Guid Id, string FullName, string Email, string? Phone, string? Department, IReadOnlyList<string> Roles, string? MaconomyNumber);
 
 /// <summary>One selectable department for the picker.</summary>
 public sealed record DepartmentOptionDto(string Value, string Label);
@@ -173,4 +180,5 @@ public sealed record UserDetail(
     bool IsDepartmentHead,
     // The profile picture from the person's own record, or null — in which case the UI shows initials.
     string? ProfileMediaUrl,
+    string? MaconomyNumber,
     RecordAudit Audit);

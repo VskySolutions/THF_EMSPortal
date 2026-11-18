@@ -14,7 +14,12 @@
       @filters="filterOpen = true"
       @add="openCreate"
       @back="$router.back()"
-    />
+    >
+      <template #actions>
+        <q-btn outline no-caps color="primary" icon="o_history" label="Import History" :to="{ name: 'user_imports' }" />
+        <q-btn v-if="canCreate" outline no-caps color="primary" icon="o_upload_file" label="Import" @click="importOpen = true" />
+      </template>
+    </app-list-header>
 
     <app-filter-drawer v-model="filterOpen" :chips="filterChips" @remove="removeFilter" @clear="clearFilters">
       <app-column-filters v-model="filters" :columns="filterableColumns" />
@@ -93,6 +98,8 @@
     <!-- Create user (promote an existing Person to a login account). -->
     <user-create-drawer v-model="formOpen" :person-id="presetPersonId" @created="load" />
 
+    <user-import-dialog v-model="importOpen" @imported="load" />
+
     <temp-password-dialog v-model="tempPwOpen" :password="tempPassword" />
   </q-page>
 </template>
@@ -116,6 +123,7 @@ import AppFilterDrawer from "components/common/AppFilterDrawer.vue";
 import AppColumnFilters from "components/common/AppColumnFilters.vue";
 import AppListHeader from "components/common/AppListHeader.vue";
 import UserCreateDrawer from "components/user/UserCreateDrawer.vue";
+import UserImportDialog from "components/user/UserImportDialog.vue";
 import TempPasswordDialog from "components/temp_password_dialog.vue";
 
 const route = useRoute();
@@ -173,6 +181,7 @@ watch([search, filters], reload, { deep: true });
 // page only says WHEN to open it and, for the deep-link below, about whom.
 const formOpen = ref(false);
 const presetPersonId = ref(null);
+const importOpen = ref(false);
 
 const openCreate = (personId = null) => {
   presetPersonId.value = personId;

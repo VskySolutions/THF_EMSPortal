@@ -24,18 +24,27 @@ const writeCache = (value) => {
   }
 };
 
+// What the cache holds: the look, and the name it is worn under.
+const cacheable = (store) => ({ tenantName: store.tenantName, theme: store.theme, assets: store.assets });
+
+// The invite whose branding has been asked for, and the request itself — see loadForInvite.
+let inviteLoad = null;
+
 // BrandingStore: the branding of the tenant the user is working in, and the page wearing it.
 export const useBrandingStore = defineStore("branding", {
   state: () => ({
     theme: {},
     assets: {},
+    // The tenant's own name: what the application goes by wherever the branding sets no name of its own.
+    tenantName: null,
     // True while the editor is trying a draft on the whole page; the state above is not the draft.
     previewing: false
   }),
 
   getters: {
     resolved: (state) => resolveTheme(state.theme),
-    appName () { return this.resolved.identity.applicationName; },
+    // The name the branding sets, else the tenant's own name, else the product's.
+    appName () { return this.theme?.identity?.applicationName || this.tenantName || this.resolved.identity.applicationName; },
     tagline () { return this.resolved.identity.tagline; },
     footerText () { return this.resolved.identity.footerText; },
     supportEmail () { return this.resolved.identity.supportEmail; },
@@ -54,9 +63,11 @@ export const useBrandingStore = defineStore("branding", {
     set (branding, { cache = true } = {}) {
       this.theme = branding?.theme || {};
       this.assets = branding?.assets || {};
+      // A response that says nothing about the tenant (the editor's image uploads) leaves the name as it is.
+      if (branding && "tenantName" in branding) this.tenantName = branding.tenantName || null;
       this.previewing = false;
       applyBranding(this);
-      if (cache) writeCache({ theme: this.theme, assets: this.assets });
+      if (cache) writeCache(cacheable(this));
     },
 
     /** What this browser wore last, before the API has been asked. */
@@ -67,7 +78,7 @@ export const useBrandingStore = defineStore("branding", {
 
     /** Sign-out wipes localStorage; the sign-in screen that follows should still look like the firm's. */
     keepCache () {
-      writeCache({ theme: this.theme, assets: this.assets });
+      writeCache(cacheable(this));
     },
 
     /** The signed-in user's tenant (or, for a Super Admin, the tenant they are viewing). Never rejects. */
@@ -88,12 +99,17 @@ export const useBrandingStore = defineStore("branding", {
 
     /**
      * The public client form. Not cached: a member of staff opening a client's link should not come
-     * back to find their own sign-in screen rebranded by it.
+     * back to find their own sign-in screen rebranded by it. One request per invite however many ask:
+     * the layout wears the brand and the form waits on it, because the form is named after the site.
      */
-    async loadForInvite (inviteCode) {
-      try {
-        this.set(await brandingApi.getForInvite(inviteCode), { cache: false });
-      } catch { /* stays as it is */ }
+    loadForInvite (inviteCode) {
+      if (inviteLoad?.inviteCode !== inviteCode) {
+        const done = brandingApi.getForInvite(inviteCode)
+          .then((branding) => this.set(branding, { cache: false }))
+          .catch(() => { /* stays as it is */ });
+        inviteLoad = { inviteCode, done };
+      }
+      return inviteLoad.done;
     },
 
     /** Try a draft on the whole page without adopting it. */

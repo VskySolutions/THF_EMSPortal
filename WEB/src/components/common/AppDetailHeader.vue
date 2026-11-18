@@ -3,7 +3,14 @@
     <!-- Crumbs on the left and the actions on the right — on one line where there is width for it, and on
          two once there is not. -->
     <q-card-section class="app-detail-header__bar q-py-sm">
-      <app-breadcrumbs :items="items" no-margin class="app-detail-header__crumbs" />
+      <!-- The record's name and, at the end of it, where it stands: what a page puts in the `status` slot
+           sits after the last crumb, so the trail reads "… › REMS-0042 · Approved". -->
+      <div class="app-detail-header__lead">
+        <app-breadcrumbs :items="items" no-margin class="app-detail-header__crumbs" />
+        <div v-if="$slots.status" class="app-detail-header__status">
+          <slot name="status" />
+        </div>
+      </div>
       <!-- The page's own actions and Back travel as one group, so they wrap onto a second line together and
            stay right-aligned there rather than Back dropping away from the buttons it belongs with. -->
       <div class="app-detail-header__actions">
@@ -16,7 +23,8 @@
 
 <script setup>
 // Standard header for internal view/manage (detail) pages: breadcrumbs on the left, a Back button on the
-// right (plus an optional `actions` slot for status badges/controls).
+// right, an `actions` slot for the page's own buttons beside Back, and a `status` slot for the pills that
+// say where the record stands, which sit at the end of the breadcrumb trail.
 import { useRouter } from "vue-router";
 import AppBreadcrumbs from "components/common/AppBreadcrumbs.vue";
 
@@ -44,23 +52,37 @@ const goBack = () => {
 /* gap rather than margin utilities on the children: a wrapped second line then sits the same distance
    from the first as the buttons do from each other. */
 .app-detail-header__bar {
+  /* Two sizes, because this bar holds two KINDS of thing: things to press and things to read. Both are
+     inherited, so a page putting something of its own in either slot sizes it off the same numbers
+     rather than guessing at them. */
+  --dh-action-height: 36px;
+  --dh-status-height: 24px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 12px;
 }
-/* min-width:0 lets a long trail of crumbs shrink and ellipsize instead of forcing the actions onto a
-   line of their own while there is still room beside them. */
-.app-detail-header__crumbs {
+/* The crumbs and the status after them, as one group taking the width the actions leave. */
+.app-detail-header__lead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   flex: 1 1 auto;
   min-width: 0;
 }
+/* min-width:0 lets a long trail of crumbs shrink and ellipsize instead of forcing the actions onto a
+   line of their own while there is still room beside them. */
+.app-detail-header__crumbs {
+  min-width: 0;
+}
+.app-detail-header__status {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .app-detail-header__actions {
-  /* Two sizes, because this row holds two KINDS of thing: things to press and things to read. Both are
-     inherited, so a page putting something of its own in the slot sizes it off the same numbers rather
-     than guessing at them. */
-  --dh-action-height: 36px;
-  --dh-status-height: 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -89,6 +111,8 @@ const goBack = () => {
    caption beside the buttons rather than another of them, on the same centre line as them.
    A floating badge is exempt: that one is a counter pinned to the corner of a button, not a status
    standing beside it. */
+.app-detail-header__status :deep(.q-chip),
+.app-detail-header__status :deep(.q-badge:not(.q-badge--floating)),
 .app-detail-header__actions :deep(.q-chip),
 .app-detail-header__actions :deep(.q-badge:not(.q-badge--floating)) {
   display: inline-flex;

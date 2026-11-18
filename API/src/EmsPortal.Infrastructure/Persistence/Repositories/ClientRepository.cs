@@ -158,13 +158,12 @@ internal sealed class ClientRepository : IClientRepository
             Stale: Of(RemsMaconomyCustomerSyncStatus.Syncing, stale: true));
     }
 
-    // A client an approved brand-new-client request made postable, with no Maconomy number and nothing recorded yet.
+    // A client an approved request (of any type) made postable, with no Maconomy number and nothing recorded yet.
     private IQueryable<Client> ApprovedUnrecorded(Guid tenantId)
         => InTenant(tenantId)
             .Where(c => c.MaconomyCustomerNumber == null
                 && c.MaconomySyncStatus == RemsMaconomyCustomerSyncStatus.NotSynced
                 && _dbContext.RemsRequests.IgnoreQueryFilters().Any(r => r.ClientId == c.Id && !r.Deleted
-                    && r.Type != null && r.Type.Value == RemsRequestTypes.BrandNewClient
                     && r.Status != null && r.Status.Value == RemsRequestStatuses.Approved));
 
     public async Task<IReadOnlyList<Client>> ListApprovedUnrecordedAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -175,9 +174,7 @@ internal sealed class ClientRepository : IClientRepository
 
     // Includes must sit on the query's root, so start from the client and reach the request through its navigation.
     public Task<Client?> GetSyncSubjectAsync(Guid remsId, Guid tenantId, CancellationToken cancellationToken = default)
-        => _dbContext.Clients.IgnoreQueryFilters()
-            .Include(c => c.Person)
-            .Include(c => c.EntityType)
-            .Include(c => c.Industry)
+        // The whole client: its addresses go on the customer card, its contacts and individuals under the contact company.
+        => _dbContext.Clients.IgnoreQueryFilters().FullGraph()
             .FirstOrDefaultAsync(c => c.Requests.Any(r => r.Id == remsId && r.TenantId == tenantId && !r.Deleted), cancellationToken);
 }

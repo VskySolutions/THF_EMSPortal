@@ -36,5 +36,5 @@ public sealed record BrandingResponse(
     string? UpdatedByName,
     DateTime? UpdatedOnUtc);
 
-/// <summary>What an anonymous screen may know: enough to draw itself, and nothing about who set it.</summary>
-public sealed record PublicBrandingResponse(BrandingTheme Theme, BrandingAssetsResponse Assets);
+/// <summary>What an anonymous screen may know: the firm's name and enough to draw itself, nothing about who set it.</summary>
+public sealed record PublicBrandingResponse(string? TenantName, BrandingTheme Theme, BrandingAssetsResponse Assets);

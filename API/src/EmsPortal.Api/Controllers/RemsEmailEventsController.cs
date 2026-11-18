@@ -16,7 +16,7 @@ using EmsPortal.Api.RateLimiting;
 namespace EmsPortal.Api.Controllers;
 
 /// <summary>
-/// Ingestion endpoint for provider-reported EMS email delivery events (WO-121): the delivered / opened
+/// Ingestion endpoint for provider-reported COP email delivery events (WO-121): the delivered / opened
 /// / failed / sent callbacks a mail-delivery provider posts back for a REMS form-link email.
 /// </summary>
 [ApiController]
