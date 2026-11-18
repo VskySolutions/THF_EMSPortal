@@ -90,6 +90,24 @@
       </q-th>
     </template>
 
+    <!-- An email column gets the copy button, unless the page draws that cell itself. -->
+    <template v-for="slotName in emailCellSlots" #[slotName]="cellProps" :key="`email-${slotName}`">
+      <q-td :props="cellProps"><app-email :email="String(cellProps.value ?? '')" /></q-td>
+    </template>
+
+    <!-- A column that names a user (`userId: (row) => id`) says who they are on hover. -->
+    <template v-for="c in userCells" #[c.slot]="cellProps" :key="`user-${c.slot}`">
+      <q-td :props="cellProps">
+        <span>
+          {{ cellProps.value }}
+          <app-user-card-tooltip
+            v-if="c.userId(cellProps.row)" :user-id="c.userId(cellProps.row)"
+            anchor="bottom middle" self="top middle"
+          />
+        </span>
+      </q-td>
+    </template>
+
     <!-- Forward all parent-provided body slots (e.g. body-cell-xxx) to QTable. -->
     <template v-for="(_, name) in forwardedSlots" #[name]="slotProps" :key="name">
       <slot :name="name" v-bind="slotProps" />
@@ -100,6 +118,8 @@
 <script setup>
 import { computed, ref, watch, useSlots, toRef, onMounted, onBeforeUnmount } from "vue";
 import { usePreferences } from "composables/usePreferences";
+import AppEmail from "components/common/AppEmail.vue";
+import AppUserCardTooltip from "components/common/AppUserCardTooltip.vue";
 import useColumnResize from "composables/dataTable/useColumnResize.js";
 import useColumnOrder from "composables/dataTable/useColumnOrder.js";
 
@@ -321,6 +341,15 @@ const slots = useSlots();
 const reserved = ["top", "no-data", "actions", "bulk-actions", "header-cell"];
 const forwardedSlots = computed(() =>
   Object.fromEntries(Object.entries(slots).filter(([name]) => !reserved.includes(name))));
+
+const userCells = computed(() => props.columns
+  .filter((c) => typeof c.userId === "function" && !slots[`body-cell-${c.name}`])
+  .map((c) => ({ slot: `body-cell-${c.name}`, userId: c.userId })));
+
+const emailCellSlots = computed(() => props.columns
+  .filter((c) => /email$/i.test(c.name))
+  .map((c) => `body-cell-${c.name}`)
+  .filter((slotName) => !slots[slotName]));
 </script>
 
 <style scoped>

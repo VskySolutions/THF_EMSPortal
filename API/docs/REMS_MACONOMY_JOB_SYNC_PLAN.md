@@ -643,6 +643,11 @@ answers "A row parameter is required on record initialization" to `?row=end`, `?
 **So** the sync updates the template's FEE line and never adds one. When the budget has no Outlay line on
 task FEE the attempt fails with a message saying so.
 
+**Since 17 Nov 2026 (user: "add the line itself when it is missing")** a budget with no Outlay line on
+task FEE gets one, in one step: POST `…/panes/table` with `{"row":"end","data":{line type, task,
+quantity 1, price}}` and no init before it (after an init Maconomy answers "A row parameter is required on
+record initialization"). Proven on thmasd01, 17 Nov 2026: job 10119, whose budget was empty, took the line.
+
 **Flow.** After the job create is recorded, `REMS.IsMaconomyJobBudgetSyncPending` is set when there is an
 estimate, and the line is written. A failure leaves the job number in place, marks the job sync Failed
 with "Job N is in Maconomy, but the First-Year Fee Estimate could not be put on its budget: …", and the

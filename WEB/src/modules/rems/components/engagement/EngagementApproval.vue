@@ -45,7 +45,7 @@
       <!-- Extra approvers only: the automatic ones already route and are shown in the list below. -->
       <div v-if="canPick" class="q-mb-md">
         <app-select
-          v-model="picked" :options="approverOptions" label="Add approvers" multiple use-input
+          v-model="picked" user-cards :options="approverOptions" label="Add approvers" multiple use-input
           :loading="loadingOptions || savingPicks"
           info="Lists every user in this tenant with the role they hold here: an engagement can need a signature from anyone. They are ADDED to the ones below — the shareholders, the Department Director, the CSE and the commission recipients — who approve regardless and cannot be removed."
           @update:model-value="savePicks"

@@ -51,7 +51,7 @@
         <q-separator />
         <q-card-section class="column q-gutter-md">
           <app-select
-            v-model="form.delegateUserId" :options="userOptions" label="Delegate" required
+            v-model="form.delegateUserId" user-cards :options="userOptions" label="Delegate" required
             :readonly="!!form.id" :clearable="false"
           />
           <div>

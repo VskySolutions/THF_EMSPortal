@@ -925,10 +925,11 @@ const canManage = computed(() =>
 // Submit for review wants what Submit to Client wants, less the email the form needs — and the client's
 // intake on file, which the server alone knows.
 const submitForReviewBlockedReason = computed(() => {
-  if (request.value?.submitForReviewBlockedReason) return request.value.submitForReviewBlockedReason;
+  // First: the server's reason is about the client it last saved, who may not be the one on screen.
   if (saveBlocked.value) {
     return `Not submitted while a change is unsaved — ${(saveMessage.value || "see the save status above").replace(/\.$/, "")}.`;
   }
+  if (request.value?.submitForReviewBlockedReason) return request.value.submitForReviewBlockedReason;
   if (!setupForm.cseUserId) return "Choose a CSE first — it is under Client Information.";
   if (!setupForm.entityType) return "Choose an entity type under Client Information.";
   if (!setupForm.industry) return "Choose an industry under Client Information.";

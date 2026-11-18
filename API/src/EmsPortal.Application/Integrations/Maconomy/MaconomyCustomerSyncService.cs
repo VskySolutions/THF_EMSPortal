@@ -207,7 +207,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
 
     private DateTime StaleBefore() => DateTime.UtcNow.AddMinutes(-Math.Max(1, _options.CustomerSyncStaleMinutes));
 
-    // The latest approved brand-new-client request for the client: where the activity is logged.
+    // Where the activity is logged: the client's approved Brand New Client request, else any approved one.
     private async Task<RemsRequest?> SubjectRequestAsync(Client client, CancellationToken cancellationToken)
     {
         if (!_tenant.IsResolved)
@@ -218,6 +218,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         return requests.FirstOrDefault(r =>
                 string.Equals(r.Type?.Value, RemsRequestTypes.BrandNewClient, StringComparison.Ordinal)
                 && string.Equals(r.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal))
+            ?? requests.FirstOrDefault(r => string.Equals(r.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal))
             ?? requests.FirstOrDefault();
     }
 
@@ -435,12 +436,10 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         }
     }
 
+    // Whatever the request's type: an Existing Client request can be the first one approved for a client
+    // whose own Brand New Client request never was (user, 18 Nov 2026).
     private static string? WhyNotPosted(RemsRequest request, Client client, bool requireApproved)
     {
-        if (!string.Equals(request.Type?.Value, RemsRequestTypes.BrandNewClient, StringComparison.Ordinal))
-        {
-            return "Only a Brand New Client request posts its client to Maconomy.";
-        }
         if (requireApproved && !string.Equals(request.Status?.Value, RemsRequestStatuses.Approved, StringComparison.Ordinal))
         {
             return "The request is not approved yet.";

@@ -412,12 +412,11 @@ internal sealed class MaconomyGateway : IMaconomyGateway
         }
     }
 
-    public async Task<IReadOnlyDictionary<string, string?>?> SetTableRowAsync(
+    public async Task<IReadOnlyDictionary<string, string?>> SetTableRowAsync(
         MaconomyEndpoint endpoint, string reconnectToken, MaconomyTableRowSet set, CancellationToken cancellationToken = default)
     {
         // The card and its table in one instance: load by key, then save the matching row in place
-        // (.../panes/table/{row}). Null, nothing written, when no row matches: adding a row to a
-        // line-numbered table wants a row parameter, and thmasd01 took no form of it (13 Nov 2026).
+        // (.../panes/table/{row}), or add it at the end when none matches (user, 17 Nov 2026).
         var instancesUrl = InstancesUrl(endpoint, set.Container);
         string? instanceId = null;
         try
@@ -451,7 +450,7 @@ internal sealed class MaconomyGateway : IMaconomyGateway
             }
             if (index < 0)
             {
-                return null;
+                return await AddTableRowAtEndAsync(reconnectToken, instanceUrl, set, concurrency, cancellationToken);
             }
             var (saved, _) = await PostContainersAsync(
                 reconnectToken, $"{instanceUrl}/data/panes/table/{index}", new { data = Typed(set.Values, set.NumberFields) }, concurrency,
@@ -465,6 +464,26 @@ internal sealed class MaconomyGateway : IMaconomyGateway
         finally
         {
             await ReleaseAsync(reconnectToken, instancesUrl, instanceId, cancellationToken);
+        }
+    }
+
+    // A table with line number control takes the new row's position in the BODY of the one-step create
+    // ({"row":"end","data":…}; live on thmasd01, 17 Nov 2026). An init first makes Maconomy refuse it.
+    private async Task<IReadOnlyDictionary<string, string?>> AddTableRowAtEndAsync(
+        string reconnectToken, string instanceUrl, MaconomyTableRowSet set, string? concurrency, CancellationToken cancellationToken)
+    {
+        var values = new Dictionary<string, string?>(set.Match, StringComparer.OrdinalIgnoreCase);
+        foreach (var (field, value) in set.Values)
+        {
+            values[field] = value;
+        }
+        var data = Typed(values, set.NumberFields);
+        var (made, _) = await PostContainersAsync(
+            reconnectToken, $"{instanceUrl}/data/panes/table", new { row = "end", data }, concurrency, $"{set.Container} row", cancellationToken);
+        using (made)
+        {
+            var rows = PaneRecords(made.RootElement, "table");
+            return rows.LastOrDefault(r => set.Match.All(m => SameText(r.GetValueOrDefault(m.Key), m.Value))) ?? values;
         }
     }
 

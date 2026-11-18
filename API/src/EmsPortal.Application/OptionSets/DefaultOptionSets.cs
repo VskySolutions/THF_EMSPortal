@@ -203,7 +203,7 @@ public static class DefaultOptionSets
                 "Nothing has been raised for this related client yet. Every row starts here.",
                 BackgroundColor: Grey, TextColor: OnDark),
             new ItemDefinition("rems_initiated", "COP Initiated", 2, Description:
-                "A REMS request has been raised for this related client and is being worked.",
+                "A COP request has been raised for this related client and is being worked.",
                 BackgroundColor: Teal, TextColor: OnDark),
             new ItemDefinition("pending_approval", "Pending Approval", 3, Description:
                 "Their request has reached the approvers and is waiting on their decisions.",

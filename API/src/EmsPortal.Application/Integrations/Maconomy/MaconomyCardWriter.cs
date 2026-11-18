@@ -26,7 +26,7 @@ public sealed class MaconomyCardWriter : IMaconomyCardWriter
             (token, ct) => _gateway.AddTableRowsAsync(new MaconomyEndpoint(connection.BaseUrl, connection.InstanceCode), token, add, ct),
             cancellationToken);
 
-    public Task<IReadOnlyDictionary<string, string?>?> SetTableRowAsync(
+    public Task<IReadOnlyDictionary<string, string?>> SetTableRowAsync(
         MaconomyConnection connection, MaconomyTableRowSet set, CancellationToken cancellationToken = default)
         => _session.InvokeAsync(
             connection,

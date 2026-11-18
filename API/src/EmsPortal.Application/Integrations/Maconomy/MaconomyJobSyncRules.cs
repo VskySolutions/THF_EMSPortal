@@ -76,9 +76,6 @@ public static class MaconomyJobSyncRules
     public static string BudgetOwedReason(string jobNumber, string why)
         => $"Job {jobNumber} is in Maconomy, but the First-Year Fee Estimate could not be put on its budget: {why} Press Sync job now to try that again; no second job is created.";
 
-    public const string NoBudgetLineReason =
-        "The job's budget has no Outlay line on task FEE. Add that line to the job's budget in Maconomy (and to its template job, for the next ones).";
-
     /// <summary>What a refusal is followed by when people on the engagement have no Maconomy Number.</summary>
     public static string? MissingNumbersAdvice(RemsRequest request)
         => MaconomyJobDataMapping.MissingNumbersOf(request) is { Count: > 0 } missing

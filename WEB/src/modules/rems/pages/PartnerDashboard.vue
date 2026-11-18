@@ -316,6 +316,7 @@ const columns = computed(() => [
     // Says which of the two silences an empty cell is: nobody has taken the request yet, versus there
     // being no admin stage in sight because it is still with its initiator or the client.
     field: (r) => r.assignedAdmin?.name || (r.status === REMS_STATUS.ADMIN_REVIEW ? "Waiting for pickup" : "—"),
+    userId: (r) => r.assignedAdmin?.id,
     align: "left",
     sortable: true,
     default: true,
@@ -327,6 +328,7 @@ const columns = computed(() => [
     name: "cse",
     label: "CSE",
     field: (r) => r.cse?.name || "—",
+    userId: (r) => r.cse?.id,
     align: "left",
     sortable: true,
     default: true,

@@ -10,7 +10,7 @@
     <!-- Add recipient (searchable CSE-group picker; excludes those already added). -->
     <div v-if="editable" class="row items-center q-col-gutter-md q-mb-md">
       <app-select
-        v-model="pick" :options="availableRecipients" label="Add recipient" class="col-12 col-sm"
+        v-model="pick" user-cards :options="availableRecipients" label="Add recipient" class="col-12 col-sm"
         use-input :disable="splits.length >= MAX_RECIPIENTS" :hint="recipientHint"
         info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded; the CSE, the Department Director and the Shareholders approve this request instead, so they are greyed out."
         @update:model-value="addRecipient"

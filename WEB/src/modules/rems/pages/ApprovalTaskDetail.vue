@@ -132,7 +132,7 @@
                   <div v-for="c in entityContacts" :key="c.id" class="rems-value">
                     <span class="text-weight-medium">{{ roleText(c.role) }}:</span>
                     <app-name-with-suffix :name="nameWithoutSuffix(c)" :suffix="c.suffix" />
-                    <span class="text-grey-6">({{ c.email || "no email" }} · {{ c.phone || "no phone" }})</span>
+                    <span class="text-grey-6">(<app-email :email="c.email || ''" empty="no email" /> · {{ c.phone || "no phone" }})</span>
                   </div>
                 </div>
                 <div v-else class="rems-value text-grey-6">No contacts.</div>
@@ -562,6 +562,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 // The REMS approval-task review screen (WO-117 Part B, AC-REMS-019/020).
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";

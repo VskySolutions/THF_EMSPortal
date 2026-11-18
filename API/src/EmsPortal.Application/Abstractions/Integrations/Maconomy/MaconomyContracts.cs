@@ -138,7 +138,7 @@ public sealed record MaconomyTableRowsAdd(
 
 /// <summary>
 /// Values for one row of the table under an existing card: the row alike on every one of
-/// <see cref="Match"/> is given <see cref="Values"/>. No row is added when none matches.
+/// <see cref="Match"/> is given <see cref="Values"/>. When none matches, a row of both is added at the end.
 /// </summary>
 public sealed record MaconomyTableRowSet(
     string Container,

@@ -7,7 +7,7 @@ namespace EmsPortal.Application.Integrations.Maconomy.Mapping;
 /// THE mapping of the First-Year Fee Estimate to the job's budget (user, 13 Nov 2026): one outlay line
 /// on task FEE, quantity 1, the estimate as its billing price. A job made from a template already
 /// carries that line (thmasd01, 13 Nov 2026), so the line is updated where it stands. Where the
-/// template gave none the sync stops and says so: no line is added. The line's Activity Type
+/// template gave none the line is added (user, 17 Nov 2026). The line's Activity Type
 /// ("Amount") is Maconomy's own, read from the task's activity: it cannot be written.
 /// </summary>
 public static class MaconomyJobBudgetDataMapping

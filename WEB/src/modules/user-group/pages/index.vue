@@ -162,7 +162,7 @@
         <q-separator />
         <q-card-section>
           <app-select
-            v-model="addUserIds" :options="userOptions" :loading="loadingUsers"
+            v-model="addUserIds" user-cards :options="userOptions" :loading="loadingUsers"
             label="Users" multiple use-chips
             hint="Users already in the group are not listed."
           />

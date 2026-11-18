@@ -435,6 +435,40 @@ public sealed class UsersController : ControllerBase
         return Ok(ApiResponseFactory.Success(await MapAsync(user, cancellationToken), "User updated."));
     }
 
+    /// <summary>The few facts a user dropdown shows on hover. Open to anyone signed in, within their tenant.</summary>
+    [HttpGet("/api/users/{id:guid}/card")]
+    [Authorize]
+    public async Task<IActionResult> Card(Guid id, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(id, cancellationToken);
+        if (user is null || !CanCallerSee(user))
+        {
+            return NotFound(ApiResponseFactory.NotFound("User not found."));
+        }
+
+        var tenantId = User.GetActiveTenantId();
+        var roles = user.TenantRoles
+            .Where(r => tenantId is null || r.TenantId == tenantId)
+            .Select(r => r.RoleEntity?.Name ?? r.Role.ToString())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+
+        string? department = null;
+        if (tenantId is not null
+            && await _departments.GetForUserAsync(id, cancellationToken) is { Department: { Length: > 0 } code })
+        {
+            department = (await ResolveDepartmentOptionsAsync(cancellationToken))
+                .FirstOrDefault(d => string.Equals(d.Value, code, StringComparison.OrdinalIgnoreCase))?.Label ?? code;
+        }
+
+        var person = user.Person;
+        return Ok(ApiResponseFactory.Success(
+            new UserCardDto(user.Id, person?.FullName ?? user.DisplayName, user.Email, person?.MobileNumber, department, roles, user.MaconomyNumber),
+            "User card retrieved."));
+    }
+
     [HttpPut("/api/users/me")]
     [Authorize]
     public async Task<IActionResult> UpdateMe([FromBody] UpdateProfileRequest request, CancellationToken cancellationToken)

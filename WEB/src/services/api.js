@@ -129,6 +129,8 @@ export const userApi = {
   // Picker data for the department section: the tenant's REMS.Department list and the current head of
   // each → { departments: [{ value, label }], heads: [{ department, userId, fullName }] }.
   departments: () => api.get("/api/admin/users/departments").then(unwrap),
+  // What a user dropdown shows on hover → { id, fullName, email, phone, department, roles[], maconomyNumber }.
+  card: (id) => api.get(`/api/users/${id}/card`).then(unwrap),
   // payload: { department: code|null, isHead } — a null department unassigns the user.
   setDepartment: (id, payload) => api.put(`/api/admin/users/${id}/department`, payload).then(unwrap),
   // Bulk import from CSV text. payload: { fileName, content, temporaryPassword }. A check writes nothing
@@ -274,7 +276,7 @@ export const maconomyApi = {
   searchCustomers: (search, limit, tenantId) =>
     api.get("/api/integrations/maconomy/customers", { params: { search, limit, tenantId } }).then(unwrap),
 
-  // ---- The customer sync: a fully approved Brand New Client request posts its client to Maconomy ----
+  // ---- The customer sync: a fully approved request posts a client Maconomy does not have yet ----
   // ALWAYS the caller's own tenant — no `tenantId` override here, unlike the connection calls above: the
   // rows are REMS requests, which the caller only ever sees for the tenant they are signed in to.
   // → { connected, enabled, changedOnUtc, changedByName, synced, linked, failed, notSynced, pending }.

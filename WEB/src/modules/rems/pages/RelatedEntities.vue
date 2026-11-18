@@ -87,7 +87,7 @@
             <app-name-with-suffix :name="cell.row.clientName" :suffix="cell.row.clientNameSuffix" />
           </div>
           <div v-if="cell.row.clientEmail" class="text-caption text-primary ellipsis">
-            {{ cell.row.clientEmail }}
+            <app-email :email="cell.row.clientEmail" />
           </div>
         </q-td>
       </template>
@@ -189,6 +189,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 // Related Entities — the shared board of the clients a client brought with them.
 import { ref, reactive, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";

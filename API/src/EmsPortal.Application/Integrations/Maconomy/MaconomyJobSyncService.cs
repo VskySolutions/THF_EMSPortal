@@ -341,12 +341,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
         {
             if (MaconomyJobBudgetDataMapping.Map(request, number) is { } line)
             {
-                if (await _writer.SetTableRowAsync(connection, line, cancellationToken) is null)
-                {
-                    await FailAsync(
-                        request, MaconomyJobSyncRules.BudgetOwedReason(number, MaconomyJobSyncRules.NoBudgetLineReason), actorId, cancellationToken);
-                    return;
-                }
+                await _writer.SetTableRowAsync(connection, line, cancellationToken);
                 await WriteActivityAsync(
                     request, ActivityEventTypes.RemsMaconomyJobSynced,
                     $"Put the First-Year Fee Estimate on the budget of Maconomy job {number}", actorId, cancellationToken);

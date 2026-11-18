@@ -73,7 +73,7 @@
           <div class="row q-col-gutter-md q-mb-md">
             <div class="col-12 col-sm-6">
               <div class="text-caption text-grey-7">To</div>
-              <div class="text-weight-medium">{{ viewing.recipientEmail }}</div>
+              <div class="text-weight-medium"><app-email :email="viewing.recipientEmail || ''" /></div>
             </div>
             <div class="col-12 col-sm-6">
               <div class="text-caption text-grey-7">Sent on</div>
@@ -104,6 +104,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 import { ref, computed, watch } from "vue";
 import { debounce } from "quasar";
 import { emailLogApi, getApiErrorMessage } from "services/api";

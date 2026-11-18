@@ -324,7 +324,7 @@
       />
       <!-- The Client Service Executive. -->
       <app-select
-        :model-value="cseUserId" :options="cseOptions" label="CSE" required
+        user-cards :model-value="cseUserId" :options="cseOptions" label="CSE" required
         class="col-12 col-sm-6 col-md-4" :readonly="setupReadonly" :clearable="false" :hint="cseHint"
         :error="attempted && !cseUserId" error-message="Choose a CSE."
         info="Users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. The CSE owns the client relationship and becomes an approver on this request's engagement."

@@ -41,13 +41,13 @@
         <!-- ── The two people who run it ────────────────────────────────────────────────────────── -->
         <!-- Each is scoped to the ROLE of its own name. -->
         <app-select
-          v-model="core.engagementExecutiveId" :options="executiveOptions" label="Engagement Executive"
+          v-model="core.engagementExecutiveId" user-cards :options="executiveOptions" label="Engagement Executive"
           required class="col-12 col-sm-6" :readonly="!editable"
           :rules="[requiredRule('an Engagement Executive')]" :hint="executiveHint"
           info="Lists users holding the &quot;Engagement Executive&quot; role, assigned on a user's page in Administration → Users."
         />
         <app-select
-          v-model="core.billingManagerId" :options="billingManagerOptions" label="Billing Manager"
+          v-model="core.billingManagerId" user-cards :options="billingManagerOptions" label="Billing Manager"
           required class="col-12 col-sm-6" :readonly="!editable"
           :rules="[requiredRule('a Billing Manager')]" :hint="billingManagerHint"
           info="Lists users holding the &quot;Billing Manager&quot; role, assigned on a user's page in Administration → Users."

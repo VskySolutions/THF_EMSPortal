@@ -1931,7 +1931,8 @@ public sealed class RemsRequestsController : ControllerBase
         {
             return (false, $"Waiting for the client's intake form, sent with {outstanding.RemsNumber}. This request can be submitted for review once it is in.");
         }
-        if (r.CopiedFromRemsId is not null)
+        // Only while the copy still names its source's client: a copy moved to another client waits on nobody.
+        if (r.CopiedFromRemsId is not null && (r.CopiedFrom is null || r.CopiedFrom.ClientId == r.ClientId))
         {
             var source = r.CopiedFrom?.RemsNumber is { Length: > 0 } number ? number : "the request it was copied from";
             return (false, $"Waiting for the client's intake form, which goes out with {source}. The copy can be submitted for review once it is in.");

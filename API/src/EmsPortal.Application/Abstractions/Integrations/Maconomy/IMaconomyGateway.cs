@@ -85,11 +85,11 @@ public interface IMaconomyGateway
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sets values on the matching row of the table under an existing card. Returns the row as Maconomy
-    /// holds it afterwards, or null, with nothing written, when no row matches. Throws
+    /// Sets values on the matching row of the table under an existing card, adding the row at the
+    /// end when none matches. Returns the row as Maconomy holds it afterwards. Throws
     /// <see cref="MaconomyFailure.Rejected"/> when there is no such card.
     /// </summary>
-    Task<IReadOnlyDictionary<string, string?>?> SetTableRowAsync(
+    Task<IReadOnlyDictionary<string, string?>> SetTableRowAsync(
         MaconomyEndpoint endpoint,
         string reconnectToken,
         MaconomyTableRowSet set,

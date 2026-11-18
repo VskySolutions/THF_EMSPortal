@@ -19,7 +19,7 @@
                fixed, so a long business name would otherwise push it off a narrow card. -->
           <q-item-label class="ellipsis">{{ row.fullName }}</q-item-label>
           <q-item-label caption class="ellipsis">
-            {{ row.emailAddress || "no email" }} · {{ row.phoneNumber || "no phone" }}
+            <app-email :email="row.emailAddress || ''" empty="no email" /> · {{ row.phoneNumber || "no phone" }}
           </q-item-label>
         </q-item-section>
         <q-item-section side>
@@ -42,6 +42,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 // The client's other businesses, and whether each has been turned into its own request yet.
 import { computed } from "vue";
 

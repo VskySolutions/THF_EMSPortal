@@ -34,7 +34,7 @@
                 <q-icon name="o_key" size="13px" class="q-mr-xs" />Must change password
               </q-badge>
             </div>
-            <div class="text-body2 text-grey-7 ellipsis">{{ user.email }}</div>
+            <div class="text-body2 text-grey-7 ellipsis"><app-email :email="user.email || ''" /></div>
             <div v-if="user.phoneNumber" class="text-body2 text-grey-7">{{ user.phoneNumber }}</div>
 
             <div class="row items-center q-gutter-xs q-mt-sm">
@@ -322,6 +322,7 @@
 </template>
 
 <script setup>
+import AppEmail from "components/common/AppEmail.vue";
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { userApi, tenantApi, userGroupApi, mediaApi, getApiErrorMessage } from "services/api";

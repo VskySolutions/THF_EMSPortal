@@ -12,7 +12,7 @@ namespace EmsPortal.Application.Abstractions.Integrations.Maconomy;
 public interface IMaconomyCustomerSyncService
 {
     /// <summary>
-    /// Marks the client of an approved brand-new-client request as waiting to be posted. Returns the client
+    /// Marks the client of an approved request, of any type, as waiting to be posted. Returns the client
     /// when a background attempt should be queued, null when nothing is to be done.
     /// </summary>
     Task<Client?> RecordOnApprovalAsync(RemsRequest request, CancellationToken cancellationToken = default);

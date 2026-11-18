@@ -158,13 +158,12 @@ internal sealed class ClientRepository : IClientRepository
             Stale: Of(RemsMaconomyCustomerSyncStatus.Syncing, stale: true));
     }
 
-    // A client an approved brand-new-client request made postable, with no Maconomy number and nothing recorded yet.
+    // A client an approved request (of any type) made postable, with no Maconomy number and nothing recorded yet.
     private IQueryable<Client> ApprovedUnrecorded(Guid tenantId)
         => InTenant(tenantId)
             .Where(c => c.MaconomyCustomerNumber == null
                 && c.MaconomySyncStatus == RemsMaconomyCustomerSyncStatus.NotSynced
                 && _dbContext.RemsRequests.IgnoreQueryFilters().Any(r => r.ClientId == c.Id && !r.Deleted
-                    && r.Type != null && r.Type.Value == RemsRequestTypes.BrandNewClient
                     && r.Status != null && r.Status.Value == RemsRequestStatuses.Approved));
 
     public async Task<IReadOnlyList<Client>> ListApprovedUnrecordedAsync(Guid tenantId, CancellationToken cancellationToken = default)

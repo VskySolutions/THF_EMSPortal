@@ -102,6 +102,9 @@ public sealed class SetUserDepartmentRequest
     public bool IsHead { get; set; }
 }
 
+/// <summary>What a user dropdown shows about one user on hover, in the caller's tenant.</summary>
+public sealed record UserCardDto(Guid Id, string FullName, string Email, string? Phone, string? Department, IReadOnlyList<string> Roles, string? MaconomyNumber);
+
 /// <summary>One selectable department for the picker.</summary>
 public sealed record DepartmentOptionDto(string Value, string Label);
 

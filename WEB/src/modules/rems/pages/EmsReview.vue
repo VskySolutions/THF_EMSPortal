@@ -113,7 +113,10 @@
       <!-- Who holds the request. -->
       <template #body-cell-assignedAdmin="cell">
         <q-td :props="cell">
-          <span v-if="cell.row.assignedAdmin?.name">{{ cell.row.assignedAdmin.name }}</span>
+          <span v-if="cell.row.assignedAdmin?.name">
+            {{ cell.row.assignedAdmin.name }}
+            <app-user-card-tooltip :user-id="cell.row.assignedAdmin.id" anchor="bottom middle" self="top middle" />
+          </span>
           <q-badge v-else color="amber-8">Waiting for pickup</q-badge>
         </q-td>
       </template>
@@ -228,6 +231,7 @@
 </template>
 
 <script setup>
+import AppUserCardTooltip from "components/common/AppUserCardTooltip.vue";
 import { ref, computed, watch, toRef, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { debounce } from "quasar";
@@ -326,7 +330,7 @@ const columns = computed(() => [
   { name: "submittedOnUtc", label: "Received On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
-  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
+  { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", userId: (r) => r.cse?.id, align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
   // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
   { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },

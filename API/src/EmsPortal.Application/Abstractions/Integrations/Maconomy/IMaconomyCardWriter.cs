@@ -14,7 +14,7 @@ public interface IMaconomyCardWriter
     /// <summary>Adds rows under an existing card, skipping any already there; returns how many were added.</summary>
     Task<int> AddTableRowsAsync(MaconomyConnection connection, MaconomyTableRowsAdd add, CancellationToken cancellationToken = default);
 
-    /// <summary>Sets values on the matching row of the table under an existing card. Null, nothing written, when no row matches.</summary>
-    Task<IReadOnlyDictionary<string, string?>?> SetTableRowAsync(
+    /// <summary>Sets values on the matching row of the table under an existing card. The row is added when none matches.</summary>
+    Task<IReadOnlyDictionary<string, string?>> SetTableRowAsync(
         MaconomyConnection connection, MaconomyTableRowSet set, CancellationToken cancellationToken = default);
 }

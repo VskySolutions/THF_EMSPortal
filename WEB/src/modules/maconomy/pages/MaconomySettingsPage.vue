@@ -172,7 +172,7 @@
         </div>
       </div>
 
-      <!-- The customer sync: a fully approved Brand New Client request posts its client to Maconomy. It is
+      <!-- The customer sync: a fully approved request posts its client to Maconomy when they are not a customer there yet. It is
            standalone from approval, so what failed, or was approved while it was off, waits here for a hand.
            Always the caller's OWN tenant: the scope control moves the connection, not this. -->
       <q-card flat bordered class="q-mt-md">
@@ -185,7 +185,7 @@
         <q-separator />
         <q-card-section>
           <p class="text-body2 text-grey-8 q-mb-xs">
-            When on, a Brand New Client request that is fully approved posts its client to Maconomy as a new
+            When on, a fully approved request whose client is not in Maconomy yet posts that client as a new
             customer, with the number left to Maconomy's series and written back onto the client. Starting it
             posts nothing by itself: requests approved while it was off, and attempts that failed, are listed
             below for syncing by hand. While it is on, an approved request's attachments are uploaded to its

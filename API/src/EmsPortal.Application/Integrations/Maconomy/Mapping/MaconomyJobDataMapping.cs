@@ -310,7 +310,7 @@ public static class MaconomyJobDataMapping
         new MaconomyFieldMapping(Setup, "Engagement Executive", ProjectManagerField, "Project Manager No.", PersonRule),
         new MaconomyFieldMapping(Setup, "Billing Manager", BillingManagerField, "Employee 6", PersonRule),
         new MaconomyFieldMapping(Setup, "First-Year Fee Estimate", MaconomyJobBudgetDataMapping.PriceField, "Budget · FEE line · Billing Price",
-            "After the job is created: the job's budget line of type Outlay on task FEE gets quantity 1 and the estimate as its billing price. The line comes from the template job; where the template has none the sync stops and says so. Left alone when the estimate is blank."),
+            "After the job is created: the job's budget line of type Outlay on task FEE gets quantity 1 and the estimate as its billing price. The line comes from the template job; where the template gave none the line is added. Left alone when the estimate is blank."),
         new MaconomyFieldMapping(Setup, "Engagement Fee"),
         new MaconomyFieldMapping(Setup, "% Realization"),
         new MaconomyFieldMapping(Setup, "Billing Frequency"),
