@@ -384,7 +384,7 @@
                   <q-item>
                     <q-item-section><q-item-label class="text-weight-medium">Total allocated</q-item-label></q-item-section>
                     <q-item-section side>
-                      <q-badge :color="commissionTotal > 100 ? 'negative' : 'grey-7'">{{ commissionTotal }}%</q-badge>
+                      <q-badge :color="commissionTotal > 100 ? 'warning' : 'grey-7'">{{ commissionTotal }}%</q-badge>
                     </q-item-section>
                   </q-item>
                 </q-list>

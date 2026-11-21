@@ -510,6 +510,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
+import { isRefusalMessage } from "services/apiRefusals";
 import { SHOW_MIDDLE_NAME, SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 import { useNotify } from "composables/useNotify";
 import { formatDateOnly, useDateFormat } from "composables/useDateFormat";
@@ -1584,7 +1585,8 @@ const saveChip = computed(() => ({
   saved: { tone: "ok", icon: "o_cloud_done", text: "All changes saved" },
   pending: { tone: "busy", icon: "o_edit", text: "Unsaved changes" },
   blocked: { tone: "warn", icon: "o_pending", text: "Not saved yet" },
-  error: { tone: "bad", icon: "o_cloud_off", text: "Not saved" }
+  // A save the API refused is something to put right (warn); one that failed is an error (bad).
+  error: { tone: isRefusalMessage(saveMessage.value) ? "warn" : "bad", icon: "o_cloud_off", text: "Not saved" }
 }[saveState.value] || { tone: "idle", icon: "o_cloud_sync", text: "Saves as you type" }));
 
 // Said out loud as well as in the chip: a refused save nobody noticed is how a request went to the client

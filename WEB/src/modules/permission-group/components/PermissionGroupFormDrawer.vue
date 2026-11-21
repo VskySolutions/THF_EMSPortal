@@ -300,7 +300,7 @@ const onSubmit = async ({ clearDraft } = {}) => {
     if (code === ApiErrorCodes.PermissionCeilingExceeded) {
       notify.error(getApiErrorMessage(err, "One or more keys are outside your tenant's permission ceiling."));
     } else if (code === ApiErrorCodes.DuplicateGroupName) {
-      notify.error("A group with that name already exists.");
+      notify.warning("A group with that name already exists.");
     } else if (code === ApiErrorCodes.CapacityBelowUsage) {
       // Server message states how many members must be removed before lowering the limit (AC-PG-003.4).
       notify.error(getApiErrorMessage(err, "The capacity limit is below the group's current usage."));

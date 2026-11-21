@@ -7,7 +7,7 @@
     <div class="brand-asset__body">
       <div class="text-body2 text-weight-medium">{{ label }}</div>
       <div class="text-caption text-grey-7">{{ hint }}</div>
-      <div v-if="error" class="text-caption text-negative">{{ error }}</div>
+      <div v-if="error" class="text-caption text-validation">{{ error }}</div>
       <div class="row q-gutter-sm q-mt-xs">
         <q-btn
           outline dense no-caps color="primary" icon="o_upload" :label="url ? 'Replace' : 'Upload'"

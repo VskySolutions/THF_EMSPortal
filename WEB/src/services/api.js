@@ -1,4 +1,5 @@
 import { http, http2 } from "boot/axios";
+import { noteApiMessage } from "services/apiRefusals";
 
 // Shared API access points. `api` → authenticated instance (Bearer token + tenant + correlation-id
 // headers). `anonApi` → anonymous instance (login, refresh).
@@ -33,13 +34,16 @@ export const ApiErrorCodes = Object.freeze({
 
 /** Extract a caller-safe message from an Axios error. */
 export function getApiErrorMessage (error, fallback = "Something went wrong. Please try again.") {
-  return (
+  const message = (
     error?.response?.data?.error?.details ||
     error?.response?.data?.message ||
     (typeof error?.response?.data === "string" ? error.response.data : null) ||
     error?.message ||
     fallback
   );
+  // Remembered as a refusal or a failure, so whoever shows it colours it right (services/apiRefusals).
+  noteApiMessage(message, error);
+  return message;
 }
 
 /** Extract the stable machine-readable error code, if present. */

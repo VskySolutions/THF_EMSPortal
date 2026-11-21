@@ -50,7 +50,7 @@
           <div class="col-12 col-sm-6">
             <!-- Owed by a trust or estate, which must be reachable beyond the locked email. -->
             <app-phone-input v-model="payload.mobileNumber" label="Phone Number" :required="clientPhoneRequired" />
-            <div v-if="errors.mobileNumber" class="text-negative text-caption q-mt-xs">{{ errors.mobileNumber }}</div>
+            <div v-if="errors.mobileNumber" class="text-caption q-mt-xs" :class="payload.mobileNumber ? 'text-validation' : 'text-negative'">{{ errors.mobileNumber }}</div>
           </div>
           <!-- Each option's description is its own tooltip, maintained by staff in Administration →
                Option Sets. -->

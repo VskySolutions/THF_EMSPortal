@@ -36,8 +36,8 @@
           </q-banner>
 
           <!-- Server-side validation summary — surfaced field-by-field below too. -->
-          <q-banner v-if="serverSummary.length" dense class="bg-red-1 text-red-9 q-mb-md rounded-borders">
-            <template #avatar><q-icon name="o_error" color="red-9" /></template>
+          <q-banner v-if="serverSummary.length" dense class="bg-validation q-mb-md rounded-borders">
+            <template #avatar><q-icon name="o_warning" /></template>
             <div class="text-weight-medium">Please fix the following:</div>
             <ul class="q-my-xs q-pl-md">
               <li v-for="(m, i) in serverSummary" :key="i">{{ m }}</li>
@@ -220,7 +220,7 @@ async function save () {
       const parsed = parseIntakeFieldErrors(err);
       errors.value = parsed.fields;
       serverSummary.value = parsed.summary;
-      notify.error("Please fix the highlighted fields.");
+      notify.warning("Please fix the highlighted fields.");
     } else {
       // A 409 (the round is open) or a 403 (not an admin any more) — the wording is the server's, and
       // the dialog stays open so nothing typed is lost.

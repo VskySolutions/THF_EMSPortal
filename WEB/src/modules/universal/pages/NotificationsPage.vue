@@ -29,7 +29,7 @@
       <!-- A received range has no column of its own: it is two controls, not one. -->
       <app-date-field v-model="extras.createdFrom" label="Received From" :dense="false" :max-date="extras.createdTo" />
       <app-date-field v-model="extras.createdTo" label="Received To" :dense="false" :min-date="extras.createdFrom" />
-      <div v-if="invalidRange" class="text-caption text-negative">
+      <div v-if="invalidRange" class="text-caption text-validation">
         “Received From” is after “Received To” — no notification can match both.
       </div>
     </app-filter-drawer>

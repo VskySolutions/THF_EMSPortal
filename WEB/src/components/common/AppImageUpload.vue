@@ -133,7 +133,7 @@ defineExpose({ closeCrop: () => { cropOpen.value = false; } });
 
 <style scoped>
 .app-image-upload__hint { font-size: 12px; color: #8a94a3; }
-/* Same red the file-upload components use for a rejected pick. */
-.app-image-upload__error { font-size: 12px; color: #e53935; }
+/* A rejected pick is a validation: the same warning ink the file-upload components use. */
+.app-image-upload__error { font-size: 12px; color: var(--warning-ink); }
 .app-image-upload__cropper { max-height: 60vh; }
 </style>

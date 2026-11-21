@@ -49,8 +49,8 @@
     </q-card>
 
     <!-- Warning when the tenant has accounts but none is active (AC-SMTP-009.3). -->
-    <q-banner v-if="showNoActiveWarning" dense rounded class="bg-red-1 text-negative q-mb-md">
-      <template #avatar><q-icon name="o_warning" color="negative" /></template>
+    <q-banner v-if="showNoActiveWarning" dense rounded class="bg-validation q-mb-md">
+      <template #avatar><q-icon name="o_warning" /></template>
       No active email account is configured for this tenant. Set one active so notifications can be sent.
     </q-banner>
 
@@ -302,7 +302,7 @@ const openTest = (row) => { testAccount.value = row; testOpen.value = true; };
 // ---- Delete ----
 const deleteAccount = async (row) => {
   if (row.isActive) {
-    notify.error("The active account cannot be deleted. Activate another account first.");
+    notify.warning("The active account cannot be deleted. Activate another account first.");
     return;
   }
   const ok = await confirm({
@@ -327,7 +327,7 @@ const bulkDelete = async (sel) => {
   const deletable = sel.filter((r) => !r.isActive);
   const skipped = sel.length - deletable.length;
   if (!deletable.length) {
-    notify.error("The active account cannot be deleted. Activate another account first.");
+    notify.warning("The active account cannot be deleted. Activate another account first.");
     return;
   }
   const ok = await confirm({

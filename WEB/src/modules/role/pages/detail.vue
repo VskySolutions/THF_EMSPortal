@@ -292,7 +292,7 @@ const autoSaveName = async () => {
     return;
   }
   if (!next) {
-    notify.error("A role needs a name.");
+    notify.warning("A role needs a name.");
     form.name = role.value.name;
     return;
   }

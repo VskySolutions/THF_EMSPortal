@@ -1311,7 +1311,8 @@ defineExpose({ uploadAttachments, addingNew, emailHolder });
   font-size: 12px;
   color: var(--ink-500);
 }
-.rf-hint--error { color: #c10015; }
+/* An unanswered question: a missing answer is the one validation that stays red. */
+.rf-hint--error { color: var(--q-negative); }
 
 /* A gutter row pulls itself up by its own gutter, which lands it flush against the row above. */
 .cif-row { margin-top: 0; }
@@ -1392,8 +1393,8 @@ defineExpose({ uploadAttachments, addingNew, emailHolder });
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: #fdecea;
-  color: #8a1c12;
+  background: var(--warning-tint);
+  color: var(--warning-ink);
   font-size: 13px;
 }
 

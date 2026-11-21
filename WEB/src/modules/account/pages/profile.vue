@@ -290,7 +290,7 @@ const onImageRemove = () => {
 // ---- Save ----
 const save = async () => {
   if (!addressRef.value?.validate()) {
-    notify.error("Please fix the highlighted fields.");
+    notify.warning("Please fix the highlighted fields.");
     return;
   }
 

@@ -27,6 +27,7 @@ export default defineConfig((ctx) => {
       "branding",
       "title",
       "components",
+      "field-has-value",
       "i18n"
     ],
 

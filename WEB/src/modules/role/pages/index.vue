@@ -228,7 +228,7 @@ const submitForm = async ({ clearDraft } = {}) => {
     }
   } catch (err) {
     if (getApiErrorCode(err) === ApiErrorCodes.DuplicateIdentifier) {
-      notify.error("A role with that name already exists.");
+      notify.warning("A role with that name already exists.");
     } else {
       notify.error(getApiErrorMessage(err));
     }

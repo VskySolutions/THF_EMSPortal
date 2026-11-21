@@ -58,8 +58,8 @@
       <!-- ============================ FORM STEP ============================ -->
       <template v-if="step === 'form'">
         <!-- Server-side validation summary (from review/submit) — surfaced field-by-field below too. -->
-        <q-banner v-if="serverSummary.length" dense class="pef-card bg-red-1 text-red-9 q-mb-md rounded-borders">
-          <template #avatar><q-icon name="o_error" color="red-9" /></template>
+        <q-banner v-if="serverSummary.length" dense class="pef-card bg-validation q-mb-md rounded-borders">
+          <template #avatar><q-icon name="o_warning" /></template>
           <div class="text-weight-medium">Please fix the following:</div>
           <ul class="q-my-xs q-pl-md">
             <li v-for="(m, i) in serverSummary" :key="i">{{ m }}</li>
@@ -323,7 +323,7 @@ async function handleActionError (err, fallback) {
   if (getApiErrorCode(err) === ApiErrorCodes.ValidationFailed) {
     applyServerValidation(err);
     step.value = "form";
-    notify.error("Please fix the highlighted fields.");
+    notify.warning("Please fix the highlighted fields.");
     scrollTop();
     return;
   }

@@ -242,8 +242,11 @@ defineExpose({ saveCommission });
   background: #fff8e1;
   color: #8a5a00;
 }
+/* Over 100%, or a row that is not a percentage: a validation, so the warning colour, outlined to tell it
+   from the softer "not yet 100%" above. */
 .rems-commission__total--bad {
-  background: #ffebee;
-  color: #b71c1c;
+  background: var(--warning-tint);
+  color: var(--warning-ink);
+  box-shadow: inset 0 0 0 1px var(--q-warning);
 }
 </style>

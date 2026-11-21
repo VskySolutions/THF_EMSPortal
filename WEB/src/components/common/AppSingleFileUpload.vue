@@ -32,7 +32,7 @@
       </template>
     </div>
 
-    <div v-if="error || errorMessage" class="app-file-drop__error">{{ error || errorMessage }}</div>
+    <div v-if="error || errorMessage" class="app-file-drop__error" :class="{ 'app-file-drop__error--missing': !error && !modelValue }">{{ error || errorMessage }}</div>
 
     <app-file-preview-item
       v-if="modelValue"
@@ -131,5 +131,7 @@ const clear = () => {
 .app-file-drop__input { display: none; }
 .app-file-drop__text { font-size: 14px; color: #5a6675; }
 .app-file-drop__hint { font-size: 12px; color: #8a94a3; }
-.app-file-drop__error { font-size: 12px; color: #e53935; margin-top: 4px; }
+.app-file-drop__error { font-size: 12px; color: var(--warning-ink); margin-top: 4px; }
+/* Nothing picked where a file is owed: a missing answer stays red. */
+.app-file-drop__error--missing { color: var(--q-negative); }
 </style>

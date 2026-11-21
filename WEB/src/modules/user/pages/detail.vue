@@ -584,7 +584,7 @@ const commitEmail = async () => {
   }
 
   if (!/^\S+@\S+\.\S+$/.test(next)) {
-    notify.error("Enter a valid username (email address).");
+    notify.warning("Enter a valid username (email address).");
     email.value = current;
     return;
   }
@@ -736,11 +736,11 @@ const openAssign = async () => {
 const submitAssign = async ({ clearDraft } = {}) => {
   if (!(await assignForm.value?.validate())) return;
   if (!assign.tenantId) {
-    notify.error("Select a tenant.");
+    notify.warning("Select a tenant.");
     return;
   }
   if (!assign.roleIds.length) {
-    notify.error("Select at least one role.");
+    notify.warning("Select at least one role.");
     return;
   }
   assignSaving.value = true;

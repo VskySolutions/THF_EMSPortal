@@ -254,7 +254,7 @@ const bulkDelete = async (sel) => {
   const deletable = sel.filter((r) => !r.isUser);
   const skipped = sel.length - deletable.length;
   if (!deletable.length) {
-    notify.error("Selected persons are linked to users and can't be deleted.");
+    notify.warning("Selected persons are linked to users and can't be deleted.");
     return;
   }
   const ok = await confirm({

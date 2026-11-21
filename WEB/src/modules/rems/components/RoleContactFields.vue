@@ -43,7 +43,7 @@
         <!-- Optional unless the entity type asks for it (a trust or estate, a government body), in which
              case every contact that is given at all carries one — see contactPhoneRequired. -->
         <app-phone-input v-model="role.phone" label="Phone Number" :required="phoneRequired" />
-        <div v-if="err('phone')" class="text-negative text-caption q-mt-xs">{{ err('phone') }}</div>
+        <div v-if="err('phone')" class="text-caption q-mt-xs" :class="role.phone ? 'text-validation' : 'text-negative'">{{ err('phone') }}</div>
       </div>
     </div>
   </div>
