@@ -32,6 +32,8 @@ export const Permissions = Object.freeze({
   RemsRequestsUpdate: "rems.requests.update",
   RemsRequestsDelete: "rems.requests.delete",
   RemsRequestsAssign: "rems.requests.assign",
+  // Filing a brand-new client on a request; without it only clients already on file can be picked.
+  RemsClientsCreate: "rems.clients.create",
   RemsFormsManage: "rems.forms.manage",
   RemsFormsSend: "rems.forms.send",
   RemsEmailLogRead: "rems.emailLog.read",

@@ -11,7 +11,7 @@ public sealed record RemsApproverSuggestion(RemsUserRef User, string Role);
 
 /// <summary>
 /// The full approver list an engagement will route to (updates until the round is sent): the automatic
-/// approvers — the firm's shareholders, the Department Director.
+/// approvers — the Managing Shareholder, the Department Director.
 /// </summary>
 public sealed record RemsApproverList(
     Guid EngagementId,
@@ -26,7 +26,7 @@ public sealed record RemsApproverList(
 /// <summary>STATIC-APPROVAL-POLICY. The fixed rules as they resolve in this tenant.</summary>
 public sealed record RemsApprovalPolicyView(
     bool StaticRouting,
-    IReadOnlyList<RemsUserRef> Shareholders,
+    IReadOnlyList<RemsUserRef> ManagingShareholders,
     IReadOnlyList<RemsUserRef> TaxExceptionCses);
 
 /// <summary>A user selectable as an extra approver: any active user in the tenant (there is no Approver role).</summary>
@@ -327,7 +327,7 @@ public static class RemsApprovalChecklistCatalog
         RemsApproverRole.CSE => Cse,
         RemsApproverRole.DepartmentDirector => DepartmentDirector,
         RemsApproverRole.CommissionRecipient => CommissionRecipient,
-        RemsApproverRole.Shareholder or RemsApproverRole.Approver => Approver,
+        RemsApproverRole.ManagingShareholder or RemsApproverRole.Approver => Approver,
         _ => Array.Empty<string>(),
     };
 }

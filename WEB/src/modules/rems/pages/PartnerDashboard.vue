@@ -163,6 +163,14 @@
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click="openConversation(cell.row)">
             <q-tooltip>Conversation</q-tooltip>
           </q-btn>
+          <!-- Delete: drafts only, and the server says whose (the owner's, or any for a Tenant Admin). -->
+          <q-btn
+            v-if="cell.row.actions?.canDelete" type="a"
+            flat round dense color="negative" icon="o_delete"
+            :loading="deleting === cell.row.id" @click.stop="deleteDraft(cell.row)"
+          >
+            <q-tooltip>Delete draft</q-tooltip>
+          </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
                everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
           <entity-row-marks
@@ -263,9 +271,9 @@ const {
 const canCreate = computed(() => has(Permissions.RemsRequestsCreate));
 const canReadEmailLog = computed(() => has(Permissions.RemsEmailLogRead));
 
-// Who gets the two views.
+// Who gets the two views: the roles the API shows the whole tenant's requests to.
 const isRemsAdmin = computed(() =>
-  auth.roles.includes("SuperAdmin") || auth.roles.includes("Admin"));
+  ["SuperAdmin", "TenantAdmin", "Admin"].some((role) => auth.roles.includes(role)));
 
 // Which of the two readings of this list is on screen.
 const OWNERSHIP_FILTERS = [
@@ -476,6 +484,29 @@ const copyRequest = async (row) => {
     notify.error(getApiErrorMessage(err));
   } finally {
     copying.value = null;
+  }
+};
+
+// ---- Delete ----
+// A soft delete: the draft leaves the list and stays restorable from Show deleted.
+const deleting = ref(null);
+const deleteDraft = async (row) => {
+  const ok = await confirm({
+    title: "Delete this draft",
+    message: `Delete draft ${row.remsNumber} for ${row.clientName}? It is removed from the list.`,
+    confirmLabel: "Delete",
+    type: "danger"
+  });
+  if (!ok) return;
+  deleting.value = row.id;
+  try {
+    await remsApi.remove(row.id);
+    notify.success(`${row.remsNumber} deleted.`);
+    load();
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    deleting.value = null;
   }
 };
 

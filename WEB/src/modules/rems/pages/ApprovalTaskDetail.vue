@@ -416,7 +416,7 @@
                   </q-banner>
                 </div>
 
-                <!-- Server order: by role — shareholder, director, CSE, commission recipient, then anyone
+                <!-- Server order: by role — managing shareholder, director, CSE, commission recipient, then anyone
                      added by hand — so the list reads the same way every time. -->
                 <div class="rems-subhead">Approvers</div>
                 <q-list bordered separator class="rounded-borders">

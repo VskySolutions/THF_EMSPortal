@@ -101,7 +101,7 @@ UPDATE dbo.REMS_Settings SET DeclineThreshold = 1 WHERE DeclineThreshold = 0;
 UPDATE dbo.REMS_Settings SET IsStaticRouting = 1 WHERE IsStaticRouting = 0;
 UPDATE dbo.REMS_Settings SET TaxFeeCeilingWithoutShareholder = 10000 WHERE TaxFeeCeilingWithoutShareholder IS NULL;
 
--- 3. Checklist template, from the static catalog in RemsApprovalModels. Shareholders use the Approver list.
+-- 3. Checklist template, from the static catalog in RemsApprovalModels. The Managing Shareholder uses the Approver list.
 DECLARE @tpl TABLE (Role nvarchar(20), DisplayOrder int, Label nvarchar(200));
 INSERT INTO @tpl VALUES
     (N'CSE', 1, N'Client information reviewed and accurate'),
@@ -111,8 +111,8 @@ INSERT INTO @tpl VALUES
     (N'DepartmentDirector', 3, N'Engagement team and department placement appropriate'),
     (N'CommissionRecipient', 1, N'Commission split reviewed'),
     (N'CommissionRecipient', 2, N'Commission allocation accepted'),
-    (N'Shareholder', 1, N'Engagement details reviewed'),
-    (N'Shareholder', 2, N'Engagement accepted'),
+    (N'ManagingShareholder', 1, N'Engagement details reviewed'),
+    (N'ManagingShareholder', 2, N'Engagement accepted'),
     (N'Approver', 1, N'Engagement details reviewed'),
     (N'Approver', 2, N'Engagement accepted');
 

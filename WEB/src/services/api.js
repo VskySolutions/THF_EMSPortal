@@ -729,10 +729,10 @@ export const remsApi = {
   // Set the commission splits (≤3 recipients, each > 0 and ≤ 100). splits: [{ employeeId, percentage }].
   updateCommission: (id, splits) => api.put(`/api/rems/engagements/${id}/commission`, { splits }).then(unwrap),
   // The full approver list: { engagementId, engagementStatus, approvers:[{ user:{id,name}, role }],
-  // selectedApproverIds }. approvers = the automatic ones (the firm's shareholders.
+  // selectedApproverIds }. approvers = the automatic ones (the Managing Shareholder.
   approvers: (id) => api.get(`/api/rems/engagements/${id}/approvers`).then(unwrap),
   // STATIC-APPROVAL-POLICY: the fixed route as it resolves in this tenant —
-  // { staticRouting, shareholders:[{id,name}], taxExceptionCses:[{id,name}] }.
+  // { staticRouting, managingShareholders:[{id,name}], taxExceptionCses:[{id,name}] }.
   approvalPolicy: () => api.get("/api/rems/approval-policy").then(unwrap),
   // Users selectable as EXTRA approvers — every active user in the tenant, with the roles they hold there
   // for the picker label → [{ userId, name, email, roles: [] }].

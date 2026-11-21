@@ -391,6 +391,7 @@
                   :cse-hint="cseHint"
                   :readonly="!canEditClient"
                   :client-locked="clientLocked"
+                  :can-add-new="canAddNewClient"
                   :saved="request"
                   :compact="showSubmittedPane"
                   :setup-readonly="!canEditSetup"
@@ -699,6 +700,8 @@ const frozen = computed(() =>
   [REMS_STATUS.PENDING_APPROVAL, REMS_STATUS.APPROVED].includes(status.value));
 
 const isAdmin = computed(() => has(Permissions.RemsEngagementsManage));
+// Filing a brand-new client is a right of its own; without it the client block is search-only.
+const canAddNewClient = computed(() => has(Permissions.RemsClientsCreate));
 
 // THE admin on this request, not just an admin.
 const assignedAdminId = computed(() => request.value?.assignedAdmin?.id || null);
@@ -1345,7 +1348,7 @@ const reservedCommissionRecipients = computed(() => {
     [setupForm.cseUserId, "CSE"],
     [live?.departmentDirector?.id, "Department Director"],
     [mappedDirector, "Department Director"],
-    ...(policy?.shareholders || []).map((s) => [s.id, "Shareholder"])
+    ...(policy?.managingShareholders || []).map((s) => [s.id, "Managing Shareholder"])
   ];
   const reserved = [];
   for (const [id, seat] of seats) {
@@ -1407,7 +1410,11 @@ const clientChosen = () => {
 // The client half, which is what the API requires to accept a request at all. Top to bottom, as the section
 // reads: who the client is, what kind of entity they are, then what they are called.
 const clientProblem = () => {
-  if (!clientChosen()) return "Search for the client, or add a new one.";
+  if (!clientChosen()) {
+    return canAddNewClient.value
+      ? "Search for the client, or add a new one."
+      : "Search for the client and pick them from the results.";
+  }
   if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
   // A Maconomy customer's name and email are Maconomy's to hold: nothing here is asked for or checked.
   // One with no email can still be filed as a draft; sending is what waits for the address.

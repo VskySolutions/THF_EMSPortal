@@ -42,6 +42,7 @@ public sealed class RemsRequestsController : ControllerBase
     private const string CodeNotDeletable = "REMS_REQUEST_NOT_DELETABLE";
     private const string CodeDuplicateEmail = "REMS_DUPLICATE_CLIENT_EMAIL";
     private const string CodeClientLocked = "REMS_CLIENT_LOCKED";
+    private const string CodeNewClientNotAllowed = "REMS_NEW_CLIENT_NOT_ALLOWED";
     private const string CodeMaconomyCustomerNotFound = "REMS_MACONOMY_CUSTOMER_NOT_FOUND";
     private const string CodeNotSubmittable = "REMS_NOT_SUBMITTABLE";
     private const string CodeIntakeNotOnFile = "REMS_INTAKE_NOT_ON_FILE";
@@ -328,6 +329,12 @@ public sealed class RemsRequestsController : ControllerBase
             }
         }
 
+        // Neither a Maconomy customer nor a client on file: this save would file somebody new.
+        if (maconomyClient is null && request.ExistingClientReferenceId is null && !MayFileNewClient())
+        {
+            return NewClientRefused();
+        }
+
         // Whose request this is.
         var seat = await RemsActingAs.ResolveAsync(this, _delegations, me, cancellationToken);
         if (seat is { CanPrepare: false })
@@ -512,6 +519,12 @@ public sealed class RemsRequestsController : ControllerBase
                 referenceId, details.Email, keepsOwnClient ? ownClient!.Id : null, cancellationToken) is { } emailClash)
         {
             return emailClash;
+        }
+
+        // As on create: a save that leaves the request with nobody on file to name would file somebody new.
+        if (!sameMaconomyClient && maconomyClient is null && referenceId is null && !keepsOwnClient && !MayFileNewClient())
+        {
+            return NewClientRefused();
         }
 
         // Description is no longer held on the request; the field is accepted and ignored.
@@ -911,10 +924,10 @@ public sealed class RemsRequestsController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
         }
 
-        if (!CanAct(rems, me, IsPrivileged()))
+        if (!MayDelete(rems, me))
         {
             return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponseFactory.Forbidden("Not permitted to delete this request."));
+                ApiResponseFactory.Forbidden("Only the person who raised this draft, or a Tenant Admin, can delete it."));
         }
 
         // Hiding the action in the UI is not enough — the same window applies to a direct call.
@@ -923,8 +936,11 @@ public sealed class RemsRequestsController : ControllerBase
             return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
                 CodeNotDeletable,
                 "This request can no longer be deleted.",
-                "A request can only be deleted while it is a draft, or submitted and not yet assigned to an admin."));
+                "A request can only be deleted while it is a draft."));
         }
+
+        // A copy waits on its source's intake form, so one left pointing at a deleted draft could never be sent.
+        await _rems.DetachCopiesAsync(rems.Id, cancellationToken);
 
         // The DbContext converts the delete into a soft-delete (Deleted flag). The status does not change,
         // so no history is written; the client the draft filed stays on file.
@@ -1339,8 +1355,8 @@ public sealed class RemsRequestsController : ControllerBase
             : StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponseFactory.Forbidden("Only an admin who reviews REMS requests can pick one up."));
 
-    /// <summary>An Admin-role or Super Admin caller (sees the whole tenant; everyone else is record-scoped).</summary>
-    private bool IsPrivileged() => RemsSetupAccess.IsRemsAdmin(User);
+    /// <summary>An Admin-role, Tenant Admin or Super Admin caller (sees the whole tenant; everyone else is record-scoped).</summary>
+    private bool IsPrivileged() => RemsSetupAccess.IsRemsAdmin(User) || RemsSetupAccess.IsElevated(User);
 
     /// <summary>
     /// Record-level VISIBILITY: privileged callers see the tenant, drafts included; everyone else sees
@@ -1364,9 +1380,13 @@ public sealed class RemsRequestsController : ControllerBase
     /// </summary>
     private static bool IsMine(RemsRequest r, Guid me) => r.CreatedById == me || r.OnBehalfOfUserId == me;
 
-    /// <summary>Record-level ACT (edit/delete): the creator or a privileged caller.</summary>
+    /// <summary>Record-level ACT (edit): the creator or a privileged caller.</summary>
     private static bool CanAct(RemsRequest r, Guid me, bool privileged)
         => privileged || IsMine(r, me);
+
+    /// <summary>Whose draft it is to delete: its owner's, or any draft for a Tenant Admin or Super Admin. Not a REMS Admin's.</summary>
+    private bool MayDelete(RemsRequest r, Guid me)
+        => IsMine(r, me) || RemsSetupAccess.IsElevated(User);
 
     private static bool IsDraft(RemsRequest r) => r.Status is null || r.Status.Value == RemsRequestStatuses.Draft;
 
@@ -1547,6 +1567,16 @@ public sealed class RemsRequestsController : ControllerBase
             CodeClientLocked,
             "The client can no longer be changed.",
             "This request's intake form has been sent, so the client it names is fixed."));
+
+    /// <summary>Whether the caller may file a brand-new client; without the right a request names one already on file.</summary>
+    private bool MayFileNewClient() => User.HasPermission(Permissions.RemsClientsCreate);
+
+    private IActionResult NewClientRefused()
+        => StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Error(
+            CodeNewClientNotAllowed,
+            "Pick an existing client.",
+            "Your role can raise a request for a client already on file or in Maconomy, not for a new one. "
+                + "Search for the client in the Client box and pick them from the results."));
 
     /// <summary>
     /// Puts the request's client on the client master and returns who they are: the Maconomy customer it
@@ -1904,7 +1934,7 @@ public sealed class RemsRequestsController : ControllerBase
             CanPickUp: User.HasPermission(Permissions.RemsRequestsAssign)
                 && !IsDraft(r)
                 && r.AdminAssignedToId is null,
-            CanDelete: canAct && User.HasPermission(Permissions.RemsRequestsDelete) && IsDeletable(r),
+            CanDelete: IsDeletable(r) && MayDelete(r, me) && User.HasPermission(Permissions.RemsRequestsDelete),
             // Copy raises a request from this one's setup: the create permission, on anything the caller may read.
             CanCopy: User.HasPermission(Permissions.RemsRequestsCreate) && CanView(r, me, privileged));
     }

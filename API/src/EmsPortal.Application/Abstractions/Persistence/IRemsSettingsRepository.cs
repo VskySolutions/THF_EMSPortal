@@ -3,8 +3,8 @@ using EmsPortal.Domain.Entities;
 namespace EmsPortal.Application.Abstractions.Persistence;
 
 /// <summary>
-/// Data access for the per-tenant <see cref="RemsSettings"/> (WO-114): the managing shareholder and the
-/// department-to-director mapping. Tenant isolation is applied by the ambient query filter.
+/// Data access for the per-tenant <see cref="RemsSettings"/> (WO-114): the department-to-director
+/// mapping. Tenant isolation is applied by the ambient query filter.
 /// </summary>
 public interface IRemsSettingsRepository
 {

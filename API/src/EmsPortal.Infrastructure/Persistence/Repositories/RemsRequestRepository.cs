@@ -846,6 +846,15 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
 
     public void Remove(RemsRequest request) => _dbContext.RemsRequests.Remove(request);
 
+    public async Task DetachCopiesAsync(Guid sourceRemsId, CancellationToken cancellationToken = default)
+    {
+        var copies = await Requests.Where(r => r.CopiedFromRemsId == sourceRemsId).ToListAsync(cancellationToken);
+        foreach (var copy in copies)
+        {
+            copy.CopiedFromRemsId = null;
+        }
+    }
+
     public async Task AddFileAsync(RemsFile file, CancellationToken cancellationToken = default)
         => await _dbContext.RemsFiles.AddAsync(file, cancellationToken);
 

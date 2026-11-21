@@ -92,6 +92,9 @@ public interface IRemsRequestRepository
     void Update(RemsRequest request);
     void Remove(RemsRequest request);
 
+    /// <summary>Unlinks every request copied from this one: a copy of a deleted source carries on as an ordinary request.</summary>
+    Task DetachCopiesAsync(Guid sourceRemsId, CancellationToken cancellationToken = default);
+
     Task AddFileAsync(RemsFile file, CancellationToken cancellationToken = default);
     void RemoveFile(RemsFile file);
 

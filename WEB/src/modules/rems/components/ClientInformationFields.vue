@@ -29,7 +29,7 @@
             autocomplete="off"
             aria-label="Client"
             :error="attempted && !linkedClient && !clientFocused"
-            error-message="Search for the client, or add a new one."
+            :error-message="clientPickNote"
             @update:model-value="onClientTyped"
             @focus="onClientFocus"
             @blur="onClientBlur"
@@ -185,7 +185,7 @@
         </app-text-field>
         <suffix-field
           :model-value="fieldValue('clientNameSuffix')" :class="suffixCols"
-          :readonly="readonly" :locked="clientLocked || recordHolds('clientNameSuffix')"
+          :readonly="readonly" :locked="clientLocked || newClientFixed || recordHolds('clientNameSuffix')"
           :locked-note="lockNote('clientNameSuffix')"
           :error="suffixTooLong" error-message="A suffix is at most 16 characters."
           @update:model-value="onFieldTyped('clientNameSuffix', $event)"
@@ -421,7 +421,10 @@ const props = defineProps({
   // saved by the same endpoint as the entity type above, which requires the pair.
   cseUserId: { type: String, default: null },
   cseOptions: { type: Array, default: () => [] },
-  cseHint: { type: String, default: "" }
+  cseHint: { type: String, default: "" },
+
+  // Whether this user may file a brand-new client (rems.clients.create). Without it the block is search-only.
+  canAddNew: { type: Boolean, default: true }
 });
 // `change` covers the ATTACHMENT picker only.
 const emit = defineEmits([
@@ -516,7 +519,15 @@ const addingNew = ref(!isLinked && (!!model.clientName?.trim() || !!props.entity
 // nothing about them is typed, edited or sent from here.
 const isMaconomyClient = computed(() => !!linkedClient.value?.maconomyCustomerNumber);
 const clientSettled = computed(() => !!linkedClient.value || addingNew.value);
-const canStartNew = computed(() => !props.readonly && !props.clientLocked && !clientSettled.value);
+const canStartNew = computed(() =>
+  props.canAddNew && !props.readonly && !props.clientLocked && !clientSettled.value);
+// A new client already on the draft (a copy, a related-entity follow-up) is shown to them, not edited.
+const newClientFixed = computed(() => !props.canAddNew && addingNew.value);
+const NEW_CLIENT_FIXED_NOTE =
+  "A new client, not yet on file. Your role can pick an existing client, not change a new one.";
+const clientPickNote = computed(() => (props.canAddNew
+  ? "Search for the client, or add a new one."
+  : "Search for the client and pick them from the results."));
 
 // The two halves of one search: clients the portal holds, and Maconomy customers.
 const systemOptions = ref([]);
@@ -546,7 +557,8 @@ const clientInfo = computed(() => {
   if (linkedClient.value) return "Linked to a THF client record — the details below are read off it.";
   if (addingNew.value) return "A client THF does not have yet. The details below file a new record.";
   return "Search by name, email or phone, across every entity type — clients already in the portal " +
-    "and Maconomy customers together. Pick the client to fill in their details, or add a new one.";
+    "and Maconomy customers together. Pick the client to fill in their details" +
+    (props.canAddNew ? ", or add a new one." : ".");
 });
 
 // A person or an organisation, which decides the boxes the name is asked in. A client on file is what
@@ -715,11 +727,14 @@ const onEntityTypeChosen = (value) => {
 };
 
 // A matched client's name is theirs, not this request's.
-const nameReadonly = computed(() => props.readonly || props.clientLocked || !!linkedClient.value);
-const nameReadonlyNote = computed(() => (props.clientLocked
-  ? "Locked — the intake form has been sent."
-  : "This is a client THF already has. Their name is edited on their own record, not here — clear the " +
-    "client above to file a new one instead."));
+const nameReadonly = computed(() =>
+  props.readonly || props.clientLocked || !!linkedClient.value || newClientFixed.value);
+const nameReadonlyNote = computed(() => {
+  if (props.clientLocked) return "Locked — the intake form has been sent.";
+  if (newClientFixed.value) return NEW_CLIENT_FIXED_NOTE;
+  return "This is a client THF already has. Their name is edited on their own record, not here" +
+    (props.canAddNew ? " — clear the client above to file a new one instead." : ".");
+});
 
 // ---- What a client's RECORD already holds ----
 // A request fills a blank on the record of a client on file and never overwrites what is there, so a
@@ -737,9 +752,10 @@ if (linkedClient.value) {
 const recordHolds = (key) => !!linkedClient.value && !!held[key];
 // Everything about a Maconomy customer is locked, blanks included: a blank is filled in Maconomy.
 const fieldLocked = (key) =>
-  props.readonly || props.clientLocked || isMaconomyClient.value || recordHolds(key);
+  props.readonly || props.clientLocked || isMaconomyClient.value || newClientFixed.value || recordHolds(key);
 const lockNote = (key) => {
   if (isMaconomyClient.value) return maconomyLockNote.value;
+  if (newClientFixed.value && !props.clientLocked) return NEW_CLIENT_FIXED_NOTE;
   if (props.clientLocked) {
     return key === "customerEmail"
       ? "Locked — the intake form was sent to this address."
@@ -983,9 +999,11 @@ const rowCaption = (client) => (client.maconomyCustomerNumber
   ? `${client.maconomyCustomerNumber} · ${client.email || "no email"}`
   : client.email || "no email");
 
-const noMatchNote = computed(() => (lookupFailed.value
-  ? "The search is not available right now — try again in a moment."
-  : `No client matches “${clientQuery.value.trim()}”.`));
+const noMatchNote = computed(() => {
+  if (lookupFailed.value) return "The search is not available right now — try again in a moment.";
+  const none = `No client matches “${clientQuery.value.trim()}”.`;
+  return props.canAddNew ? none : `${none} Your role can pick a client already on file or in Maconomy only.`;
+});
 
 // ---- The request's Type, which follows the client ----
 const autoType = (code) => (props.typeOptions.some((o) => o.value === code) ? code : "");
@@ -1018,7 +1036,9 @@ const typeDisabled = (code) => {
 const typeNote = computed(() => {
   const lead = "Decided by the client above";
   if (props.clientLocked) return `${lead}, whose details are locked — the intake form has been sent.`;
-  if (linkedClient.value) return `${lead}, who is on THF's records. Clear the client to file somebody new.`;
+  if (linkedClient.value) {
+    return `${lead}, who is on THF's records.` + (props.canAddNew ? " Clear the client to file somebody new." : "");
+  }
   return `${lead}, who is new to THF. Search instead to link a client already on file.`;
 });
 
@@ -1164,7 +1184,7 @@ const looksLikePhone = (term) => term.replace(/\D/g, "").length >= 7 && /^[+\d(]
 
 // What was searched for is most of an answer already, so it is put where it belongs.
 const startNewClient = () => {
-  if (props.readonly || props.clientLocked) return;
+  if (!props.canAddNew || props.readonly || props.clientLocked) return;
   const term = clientQuery.value.trim();
   resetClient();
   addingNew.value = true;

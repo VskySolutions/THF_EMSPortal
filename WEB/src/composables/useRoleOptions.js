@@ -7,10 +7,10 @@ export const SYSTEM_ROLE_NAMES = Object.freeze(["SuperAdmin", "TenantAdmin"]);
 // What a person DOES in REMS. There is no Approver role: the add-approvers picker offers every user in
 // the tenant.
 export const OPERATIONAL_ROLE_NAMES = Object.freeze(["Partner", "Admin"]);
-// What a person IS in REMS. They grant nothing: the first three make the user offerable in the picker that
-// fills that seat on an engagement.
+// What a person IS in REMS: offerable in the picker that fills a seat on an engagement, or (Managing
+// Shareholder) on every approver list by standing.
 export const SEAT_ROLE_NAMES = Object.freeze([
-  "CSE", "Engagement Executive", "Billing Manager", "Shareholder"
+  "CSE", "Engagement Executive", "Billing Manager", "Managing Shareholder", "Shareholder"
 ]);
 
 export const RoleCategory = Object.freeze({

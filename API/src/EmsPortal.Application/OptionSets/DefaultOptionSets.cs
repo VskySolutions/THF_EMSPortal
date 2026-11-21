@@ -526,8 +526,8 @@ public static class DefaultOptionSets
         // value here: the approver list and the inbox are read down their left edge.
         new Definition("REMS.ApproverRole", "REMS Approver Role", OptionItemSortMode.AlphabeticalAsc, new[]
         {
-            new ItemDefinition("Shareholder", "Shareholder", 1, Description:
-                "A holder of the Shareholder role — on every engagement's list by standing, and not removable.",
+            new ItemDefinition("ManagingShareholder", "Managing Shareholder", 1, Description:
+                "A holder of the Managing Shareholder role — on every engagement's list by standing, and not removable.",
                 BackgroundColor: Brand, TextColor: OnDark, Icon: "o_workspace_premium"),
             new ItemDefinition("DepartmentDirector", "Department Director", 2, Description:
                 "The head of the department the engagement was placed in.",
