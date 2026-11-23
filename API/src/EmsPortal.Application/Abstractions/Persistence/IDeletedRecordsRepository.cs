@@ -9,7 +9,7 @@ namespace EmsPortal.Application.Abstractions.Persistence;
 /// <param name="TenantId">Owning tenant.</param>
 /// <param name="DeletedById">The user who deleted it (resolved to a name by the controller).</param>
 /// <param name="DeletedOnUtc">When it was soft-deleted.</param>
-public sealed record DeletedRecordRow(Guid EntityId, string Identity, Guid TenantId, Guid? DeletedById, DateTime? DeletedOnUtc);
+public sealed record DeletedRecordRow(Guid EntityId, string Identity, Guid? TenantId, Guid? DeletedById, DateTime? DeletedOnUtc);
 
 /// <summary>
 /// Generic access to soft-deleted records across the entity types that support Deleted Records
@@ -30,6 +30,9 @@ public interface IDeletedRecordsRepository
     /// not found.
     /// </summary>
     Task<string?> GetDeletedIdentityAsync(EntityType entityType, Guid entityId, Guid? tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>Why a soft-deleted record cannot come back as it stands, as a sentence, or null when it can.</summary>
+    Task<string?> GetRestoreBlockerAsync(EntityType entityType, Guid entityId, CancellationToken cancellationToken = default);
 
     /// <summary>Restores a soft-deleted record and its soft-deleted UF rows.</summary>
     Task<bool> RestoreAsync(EntityType entityType, Guid entityId, Guid? tenantId, CancellationToken cancellationToken = default);

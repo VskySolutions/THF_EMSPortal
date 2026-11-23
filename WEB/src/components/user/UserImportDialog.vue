@@ -13,8 +13,8 @@
         <!-- Step 1: the file and the password. -->
         <template v-if="step === 'pick'">
           <div class="text-body2 text-grey-8 q-mb-md">
-            Load users from the Excel template or a CSV file. FirstName, LastName, Email and Role are required; MaconomyNumber, Phone
-            and Department are optional. Several roles go in one cell, separated by a semicolon or a comma;
+            Load users from the Excel template or a CSV file. FirstName, LastName, Email and Role are required; MaconomyNumber, Phone,
+            Department and Status (Active or Inactive) are optional. Several roles go in one cell, separated by a semicolon or a comma;
             the template's second sheet lists the roles and departments that can be used.
             No email is sent.
           </div>
@@ -32,10 +32,20 @@
             </div>
             <div class="col-12 col-sm-6">
               <app-password-field
-                v-model="password" label="Temporary password" required
-                hint="Given to every user in the file. Each must change it at first sign-in."
+                v-model="password" label="Temporary password" :required="!updateExisting"
+                :hint="updateExisting
+                  ? 'Only for the new users in the file. Existing users keep their password.'
+                  : 'Given to every user in the file. Each must change it at first sign-in.'"
                 :error="!!passwordError" :error-message="passwordError"
               />
+            </div>
+            <div class="col-12">
+              <q-checkbox v-model="updateExisting" dense label="Update users that already exist" />
+              <div class="text-caption text-grey-7 q-mt-xs">
+                A line whose email is already a user updates that user instead of failing. The email is never
+                changed, a blank cell leaves its value alone, the Role cell replaces the user's roles, and
+                Status Inactive switches the account off.
+              </div>
             </div>
           </div>
         </template>
@@ -61,7 +71,7 @@
         <template v-else-if="step === 'review'">
           <q-btn flat no-caps color="grey-8" label="Choose another file" :disable="busy" @click="step = 'pick'" />
           <q-btn
-            unelevated no-caps color="primary" :label="`Import ${readyCount} ${readyCount === 1 ? 'user' : 'users'}`"
+            unelevated no-caps color="primary" :label="importLabel"
             :disable="!readyCount" :loading="busy" @click="runImport"
           />
         </template>
@@ -96,6 +106,8 @@ const notify = useNotify();
 const step = ref("pick"); // pick → review → done
 const file = ref(null);
 const password = ref("");
+const updateExisting = ref(false);
+const counts = ref({ create: 0, update: 0, unchanged: 0 });
 const fileError = ref("");
 const passwordError = ref("");
 const busy = ref(false);
@@ -107,6 +119,8 @@ const reset = () => {
   step.value = "pick";
   file.value = null;
   password.value = "";
+  updateExisting.value = false;
+  counts.value = { create: 0, update: 0, unchanged: 0 };
   fileError.value = "";
   passwordError.value = "";
   rows.value = [];
@@ -137,12 +151,14 @@ const passwordProblem = () =>
 const payload = async () => ({
   fileName: file.value.name,
   content: await userImportFileToCsv(file.value),
-  temporaryPassword: password.value
+  temporaryPassword: password.value,
+  updateExisting: updateExisting.value
 });
 
 const check = async () => {
   fileError.value = file.value ? "" : "Choose the file to import.";
-  passwordError.value = passwordProblem();
+  // A file of updates alone needs no password, so a blank one waits for what the check finds.
+  passwordError.value = updateExisting.value && !password.value ? "" : passwordProblem();
   if (fileError.value || passwordError.value) return;
 
   busy.value = true;
@@ -150,6 +166,13 @@ const check = async () => {
     const checked = await userApi.checkImport(await payload());
     rows.value = checked?.rows || [];
     readyCount.value = checked?.readyCount || 0;
+    counts.value = {
+      create: checked?.createCount || 0, update: checked?.updateCount || 0, unchanged: checked?.unchangedCount || 0
+    };
+    if (counts.value.create && passwordProblem()) {
+      passwordError.value = `The file has ${counts.value.create} new ${counts.value.create === 1 ? "user" : "users"}: give a temporary password.`;
+      return;
+    }
     step.value = "review";
   } catch (err) {
     fileError.value = getApiErrorMessage(err);
@@ -174,19 +197,35 @@ const runImport = async () => {
   }
 };
 
-const errorCount = computed(() => rows.value.length - readyCount.value);
+const errorCount = computed(() => rows.value.filter((r) => r.status === "Error").length);
+
+// "3 to create, 2 to update, 1 unchanged" — only the parts there are.
+const tally = (parts) => parts.filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join(", ");
+
+const importLabel = computed(() => {
+  const { create, update } = counts.value;
+  if (!update) return `Import ${create} ${create === 1 ? "user" : "users"}`;
+  return create ? `Create ${create}, update ${update}` : `Update ${update} ${update === 1 ? "user" : "users"}`;
+});
 
 const bannerText = computed(() => {
   if (step.value === "done") {
-    const { createdCount = 0, failedCount = 0 } = result.value || {};
+    const { createdCount = 0, updatedCount = 0, failedCount = 0 } = result.value || {};
+    const done = tally([[createdCount, "created"], [updatedCount, "updated"]]) || "Nothing changed";
     return failedCount
-      ? `${createdCount} created, ${failedCount} not imported. Copy or download the failed rows, correct them and import them again.`
-      : `${createdCount} created.`;
+      ? `${done}, ${failedCount} not imported. Copy or download the failed rows, correct them and import them again.`
+      : `${done}.`;
   }
-  if (!readyCount.value) return "No line can be imported. Correct the file and choose it again.";
+  const { create, update, unchanged } = counts.value;
+  const found = tally([[create, "to create"], [update, "to update"], [unchanged, "already up to date"]]);
+  if (!readyCount.value) {
+    return unchanged && !errorCount.value
+      ? `${found}. There is nothing to import.`
+      : "No line can be imported. Correct the file and choose it again.";
+  }
   return errorCount.value
-    ? `${readyCount.value} ready to import, ${errorCount.value} with errors. The lines with errors will be left out.`
-    : `${readyCount.value} ready to import.`;
+    ? `${found}, ${errorCount.value} with errors. The lines with errors will be left out.`
+    : `${found}.`;
 });
 
 const hasProblems = computed(() => (step.value === "done" ? !!result.value?.failedCount : errorCount.value > 0));

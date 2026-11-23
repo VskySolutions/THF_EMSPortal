@@ -153,7 +153,7 @@
            on the way otherwise. Blank until the request is approved. -->
       <template #body-cell-maconomyJobSync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" number-only :sync="cell.row.maconomyJobSync" />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -317,9 +317,9 @@ const columns = computed(() => [
   // person.
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", userId: (r) => r.cse?.id, align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
   // Whether the approved client has reached Maconomy; Sync now sits in the Actions column beside it.
-  { name: "maconomySync", label: "Maconomy Customer", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Client", field: (r) => syncedNumber(r) || maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
-  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy Engagement", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // The REQUEST's approval, shown by default — it is the answer to "where does this stand?", which the
   // reader's own decision below is not.
   {
@@ -459,9 +459,9 @@ const syncNow = async (row) => {
     if (result?.status === "failed") {
       notify.error(`${row.remsNumber}: Maconomy sync failed. ${result.failureReason || ""}`.trim());
     } else if (result?.status === "linked") {
-      notify.success(`${row.remsNumber}: linked to the existing Maconomy customer ${result.customerNumber}.`);
+      notify.success(`${row.remsNumber}: linked to the existing Maconomy client ${result.customerNumber}.`);
     } else {
-      notify.success(`${row.remsNumber}: Maconomy customer ${result?.customerNumber} created.`);
+      notify.success(`${row.remsNumber}: Maconomy client ${result?.customerNumber} created.`);
     }
   } catch (err) {
     notify.error(getApiErrorMessage(err));

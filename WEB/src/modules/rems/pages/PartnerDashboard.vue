@@ -118,7 +118,7 @@
            read-only here, since Sync job now lives on the Approvals list and COP Review. -->
       <template #body-cell-maconomyJobSync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" number-only :sync="cell.row.maconomyJobSync" />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -343,8 +343,8 @@ const columns = computed(() => [
     ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
   },
   { name: "emsFormState", label: "COP State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
-  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Client", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy Engagement", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.
   { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", sortable: true, default: false, filterable: false },

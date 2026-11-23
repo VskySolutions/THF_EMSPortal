@@ -38,6 +38,7 @@ internal sealed class UserImportRowConfiguration : IEntityTypeConfiguration<User
         builder.Property(r => r.Phone).HasMaxLength(100);
         builder.Property(r => r.Department).HasMaxLength(100);
         builder.Property(r => r.Roles).HasMaxLength(1000);
+        builder.Property(r => r.AccountStatus).HasMaxLength(20);
         builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(r => r.Error).HasMaxLength(1000);
 

@@ -81,7 +81,7 @@ export function useMaconomyJobSync ({
       // The job is already there: only its budget's fee line is still owed.
       const ok = await confirm(preview.budgetOnly
         ? {
-          title: "Finish the Maconomy job",
+          title: "Finish the Maconomy engagement",
           message: `Job <b>${escapeHtml(preview.sync.jobNumber)}</b> is already in Maconomy. Its budget's FEE line is ` +
               `set to the First-Year Fee Estimate, <b>${escapeHtml(Number(preview.feeEstimate ?? 0).toFixed(2))}</b>. ` +
               "No second job is created.",
@@ -89,7 +89,7 @@ export function useMaconomyJobSync ({
           html: true
         }
         : {
-          title: "Create the Maconomy job",
+          title: "Create the Maconomy engagement",
           message: "A job is created in Maconomy from the template job, under the client's customer; Maconomy " +
               `assigns the job number.<br><br>${describe(preview)}`,
           confirmLabel: "Create job",
@@ -100,11 +100,11 @@ export function useMaconomyJobSync ({
       // A failed post comes back as a result with a reason, not an error; only a refusal throws.
       const result = await run(remsId, templateJobNumber);
       if (result?.status === "failed") {
-        notify.error(`${preview.remsNumber}: Maconomy job sync failed. ${result.failureReason || ""}`.trim());
+        notify.error(`${preview.remsNumber}: Maconomy engagement sync failed. ${result.failureReason || ""}`.trim());
       } else {
         notify.success(preview.budgetOnly
-          ? `${preview.remsNumber}: fee estimate set on Maconomy job ${result?.jobNumber}.`
-          : `${preview.remsNumber}: Maconomy job ${result?.jobNumber} created.`);
+          ? `${preview.remsNumber}: fee estimate set on Maconomy engagement ${result?.jobNumber}.`
+          : `${preview.remsNumber}: Maconomy engagement ${result?.jobNumber} created.`);
       }
     } catch (err) {
       pressed = true;

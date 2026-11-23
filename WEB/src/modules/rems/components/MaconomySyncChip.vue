@@ -20,7 +20,9 @@ const props = defineProps({
   // lists hand the bare status word instead, so both shapes are read.
   sync: { type: [Object, String], default: null },
   // Which Maconomy record the chip is about: the client as a customer, or the engagement as a job.
-  kind: { type: String, default: "customer" }
+  kind: { type: String, default: "customer" },
+  // Under a column heading that already says what the number is, the badge shows the number alone.
+  numberOnly: { type: Boolean, default: false }
 });
 
 const fmt = useDateFormat();
@@ -34,7 +36,7 @@ const look = computed(() => {
   const base = looks.value[status.value] || looks.value.notSynced;
   // A synced record reads as its number: that is what somebody will type into Maconomy.
   if (isJob.value) {
-    return status.value === "synced" && view.value.jobNumber ? { ...base, label: `Job ${view.value.jobNumber}` } : base;
+    return status.value === "synced" && view.value.jobNumber ? { ...base, label: props.numberOnly ? view.value.jobNumber : `Engagement ${view.value.jobNumber}` } : base;
   }
   if ((status.value === "synced" || status.value === "linked") && view.value.customerNumber) {
     return { ...base, label: `Maconomy ${view.value.customerNumber}` };
@@ -56,8 +58,8 @@ const jobTooltip = () => {
     case "syncing":
       return "An attempt is under way.";
     default:
-      if (v.syncEnabled === false) return "No Maconomy job: the job sync is switched off.";
-      return v.blockedReason || "No Maconomy job yet.";
+      if (v.syncEnabled === false) return "No Maconomy engagement: the job sync is switched off.";
+      return v.blockedReason || "No Maconomy engagement yet.";
   }
 };
 
@@ -68,8 +70,8 @@ const customerTooltip = () => {
       return v.syncedOnUtc ? `Created in Maconomy ${fmt.formatDateTime(v.syncedOnUtc)}.` : "Created in Maconomy.";
     case "linked":
       return v.syncedOnUtc
-        ? `A Maconomy customer with this client's email already existed; linked ${fmt.formatDateTime(v.syncedOnUtc)}.`
-        : "Linked to an existing Maconomy customer with this client's email.";
+        ? `A Maconomy client with this client's email already existed; linked ${fmt.formatDateTime(v.syncedOnUtc)}.`
+        : "This client is already a Maconomy client.";
     case "failed":
       return v.failureReason || "The last attempt failed.";
     case "pending":

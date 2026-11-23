@@ -21,6 +21,8 @@ public static class Permissions
     public const string UsersRead = "users.read";
     public const string UsersWrite = "users.write";
     public const string UsersResetPassword = "users.reset_password";
+    /// <summary>Delete a user account. Held by Super Admin and Tenant Admin only.</summary>
+    public const string UsersDelete = "users.delete";
     /// <summary>Create user groups and assign/remove users from them (and delete groups).</summary>
     public const string UsersGroupManagement = "users.groupManagement";
 
@@ -119,7 +121,7 @@ public static class Permissions
     {
         TenantsRead, TenantsWrite, TenantsArchive,
         PersonsRead, PersonsWrite, PersonsDelete,
-        UsersRead, UsersWrite, UsersResetPassword, UsersGroupManagement,
+        UsersRead, UsersWrite, UsersResetPassword, UsersDelete, UsersGroupManagement,
         RolesRead, RolesWrite, RolesAssign,
         GroupsManage,
         EmailManage,
@@ -141,7 +143,7 @@ public static class Permissions
         TenantsRead,
         // Deleting persons stays Super-Admin-only (PersonsDelete intentionally excluded here).
         PersonsRead, PersonsWrite,
-        UsersRead, UsersWrite, UsersResetPassword, UsersGroupManagement,
+        UsersRead, UsersWrite, UsersResetPassword, UsersDelete, UsersGroupManagement,
         // Tenant Admins manage the roles of users in their OWN tenant, and build roles of their own to
         // assign. The permission alone is not the whole boundary. UsersController confines them to their
         // active tenant, refuses to grant the Super Admin role, refuses a Super Admin target, and refuses

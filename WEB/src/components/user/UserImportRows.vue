@@ -25,12 +25,16 @@
       <template #body-cell-error="cell">
         <q-td :props="cell" class="import-rows__error">
           <span v-if="cell.value" class="text-negative">{{ cell.value }}</span>
-          <router-link
-            v-else-if="cell.row.userId" class="text-primary"
-            :to="{ name: 'user_detail', params: { id: cell.row.userId } }"
-          >
-            Open user
-          </router-link>
+          <template v-else>
+            <!-- What an update changes, on a check. -->
+            <span v-if="cell.row.note" class="text-grey-8 q-mr-sm">{{ cell.row.note }}</span>
+            <router-link
+              v-if="cell.row.userId" class="text-primary"
+              :to="{ name: 'user_detail', params: { id: cell.row.userId } }"
+            >
+              Open user
+            </router-link>
+          </template>
         </q-td>
       </template>
     </q-table>
@@ -55,6 +59,9 @@ const notify = useNotify();
 const STATUS = {
   Ready: { color: "positive" },
   Created: { color: "positive" },
+  Update: { color: "primary" },
+  Updated: { color: "primary" },
+  Unchanged: { color: "grey" },
   Error: { color: "negative" },
   Failed: { color: "negative" }
 };
@@ -69,6 +76,7 @@ const columns = [
   { name: "department", label: "Department", field: "department", align: "left" },
   { name: "phone", label: "Phone", field: "phone", align: "left" },
   { name: "maconomyNumber", label: "Maconomy Number", field: "maconomyNumber", align: "left" },
+  { name: "accountStatus", label: "Account", field: "accountStatus", align: "left" },
   { name: "error", label: "Result", field: "error", align: "left" }
 ];
 

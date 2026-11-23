@@ -28,7 +28,7 @@ public static class MaconomyJobSyncRules
         }
         if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Synced)
         {
-            return $"This engagement is already Maconomy job {request.MaconomyJobNumber}.";
+            return $"This engagement is already Maconomy engagement {request.MaconomyJobNumber}.";
         }
         if (request.MaconomyJobSyncStatus == RemsMaconomyJobSyncStatus.Pending && !stale)
         {

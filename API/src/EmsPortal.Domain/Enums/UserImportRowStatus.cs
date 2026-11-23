@@ -5,4 +5,6 @@ public enum UserImportRowStatus
 {
     Created = 0,
     Failed = 1,
+    Updated = 2,
+    Unchanged = 3,
 }

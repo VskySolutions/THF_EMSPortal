@@ -180,7 +180,8 @@ public sealed class RemsEngagementController : ControllerBase
             MaconomyJobSync: sync.Job,
             CopiedFromRemsNumber: i.CopiedFromRemsNumber,
             CanCopy: mayCopy,
-            IntakeReused: i.IntakeReused));
+            IntakeReused: i.IntakeReused,
+            MaconomyCustomerNumber: i.MaconomyCustomerNumber));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }

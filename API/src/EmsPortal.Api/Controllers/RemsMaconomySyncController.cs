@@ -84,8 +84,8 @@ public sealed class RemsMaconomySyncController : ControllerBase
 
     public static string MessageFor(RemsMaconomySyncView view) => view.Status switch
     {
-        RemsMaconomySyncStatuses.Synced => $"Maconomy customer {view.CustomerNumber} created.",
-        RemsMaconomySyncStatuses.Linked => $"Linked to the existing Maconomy customer {view.CustomerNumber}.",
+        RemsMaconomySyncStatuses.Synced => $"Maconomy client {view.CustomerNumber} created.",
+        RemsMaconomySyncStatuses.Linked => $"Linked to the existing Maconomy client {view.CustomerNumber}.",
         RemsMaconomySyncStatuses.Failed => $"The sync failed: {view.FailureReason}",
         _ => "Sync recorded.",
     };

@@ -64,7 +64,7 @@ public sealed class RemsMaconomyJobSyncController : ControllerBase
         var preview = RemsMaconomyJobSyncViews.PreviewFor(
             request, context, _sync.IsStale(request), canManage: true, await SyncedByNameAsync(request.MaconomyJobSyncedById, cancellationToken),
             await _sync.GetLookupsAsync(request, cancellationToken));
-        return Ok(ApiResponseFactory.Success(preview, "Maconomy job sync preview retrieved."));
+        return Ok(ApiResponseFactory.Success(preview, "Maconomy engagement sync preview retrieved."));
     }
 
     /// <summary>

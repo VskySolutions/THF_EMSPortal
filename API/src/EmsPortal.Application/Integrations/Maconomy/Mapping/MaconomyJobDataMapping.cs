@@ -348,7 +348,7 @@ public static class MaconomyJobDataMapping
         new MaconomyFieldMapping(NotOnAForm, "Job name", NameField, "Job Name",
             "Client name-Job Type-Job Description, the description left off when blank: a person as \"Last First\", an organisation by its legal name, a Maconomy-picked client as Maconomy names it."),
         new MaconomyFieldMapping(NotOnAForm, "Customer", CustomerField, "Customer No.",
-            "The client's Maconomy customer number, from the customer sync or the Maconomy customer picked on the request. Without one the request is not eligible."),
+            "The client's Maconomy client number, from the customer sync or the Maconomy client picked on the request. Without one the request is not eligible."),
         new MaconomyFieldMapping(NotOnAForm, "CSE (Client Information)", AccountManagerField, "Account Manager No.", PersonRule),
         new MaconomyFieldMapping(NotOnAForm, "Job number", NumberField, "Job No.",
             "Never sent: Maconomy's number series assigns it, and it is written back onto the request.", ReadBack: true),

@@ -75,7 +75,7 @@ public sealed class DeletedRecordsController : ControllerBase
 
         var names = await _users.GetFullNamesAsync(items.Where(i => i.DeletedById.HasValue).Select(i => i.DeletedById!.Value), cancellationToken);
         var data = items.Select(i => new DeletedRecordResponse(
-            entityType, i.EntityId, i.Identity, i.TenantId, i.DeletedById,
+            entityType, i.EntityId, i.Identity, i.TenantId ?? Guid.Empty, i.DeletedById,
             i.DeletedById is { } id && names.TryGetValue(id, out var name) ? name : null,
             i.DeletedOnUtc, i.DeletedOnUtc is { } d && d <= cutoff));
         return Ok(ApiResponseFactory.Paginated(data, "Deleted records retrieved.", page, limit, total));
@@ -86,6 +86,11 @@ public sealed class DeletedRecordsController : ControllerBase
     [ProducesResponseType<ApiResponse<object>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Restore([FromBody] RestoreRecordRequest request, CancellationToken cancellationToken)
     {
+        if (await _deleted.GetRestoreBlockerAsync(request.EntityType, request.EntityId, cancellationToken) is { } blocker)
+        {
+            return Conflict(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Record not restored.", blocker));
+        }
+
         if (!await _deleted.RestoreAsync(request.EntityType, request.EntityId, null, cancellationToken))
         {
             return NotFound(ApiResponseFactory.NotFound("Deleted record not found."));
@@ -106,7 +111,11 @@ public sealed class DeletedRecordsController : ControllerBase
         {
             try
             {
-                if (await _deleted.RestoreAsync(request.EntityType, entityId, null, cancellationToken))
+                if (await _deleted.GetRestoreBlockerAsync(request.EntityType, entityId, cancellationToken) is { } blocker)
+                {
+                    results.Add(new BulkRecordResult(entityId, false, blocker));
+                }
+                else if (await _deleted.RestoreAsync(request.EntityType, entityId, null, cancellationToken))
                 {
                     await WriteRestoreEventAsync(request.EntityType, entityId, cancellationToken);
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -141,7 +150,15 @@ public sealed class DeletedRecordsController : ControllerBase
             return BadRequest(ApiResponseFactory.Error(ApiErrorCodes.ValidationFailed, "Confirmation failed.", "The confirmation token does not match the record identifier."));
         }
 
-        await _unitOfWork.ExecuteInTransactionAsync(ct => _deleted.HardDeleteAsync(request.EntityType, request.EntityId, null, ct), cancellationToken);
+        try
+        {
+            await _unitOfWork.ExecuteInTransactionAsync(ct => _deleted.HardDeleteAsync(request.EntityType, request.EntityId, null, ct), cancellationToken);
+        }
+        catch (Exception ex) when (IsStillReferenced(ex))
+        {
+            return StillReferenced();
+        }
+
         return Ok(ApiResponseFactory.Success(new { request.EntityType, request.EntityId }, "Record permanently deleted."));
     }
 
@@ -157,13 +174,20 @@ public sealed class DeletedRecordsController : ControllerBase
         }
 
         // All-or-nothing: the whole batch commits in a single transaction.
-        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        try
         {
-            foreach (var entityId in ids)
+            await _unitOfWork.ExecuteInTransactionAsync(async ct =>
             {
-                await _deleted.HardDeleteAsync(request.EntityType, entityId, null, ct);
-            }
-        }, cancellationToken);
+                foreach (var entityId in ids)
+                {
+                    await _deleted.HardDeleteAsync(request.EntityType, entityId, null, ct);
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex) when (IsStillReferenced(ex))
+        {
+            return StillReferenced();
+        }
 
         return Ok(ApiResponseFactory.Success(new { count = ids.Count }, "Records permanently deleted."));
     }
@@ -221,6 +245,14 @@ public sealed class DeletedRecordsController : ControllerBase
         var data = counts.Select(kv => new RetentionOverdueResponse(kv.Key, kv.Value));
         return Ok(ApiResponseFactory.Success(data, "Retention overdue counts retrieved."));
     }
+
+    // SQL Server 547: another table still points at the row. The transaction has rolled back.
+    private static bool IsStillReferenced(Exception ex)
+        => ex.GetBaseException() is Microsoft.Data.SqlClient.SqlException { Number: 547 };
+
+    private IActionResult StillReferenced() => Conflict(ApiResponseFactory.Error(
+        ApiErrorCodes.ValidationFailed, "Not permanently deleted.",
+        "Other records still use this one (for a user: requests, approvals or delegations), so it cannot be permanently deleted. Nothing was removed; it stays in the deleted list."));
 
     private async Task WriteRestoreEventAsync(EntityType entityType, Guid entityId, CancellationToken cancellationToken)
     {

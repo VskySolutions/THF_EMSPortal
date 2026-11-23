@@ -122,6 +122,7 @@ export const userApi = {
   setStatus: (id, isActive) => api.put(`/api/admin/users/${id}/status`, { isActive }).then(unwrap),
   // Admin password reset (REQ-ADM-013) — returns a new temporary password.
   resetPassword: (id) => api.post(`/api/admin/users/${id}/reset-password`).then(unwrap),
+  remove: (id) => api.delete(`/api/admin/users/${id}`).then(envelope),
   // payload: { tenantId, roleIds[] } — reconciles the full set of roles the user holds in the tenant
   // (adds/removes to match; an empty set removes tenant access). WO-123 multi-role.
   assignTenantRole: (id, payload) =>

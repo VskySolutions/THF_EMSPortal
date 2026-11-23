@@ -1249,7 +1249,7 @@ public sealed class RemsRequestsController : ControllerBase
             }
             return Ok(ApiResponseFactory.Success(
                 new RemsMaconomyLookup(RemsMaconomyLookupStatuses.Ok, null, found.More, items),
-                "Maconomy customers retrieved."));
+                "Maconomy clients retrieved."));
         }
         catch (MaconomyException ex)
         {
@@ -1276,7 +1276,7 @@ public sealed class RemsRequestsController : ControllerBase
     {
         if (User.GetActiveTenantId() is not { } tenantId || Normalize(number) is not { } customerNumber)
         {
-            return NotFound(ApiResponseFactory.NotFound("Maconomy customer not found."));
+            return NotFound(ApiResponseFactory.NotFound("Maconomy client not found."));
         }
 
         MaconomyClientDetails? customer;
@@ -1295,7 +1295,7 @@ public sealed class RemsRequestsController : ControllerBase
 
         var client = await _clients.FindByMaconomyNumberAsync(customer.Number, cancellationToken);
         return Ok(ApiResponseFactory.Success(
-            ToLookupItem(customer, client?.Id, client?.EntityType?.Value), "Maconomy customer retrieved."));
+            ToLookupItem(customer, client?.Id, client?.EntityType?.Value), "Maconomy client retrieved."));
     }
 
     /// <summary>The tenant's Admin and Super Admin users.</summary>

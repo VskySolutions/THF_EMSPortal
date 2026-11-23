@@ -97,7 +97,10 @@
            brand-new client to post. -->
       <template #body-cell-maconomySync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomySyncStatus" :sync="cell.row.maconomySyncStatus" />
+          <maconomy-sync-chip
+            v-if="cell.row.maconomySyncStatus"
+            :sync="{ status: cell.row.maconomySyncStatus, customerNumber: cell.row.maconomyCustomerNumber }"
+          />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -105,7 +108,7 @@
       <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved. -->
       <template #body-cell-maconomyJobSync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" number-only :sync="cell.row.maconomyJobSync" />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -331,9 +334,9 @@ const columns = computed(() => [
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", userId: (r) => r.cse?.id, align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Client", field: (r) => r.maconomyCustomerNumber || maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
   // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
-  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy Engagement", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);

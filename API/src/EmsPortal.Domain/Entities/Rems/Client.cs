@@ -95,7 +95,7 @@ public class Client : AuditableEntity
         : DisplayName;
 
     /// <summary>What stands in for the name while Maconomy cannot be read: the one thing the portal does hold.</summary>
-    public static string MaconomyPlaceholderName(string customerNumber) => $"Maconomy customer {customerNumber.Trim()}";
+    public static string MaconomyPlaceholderName(string customerNumber) => $"Maconomy client {customerNumber.Trim()}";
 
     [NotMapped]
     public string? ClientEmail => IsMaconomyClient ? Maconomy?.Email ?? PrimaryEmail : PrimaryEmail;

@@ -551,13 +551,13 @@ const clientInfo = computed(() => {
       "the request naming somebody nobody wrote to.";
   }
   if (isMaconomyClient.value) {
-    return "A Maconomy customer. The details below are read from Maconomy each time — the portal " +
+    return "A Maconomy client. The details below are read from Maconomy each time — the portal " +
       "stores only the customer number.";
   }
   if (linkedClient.value) return "Linked to a THF client record — the details below are read off it.";
   if (addingNew.value) return "A client THF does not have yet. The details below file a new record.";
   return "Search by name, email or phone, across every entity type — clients already in the portal " +
-    "and Maconomy customers together. Pick the client to fill in their details" +
+    "and Maconomy clients together. Pick the client to fill in their details" +
     (props.canAddNew ? ", or add a new one." : ".");
 });
 
@@ -1100,9 +1100,9 @@ const showMaconomyDetails = (customer) => {
 
 const maconomyNumber = computed(() => linkedClient.value?.maconomyCustomerNumber || "");
 const maconomyLockNote = computed(() =>
-  `From Maconomy customer ${maconomyNumber.value}. It is changed in Maconomy, not here.`);
+  `From Maconomy client ${maconomyNumber.value}. It is changed in Maconomy, not here.`);
 const maconomyInfo = computed(() =>
-  `Maconomy customer ${maconomyNumber.value}. These details are read from Maconomy each time and are ` +
+  `Maconomy client ${maconomyNumber.value}. These details are read from Maconomy each time and are ` +
   "not stored in the portal — to change one, change it in Maconomy.");
 
 // The request as last saved says when Maconomy could not be read at all.

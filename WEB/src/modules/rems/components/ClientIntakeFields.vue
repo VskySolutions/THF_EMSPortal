@@ -283,15 +283,25 @@
     <q-card v-if="!isIndividual" flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Other Entities
+        <q-icon name="o_info" size="15px" color="grey-6" class="cif-subhead__info">
+          <q-tooltip anchor="top middle" self="bottom middle" max-width="320px" :delay="200">
+            Example: you are filling this in for ABC Holdings LLC, and you also own ABC Rentals LLC, which
+            needs its own return. Add ABC Rentals LLC here.
+          </q-tooltip>
+        </q-icon>
         <div class="text-caption text-grey-7 text-weight-regular">
-          We will set each one up separately and get in touch about it.
+          Add an entity here only if it is a separate business, trust or organization that also needs our
+          services. Each one is set up as its own client, and we email it its own form at the address you give.
+        </div>
+        <div class="text-caption text-grey-7 text-weight-regular">
+          Do not add this entity's owners, contacts or staff here; they go under Contacts.
         </div>
       </q-card-section>
       <q-separator />
       <q-card-section>
         <q-toggle
           :model-value="hasRelatedEntities"
-          label="Are there more entities?"
+          label="Do you have other entities that also need our services?"
           color="primary"
           @update:model-value="onToggleRelated"
         />

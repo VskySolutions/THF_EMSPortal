@@ -18,6 +18,9 @@ public class UserImport : AuditableEntity
 
     public int CreatedCount { get; set; }
 
+    /// <summary>Existing users the file changed. A matched line with nothing to change is not counted.</summary>
+    public int UpdatedCount { get; set; }
+
     public int FailedCount { get; set; }
 
     public ICollection<UserImportRow> Rows { get; set; } = new List<UserImportRow>();
@@ -49,6 +52,9 @@ public class UserImportRow : AuditableEntity
 
     /// <summary>The Role cell as typed.</summary>
     public string? Roles { get; set; }
+
+    /// <summary>The Status cell as typed: Active, Inactive or blank.</summary>
+    public string? AccountStatus { get; set; }
 
     public UserImportRowStatus Status { get; set; }
 

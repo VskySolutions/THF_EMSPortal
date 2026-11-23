@@ -1190,7 +1190,7 @@ const clientRows = computed(() => [
   { label: "Client", value: clientForm.clientName, suffix: clientForm.clientNameSuffix || "" },
   // Only where there is one: a client typed into the portal has no Maconomy number to show.
   ...(clientForm.maconomyCustomerNumber
-    ? [{ label: "Maconomy Customer", value: clientForm.maconomyCustomerNumber }]
+    ? [{ label: "Maconomy Client", value: clientForm.maconomyCustomerNumber }]
     : []),
   { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Client Email Address", value: clientForm.customerEmail },
@@ -1669,7 +1669,9 @@ const maconomySyncNote = computed(() => {
     case "synced":
       return `Created in Maconomy${when}.`;
     case "linked":
-      return `A Maconomy customer with this client's email already existed; linked to it${when}.`;
+      return s.syncedOnUtc
+        ? `A Maconomy client with this client's email already existed; linked to it${when}.`
+        : "This client is already a Maconomy client.";
     case "failed":
       return s.failureReason || "The last attempt failed.";
     case "pending":
@@ -1700,10 +1702,10 @@ const maconomyJobSyncNote = computed(() => {
       return "Posting the job to Maconomy now.";
     default:
       if (!s.syncEnabled) {
-        return "No Maconomy job: the job sync is switched off. Start it under Tenant Settings → Maconomy → Job.";
+        return "No Maconomy engagement: the job sync is switched off. Start it under Tenant Settings → Maconomy → Job.";
       }
       return s.blockedReason ||
-        "No Maconomy job yet. Sync job now is on the Approvals list, COP Review and the Maconomy settings page's Job tab.";
+        "No Maconomy engagement yet. Sync job now is on the Approvals list, COP Review and the Maconomy settings page's Job tab.";
   }
 });
 

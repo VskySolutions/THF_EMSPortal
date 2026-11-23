@@ -45,6 +45,7 @@
       <template #bulk-actions="{ selected: sel }">
         <q-btn v-if="has(Permissions.UsersWrite)" flat dense no-caps color="positive" label="Activate" @click="bulkSetStatus(sel, true)" />
         <q-btn v-if="has(Permissions.UsersWrite)" flat dense no-caps color="negative" label="Deactivate" @click="bulkSetStatus(sel, false)" />
+        <q-btn v-if="canDelete" flat dense no-caps color="negative" icon="o_delete" label="Delete" @click="removeUsers(sel)" />
       </template>
 
       <template #body-cell-isActive="cell">
@@ -87,12 +88,18 @@
           >
             <q-tooltip>Reset Password</q-tooltip>
           </q-btn>
+          <q-btn
+            v-if="canDelete" type="a"
+            flat round dense color="negative" icon="o_delete" @click="removeUsers([cell.row])"
+          >
+            <q-tooltip>Delete</q-tooltip>
+          </q-btn>
         </q-td>
       </template>
     </app-data-table>
 
     <deleted-records-panel
-      v-if="canManageDeleted" :entity-type="EntityType.User" :show="showDeleted" @restored="load"
+      v-if="canManageDeleted" ref="deletedPanel" :entity-type="EntityType.User" :show="showDeleted" @restored="load"
     />
 
     <!-- Create user (promote an existing Person to a login account). -->
@@ -235,6 +242,36 @@ const bulkSetStatus = async (sel, isActive) => {
   } catch (err) {
     notify.error(getApiErrorMessage(err));
   }
+};
+
+// ---- Delete ----
+const canDelete = computed(() => has(Permissions.UsersDelete));
+const deletedPanel = ref(null);
+
+// Each user is deleted on its own, so one refusal does not stop the rest.
+const removeUsers = async (list) => {
+  if (!list.length) return;
+  const one = list.length === 1;
+  const ok = await confirm({
+    title: one ? "Delete user" : "Delete users",
+    message: `Delete ${one ? list[0].fullName : `${list.length} users`}? They will no longer be able to sign in. ` +
+      "Deleted users can be restored, or permanently deleted, under Filters > Show deleted.",
+    confirmLabel: "Delete",
+    type: "danger"
+  });
+  if (!ok) return;
+
+  const results = await Promise.allSettled(list.map((r) => userApi.remove(r.userId)));
+  const failed = results.filter((r) => r.status === "rejected");
+  const done = results.length - failed.length;
+  if (done) notify.success(done === 1 ? "User deleted." : `${done} users deleted.`);
+  if (failed.length) {
+    const reason = getApiErrorMessage(failed[0].reason);
+    notify.error(failed.length === 1 ? reason : `${failed.length} users were not deleted. First: ${reason}`);
+  }
+  selected.value = [];
+  load();
+  deletedPanel.value?.refresh();
 };
 
 const resetPassword = async (row) => {

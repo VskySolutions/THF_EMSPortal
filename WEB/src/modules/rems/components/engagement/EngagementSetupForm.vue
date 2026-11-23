@@ -29,7 +29,7 @@
         <app-select
           :model-value="core.jobType" :options="offeredJobTypes" label="Job Type" required class="col-12 col-sm-6"
           :readonly="!editable" :rules="[jobTypeRule]" :hint="jobTypeHint"
-          info="From the REMS Job Type option list (Administration → Option Sets), narrowed to the job types the selected Service Line offers. The kind of job the engagement is set up as; it is part of the Maconomy job's name."
+          info="From the REMS Job Type option list (Administration → Option Sets), narrowed to the job types the selected Service Line offers. The kind of job the engagement is set up as; it is part of the Maconomy engagement's name."
           @update:model-value="onJobTypePicked"
         />
         <!-- A short plain-text tag for the job, under its job type. Optional. -->
