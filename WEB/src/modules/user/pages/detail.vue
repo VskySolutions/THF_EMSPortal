@@ -133,7 +133,7 @@
               <div class="text-subtitle1 text-weight-medium">Department</div>
               <app-info-tip
                 v-if="canEdit && inActiveTenant"
-                text="Saves as soon as you change it. Taking a headship from somebody else asks first — the head of a department is its REMS Department Director, and that is who new engagements are routed to."
+                text="Saves as soon as you change it. Taking a headship from somebody else asks first — the head of a department is its COP Department Director, and that is who new engagements are routed to."
               />
               <q-space />
               <app-auto-save-state :state="departmentSave.state" :message="departmentSave.message" />
@@ -146,7 +146,7 @@
               <app-select
                 v-model="department" :options="departmentOptions" :loading="loadingDepartments" label="Department"
                 class="col-12 col-sm-6" :readonly="!canEdit"
-                info="From the REMS Department option list (Administration → Option Sets). A department has one head, and that head is its REMS Department Director."
+                info="From the REMS Department option list (Administration → Option Sets). A department has one head, and that head is its COP Department Director."
                 @update:model-value="onDepartmentChange"
               />
               <div class="col-12 col-sm-6">
@@ -492,7 +492,7 @@ const currentHead = computed(() => departmentHeads.value.find((h) => h.departmen
 const headHint = computed(() => {
   if (!department.value) return "Pick a department to set a head.";
   if (!currentHead.value) return `${departmentLabel(department.value)} has no head yet.`;
-  if (sameId(currentHead.value.userId, userId)) return "Heads this department, and is its REMS Department Director.";
+  if (sameId(currentHead.value.userId, userId)) return "Heads this department, and is its COP Department Director.";
   return `${currentHead.value.fullName} currently heads ${departmentLabel(department.value)}.`;
 });
 

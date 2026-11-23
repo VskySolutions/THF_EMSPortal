@@ -43,7 +43,7 @@
           <app-select
             v-model="form.department" :options="departmentOptions" :loading="loadingDepartments"
             label="Department" class="q-mb-md"
-            info="From the REMS Department option list. The department's head is its REMS Department Director, which is what prefills that field on an engagement."
+            info="From the REMS Department option list. The department's head is its COP Department Director, which is what prefills that field on an engagement."
             @update:model-value="onDepartmentChange"
           />
           <q-toggle v-model="form.isDepartmentHead" :disable="!form.department" label="Department head" />

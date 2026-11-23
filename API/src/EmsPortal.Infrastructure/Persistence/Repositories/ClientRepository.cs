@@ -118,7 +118,17 @@ internal sealed class ClientRepository : IClientRepository
     public async Task AddContractAsync(ClientContract contract, CancellationToken cancellationToken = default)
         => await _dbContext.ClientContracts.AddAsync(contract, cancellationToken);
 
-    public void UpdateContract(ClientContract contract) => _dbContext.ClientContracts.Update(contract);
+    public void UpdateContract(ClientContract contract)
+    {
+        // A contract added in this same unit of work stays an INSERT: marking it modified turns it into an
+        // UPDATE of a row that does not exist yet.
+        if (_dbContext.Entry(contract).State == EntityState.Added)
+        {
+            return;
+        }
+        _dbContext.ClientContracts.Update(contract);
+    }
+
 
     // ---- Maconomy customer sync ----
 

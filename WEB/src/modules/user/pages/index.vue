@@ -59,7 +59,7 @@
           <template v-if="cell.value">
             <span>{{ cell.value }}</span>
             <q-icon v-if="cell.row.isDepartmentHead" name="o_workspace_premium" color="primary" size="18px" class="q-ml-xs">
-              <q-tooltip>Heads {{ cell.value }} — its REMS Department Director</q-tooltip>
+              <q-tooltip>Heads {{ cell.value }} — its COP Department Director</q-tooltip>
             </q-icon>
           </template>
           <span v-else class="text-grey-6">—</span>

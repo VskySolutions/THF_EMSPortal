@@ -18,6 +18,7 @@ public static class SerilogConfigurator
 
     /// <summary>
     /// Applies the platform's standard sinks and enrichers to a logger configuration.
+    /// The SQL table takes Error and Fatal only.
     /// Log level defaults to Debug in Development and Information elsewhere, and can be
     /// overridden via the <c>Serilog:MinimumLevel</c> configuration value.
     /// </summary>
@@ -40,10 +41,12 @@ public static class SerilogConfigurator
             .Enrich.WithProperty("Environment", environmentName)
             .WriteTo.Console();
 
+        // The table keeps errors only; the console still shows everything at the minimum level.
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
             loggerConfiguration.WriteTo.MSSqlServer(
                 connectionString: connectionString,
+                restrictedToMinimumLevel: LogEventLevel.Error,
                 sinkOptions: new MSSqlServerSinkOptions
                 {
                     TableName = LogTableName,

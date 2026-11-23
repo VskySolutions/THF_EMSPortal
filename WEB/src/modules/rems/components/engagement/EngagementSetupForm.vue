@@ -202,9 +202,11 @@
               <template #prepend><span class="text-grey-7">$</span></template>
             </app-text-field>
             <!-- The pair has to run forwards, and whichever end was typed last is the one that says so. -->
+            <!-- Taking the beginning off takes the ending with it: an end with no start is not a range. -->
             <app-date-field
               v-model="gov.purchaseOrderStartDate" label="PO Beginning Date" class="col-12 col-sm-6"
               :readonly="!editable" :rules="poStartRules" :max-date="gov.purchaseOrderEndDate"
+              @update:model-value="(v) => { if (!v) gov.purchaseOrderEndDate = null; }"
             />
             <app-date-field
               v-model="gov.purchaseOrderEndDate" label="PO Ending Date" class="col-12 col-sm-6"
@@ -849,6 +851,11 @@ const saveSetup = async (engagementId, remsId = null) => {
   if (showGovernment.value || showGcs.value) {
     view = await remsApi.updateGovernment(engagementId, {
       ...gov.value,
+      // A cleared date box holds "", which the API cannot read as a date: blank goes as null.
+      contractStartDate: gov.value.contractStartDate || null,
+      contractEndDate: gov.value.contractEndDate || null,
+      purchaseOrderStartDate: gov.value.purchaseOrderStartDate || null,
+      purchaseOrderEndDate: gov.value.purchaseOrderEndDate || null,
       purchaseOrderAmount: toNum(gov.value.purchaseOrderAmount),
       // The rate card as rows, and only the levels given a rate. Not sent at all while the card is hidden:
       // the API leaves the stored one alone.

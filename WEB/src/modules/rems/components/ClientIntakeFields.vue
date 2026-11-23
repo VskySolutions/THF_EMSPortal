@@ -238,6 +238,7 @@
           <app-date-field
             v-model="payload.contractStartDate" label="Contract Start Date" class="col-12 col-sm-6"
             :max-date="payload.contractEndDate"
+            @update:model-value="(v) => { if (!v) payload.contractEndDate = ''; }"
           />
           <!-- Each pair has to run forwards; said on the end date, and again by the server on Review. -->
           <app-date-field
@@ -250,6 +251,7 @@
           <app-date-field
             v-model="payload.poStartDate" label="Purchase Order Start Date" class="col-12 col-sm-6"
             :max-date="payload.poEndDate"
+            @update:model-value="(v) => { if (!v) payload.poEndDate = ''; }"
           />
           <app-date-field
             v-model="payload.poEndDate" label="Purchase Order End Date" class="col-12 col-sm-6"
