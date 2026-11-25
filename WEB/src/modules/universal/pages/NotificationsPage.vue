@@ -58,7 +58,7 @@
       <template #body-cell-notification="cell">
         <q-td :props="cell" class="cursor-pointer" @click="open(cell.row)">
           <div :class="cell.row.isRead ? '' : 'text-weight-medium'">{{ cell.row.title }}</div>
-          <div class="text-grey-7 fs-12 ellipsis-2-lines">{{ cell.row.body }}</div>
+          <div class="text-grey-7 fs-12 ellipsis-2-lines">{{ stripHtml(cell.row.body) }}</div>
         </q-td>
       </template>
 
@@ -114,6 +114,7 @@ import { useListTable } from "composables/useListTable";
 import { useColumnFilters } from "composables/useColumnFilters";
 import { useNotify } from "composables/useNotify";
 import { useDateFormat } from "composables/useDateFormat";
+import { stripHtml } from "utils/richText";
 import { useNotificationMeta } from "composables/uf/useNotificationMeta";
 import { useNotificationRoute } from "composables/uf/useNotificationRoute";
 

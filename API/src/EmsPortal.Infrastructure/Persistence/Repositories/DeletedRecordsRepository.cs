@@ -277,6 +277,18 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.Deleted, false).SetProperty(p => p.DeletedOnUtc, (DateTime?)null), cancellationToken);
         }
 
+        // A client deleted with their only request, and the person behind them, come back with it.
+        if (entityType == EntityType.Rems)
+        {
+            var clients = _dbContext.Clients.IgnoreQueryFilters()
+                .Where(c => c.Deleted && _dbContext.RemsRequests.IgnoreQueryFilters().Any(r => r.Id == entityId && r.ClientId == c.Id));
+            await _dbContext.Persons.IgnoreQueryFilters()
+                .Where(p => p.Deleted && clients.Any(c => c.PersonId == p.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Deleted, false).SetProperty(p => p.DeletedOnUtc, (DateTime?)null), cancellationToken);
+            await clients
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.Deleted, false).SetProperty(c => c.DeletedOnUtc, (DateTime?)null), cancellationToken);
+        }
+
         await RestoreUniversalFeaturesAsync(entityType, entityId, cancellationToken);
         return true;
     }
@@ -284,6 +296,17 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
     public async Task<string?> GetRestoreBlockerAsync(
         EntityType entityType, Guid entityId, CancellationToken cancellationToken = default)
     {
+        if (entityType == EntityType.Rems)
+        {
+            // The email was free for another client while this one was deleted, and an email belongs to one client.
+            var clientEmail = await _dbContext.RemsRequests.IgnoreQueryFilters()
+                .Where(r => r.Id == entityId && r.Deleted && r.Client!.Deleted)
+                .Select(r => r.Client!.PrimaryEmail).FirstOrDefaultAsync(cancellationToken);
+            return !string.IsNullOrWhiteSpace(clientEmail) && await _dbContext.Clients.AnyAsync(c => c.PrimaryEmail == clientEmail && c.MaconomyCustomerNumber == null, cancellationToken)
+                ? $"Another client now has the email {clientEmail}."
+                : null;
+        }
+
         if (entityType != EntityType.User)
         {
             return null;

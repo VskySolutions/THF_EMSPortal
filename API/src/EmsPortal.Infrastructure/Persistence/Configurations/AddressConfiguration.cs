@@ -35,5 +35,6 @@ internal sealed class AddressConfiguration : IEntityTypeConfiguration<Address>
         builder.Property(a => a.LastName).HasMaxLength(100);
         builder.Property(a => a.Email).HasMaxLength(256);
         builder.Property(a => a.PhoneNumber).HasMaxLength(32);
+        builder.Property(a => a.PhoneCountryCode).HasMaxLength(2);
     }
 }

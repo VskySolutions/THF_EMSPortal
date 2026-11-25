@@ -97,7 +97,9 @@ public sealed record RemsRequestListOptions(
     /// </summary>
     string? ClientSubmissionState = null,
     DateTime? UpdatedFromUtc = null,
-    DateTime? UpdatedToUtc = null);
+    DateTime? UpdatedToUtc = null,
+    /// <summary>Part of the request's number ("COP-12"). The Request ID box at the top of the filters.</summary>
+    string? RemsNumber = null);
 
 /// <summary>
 /// How many pool requests fall into each Admin Pool view, under the caller's visibility and the filters
@@ -200,7 +202,9 @@ public sealed record RemsRelatedEntityQuery(
     DateTime? CreatedFromUtc = null,
     DateTime? CreatedToUtc = null,
     DateTime? UpdatedFromUtc = null,
-    DateTime? UpdatedToUtc = null);
+    DateTime? UpdatedToUtc = null,
+    /// <summary>Part of the request's number ("COP-12"). The Request ID box at the top of the filters.</summary>
+    string? RemsNumber = null);
 
 /// <summary>
 /// One Related Entities row: the PARENT request, plus the count of related clients declared on it. The

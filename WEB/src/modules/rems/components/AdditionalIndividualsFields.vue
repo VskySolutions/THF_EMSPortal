@@ -85,7 +85,7 @@
               :error="!!err(i, 'email')" :error-message="err(i, 'email')"
             />
             <div class="col-12 col-sm-6">
-              <app-phone-input v-model="row.phone" label="Phone Number" />
+              <app-phone-input v-model="row.phone" v-model:country="row.phoneCountryCode" label="Phone Number" />
             </div>
 
             <!-- Who is invoiced for this person's return. -->

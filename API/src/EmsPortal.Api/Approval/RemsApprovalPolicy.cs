@@ -80,6 +80,8 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
         var candidates = new[]
         {
             $"{user.Person?.FirstName} {user.Person?.LastName}",
+            // Imported users can carry their names the other way round ("Previte James").
+            $"{user.Person?.LastName} {user.Person?.FirstName}",
             user.Person?.DisplayName,
             user.DisplayName,
         };

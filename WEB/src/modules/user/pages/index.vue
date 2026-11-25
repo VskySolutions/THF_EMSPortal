@@ -112,6 +112,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { debounce } from "quasar";
@@ -149,7 +150,7 @@ const columns = computed(() => [
   // A Super Admin changes which tenant they are looking at with the toolbar's tenant scope.
   { name: "fullName", label: "Name", field: "fullName", align: "left", sortable: true, default: true },
   { name: "email", label: "Email", field: "email", align: "left", sortable: true, default: true },
-  { name: "phoneNumber", label: "Phone", field: "phoneNumber", align: "left", sortable: true },
+  { name: "phoneNumber", label: "Phone", field: (r) => formatPhone(r.phoneNumber), align: "left", sortable: true },
   { name: "roles", label: "Role", field: (r) => (r.roles || []).join(", "), align: "left", sortable: false, default: true },
   { name: "groups", label: "Groups", field: (r) => (r.groups || []).map((g) => g.name).join(", "), align: "left", sortable: false, default: true },
   // Department placement in the active tenant.

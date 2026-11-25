@@ -1,6 +1,9 @@
 using EmsPortal.Shared.Configuration;
 using Microsoft.Extensions.Configuration;
+using System.Collections.ObjectModel;
+using System.Data;
 using Serilog;
+using Serilog.Core;
 using Serilog.Events;
 using Serilog.Sinks.MSSqlServer;
 
@@ -16,6 +19,9 @@ public static class SerilogConfigurator
 {
     public const string LogTableName = "Logs";
 
+    /// <summary>The log property, and the table column, naming the tenant an entry belongs to.</summary>
+    public const string TenantIdProperty = "TenantId";
+
     /// <summary>
     /// Applies the platform's standard sinks and enrichers to a logger configuration.
     /// The SQL table takes Error and Fatal only.
@@ -26,7 +32,8 @@ public static class SerilogConfigurator
         LoggerConfiguration loggerConfiguration,
         IConfiguration configuration,
         string serviceName,
-        string environmentName)
+        string environmentName,
+        params ILogEventEnricher[] enrichers)
     {
         var minimumLevel = ResolveMinimumLevel(configuration, environmentName);
         var connectionString = configuration.GetConnectionString(ConfigurationSections.SqlServerConnection);
@@ -41,6 +48,11 @@ public static class SerilogConfigurator
             .Enrich.WithProperty("Environment", environmentName)
             .WriteTo.Console();
 
+        if (enrichers.Length > 0)
+        {
+            loggerConfiguration.Enrich.With(enrichers);
+        }
+
         // The table keeps errors only; the console still shows everything at the minimum level.
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
@@ -51,8 +63,29 @@ public static class SerilogConfigurator
                 {
                     TableName = LogTableName,
                     AutoCreateSqlTable = true,
-                });
+                },
+                columnOptions: LogColumns());
         }
+    }
+
+    // TenantId is null for what no tenant caused: startup, anonymous requests, platform jobs.
+    private static ColumnOptions LogColumns()
+    {
+        var columns = new ColumnOptions
+        {
+            AdditionalColumns = new Collection<SqlColumn>
+            {
+                new()
+                {
+                    ColumnName = TenantIdProperty,
+                    PropertyName = TenantIdProperty,
+                    DataType = SqlDbType.UniqueIdentifier,
+                    AllowNull = true,
+                },
+            },
+        };
+        columns.TimeStamp.ConvertToUtc = true;
+        return columns;
     }
 
     private static LogEventLevel ResolveMinimumLevel(IConfiguration configuration, string environmentName)

@@ -143,6 +143,7 @@ import { useRoute } from "vue-router";
 import { debounce } from "quasar";
 import { remsPublicApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { useConfirm } from "composables/useConfirm";
 import { useBrandingStore } from "stores/branding";
 import {
@@ -157,6 +158,7 @@ import RemsReviewSummary from "modules/rems/components/RemsReviewSummary.vue";
 
 const route = useRoute();
 const notify = useNotify();
+const { phoneIssues } = usePhoneFields();
 const { confirm } = useConfirm();
 const branding = useBrandingStore();
 const inviteCode = route.params.inviteCode;
@@ -210,7 +212,7 @@ const saveText = computed(() => ({
 }[saveState.value] || "Your progress saves automatically"));
 
 // What still has to be filled in before Review. Mirrors RemsFormPayloadValidator — see useRemsIntakeForm.
-const clientIssues = computed(() => intakeIssues(payload.value, entityType.value));
+const clientIssues = computed(() => [...intakeIssues(payload.value, entityType.value), ...phoneIssues.value]);
 const canReview = computed(() => clientIssues.value.length === 0);
 
 const buildPayload = () => buildIntakePayload(payload.value, entityType.value);

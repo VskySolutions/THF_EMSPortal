@@ -173,6 +173,11 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
         {
             tasks = tasks.Where(x => x.Request!.CSEId == cseId);
         }
+        if (!string.IsNullOrWhiteSpace(query.RemsNumber))
+        {
+            var number = query.RemsNumber.Trim();
+            tasks = tasks.Where(x => x.Request!.RemsNumber.Contains(number));
+        }
         if (query.ClientPersonIds is { Count: > 0 } clientIds)
         {
             tasks = tasks.Where(x => clientIds.Contains(x.Request!.ClientId));
@@ -243,6 +248,19 @@ internal sealed class RemsApprovalTaskRepository : IRemsApprovalTaskRepository
                 && all.Any(o => o.REMSId == x.REMSId && o.RoundNumber == x.RoundNumber && o.Status != RemsApprovalTaskStatus.Approved)
                 && !all.Any(o => o.REMSId == x.REMSId && o.RoundNumber == x.RoundNumber && o.Status == RemsApprovalTaskStatus.Approved)),
         };
+    }
+
+    public Task<int> CountAwaitingDecisionAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default)
+    {
+        // Only while the request is still out for approval: a task left pending on a round that was
+        // declined, or superseded, is nobody's to decide.
+        const string open = RemsRequestStatuses.PendingApproval;
+        var rows = InboxRowsOf(approverId, tenantId).Where(t => t.Request!.Status!.Value == open);
+        if (tenantId is null)
+        {
+            rows = rows.Where(t => t.Status == RemsApprovalTaskStatus.Pending);
+        }
+        return rows.CountAsync(cancellationToken);
     }
 
     public async Task<RemsApprovalTaskQuickCounts> CountInboxQuickFiltersAsync(RemsApprovalTaskQuery query, CancellationToken cancellationToken = default)

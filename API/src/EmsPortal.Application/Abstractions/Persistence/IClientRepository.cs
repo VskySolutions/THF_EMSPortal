@@ -38,6 +38,13 @@ public interface IClientRepository
     Task AddAsync(Client client, CancellationToken cancellationToken = default);
     void Update(Client client);
 
+    /// <summary>
+    /// Deletes the client, and the person behind them where nobody else uses that person, when the request
+    /// being deleted was all that kept them: no other live request, nothing in Maconomy, no intake on
+    /// file, no tie to another client. Saved by the caller. True when the client went.
+    /// </summary>
+    Task<bool> RemoveIfOnlyRequestAsync(Guid clientId, Guid deletedRemsId, CancellationToken cancellationToken = default);
+
     Task AddAddressAsync(ClientAddress address, CancellationToken cancellationToken = default);
     void RemoveAddress(ClientAddress address);
 

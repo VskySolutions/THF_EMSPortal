@@ -103,6 +103,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import AppEmail from "components/common/AppEmail.vue";
 import { ref, computed, onMounted } from "vue";
 import { useAuthStore } from "stores/auth";
@@ -149,7 +150,7 @@ const roleChips = computed(() => [...new Set(assignments.value.flatMap((t) => t.
 
 const contactRows = computed(() => [
   { icon: "o_mail", label: "Email", value: email.value },
-  { icon: "o_smartphone", label: "Phone Number", value: profile.value?.mobileNumber }
+  { icon: "o_smartphone", label: "Phone Number", value: formatPhone(profile.value?.mobileNumber) }
 ]);
 
 onMounted(load);

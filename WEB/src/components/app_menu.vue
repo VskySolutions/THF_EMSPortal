@@ -31,7 +31,11 @@
         @mouseleave="scheduleFlyoutClose"
         @click="openFlyout(section.key)"
       >
-        <q-item-section avatar><q-icon :name="section.icon" size="20px" /></q-item-section>
+        <q-item-section avatar>
+          <q-icon :name="section.icon" size="20px" />
+          <!-- The rail has no room for a number per item: the group's icon carries their sum. -->
+          <q-badge v-if="sectionCount(section)" floating rounded class="app-menu__count app-menu__count--rail" :label="badgeLabel(sectionCount(section))" />
+        </q-item-section>
         <q-item-section>{{ section.label }}</q-item-section>
 
         <q-menu
@@ -67,7 +71,9 @@
               @click="onItem(item)"
             >
               <q-item-section avatar><q-icon :name="item.icon" size="20px" /></q-item-section>
-              <q-item-section>{{ item.label }}</q-item-section>
+              <q-item-section>
+                <span>{{ item.label }}<q-badge v-if="countOf(item)" rounded class="app-menu__count" :label="badgeLabel(countOf(item))"><q-tooltip>{{ item.countTip }}</q-tooltip></q-badge></span>
+              </q-item-section>
             </q-item>
           </q-list>
         </q-menu>
@@ -77,12 +83,17 @@
       <q-expansion-item
         v-else
         dense
-        :icon="section.icon"
-        :label="section.label"
         :model-value="isOpen(section)"
         header-class="app-menu__group text-primary text-weight-bold"
         @update:model-value="(v) => setOpen(section.key, v)"
       >
+        <!-- A collapsed group hides its items' numbers, so its heading carries their sum. -->
+        <template #header>
+          <q-item-section avatar><q-icon :name="section.icon" /></q-item-section>
+          <q-item-section>
+            <span>{{ section.label }}<q-badge v-if="!isOpen(section) && sectionCount(section)" rounded class="app-menu__count" :label="badgeLabel(sectionCount(section))"><q-tooltip>Waiting on you across this menu</q-tooltip></q-badge></span>
+          </q-item-section>
+        </template>
         <q-item
           v-for="item in section.items"
           :key="item.label"
@@ -96,7 +107,9 @@
           @click="onItem(item)"
         >
           <q-item-section avatar><q-icon :name="item.icon" size="20px" /></q-item-section>
-          <q-item-section>{{ item.label }}</q-item-section>
+          <q-item-section>
+            <span>{{ item.label }}<q-badge v-if="countOf(item)" rounded class="app-menu__count" :label="badgeLabel(countOf(item))"><q-tooltip>{{ item.countTip }}</q-tooltip></q-badge></span>
+          </q-item-section>
         </q-item>
       </q-expansion-item>
     </template>
@@ -104,11 +117,12 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, onBeforeUnmount } from "vue";
+import { computed, reactive, ref, onMounted, onBeforeUnmount } from "vue";
 import { LocalStorage } from "quasar";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "stores/auth";
 import { useSiteName } from "composables/useSiteName";
+import { useRemsMenuCounts } from "composables/useRemsMenuCounts";
 import { Permissions } from "composables/usePermissions";
 import { STICKY_NOTES_ENABLED } from "shared/features";
 
@@ -168,12 +182,12 @@ const sections = [
     items: [
       // Open to everyone, like Approvals: the list shows the requests you raised or are named on, so a
       // user with no REMS work sees an empty list rather than a menu that hides the page from them.
-      { label: "My Requests", icon: "o_space_dashboard", to: "/rems/partner", permissions: null },
-      { label: "COP Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage] },
+      { label: "My Requests", icon: "o_space_dashboard", to: "/rems/partner", permissions: null, countKey: "myRequests", countTip: "Your drafts and requests sent back to you" },
+      { label: "COP Review", icon: "o_fact_check", to: "/rems/ems-review", permissions: [Permissions.RemsEngagementsManage], countKey: "copReview", countTip: "Waiting for pickup, or under your review" },
       // Open to everyone too, and for a different reason from the two above: this list is not scoped to the
       // caller's own work at all.
       { label: "Related Entities", icon: "o_account_tree", to: "/rems/related-entities", permissions: null },
-      { label: "Approvals", icon: "o_approval", to: "/rems/approvals", permissions: null }
+      { label: "Approvals", icon: "o_approval", to: "/rems/approvals", permissions: null, countKey: "approvals", countTip: "Awaiting an approval decision" }
     ]
   },
   {
@@ -208,6 +222,8 @@ const sections = [
       { label: "Email Accounts", icon: "o_mail", to: "/smtp-accounts", permissions: [Permissions.EmailManage] },
       { label: "Email Templates", icon: "o_drafts", to: "/email-templates", permissions: [Permissions.EmailManage] },
       { label: "Email Log", icon: "o_mark_email_read", to: "/email-log", permissions: [Permissions.EmailManage] },
+      { label: "Error Log", icon: "o_bug_report", to: "/error-log", permissions: [Permissions.LogsRead] },
+      { label: "Background Jobs", icon: "o_pending_actions", to: "/background-jobs", permissions: [Permissions.JobsManage] },
       { label: "Branding", icon: "o_palette", to: "/settings/branding", permissions: [Permissions.BrandingManage] },
       { label: "Maconomy", icon: "o_hub", to: "/settings/maconomy", permissions: [Permissions.IntegrationsMaconomyManage] },
       // Gated on MANAGE, not read: Partner and REMS Admin hold optionSets.read so their dropdowns resolve,
@@ -265,6 +281,24 @@ const setOpen = (key, open) => {
   collapsed[key] = !open;
   LocalStorage.set(STORAGE_KEY, { ...collapsed });
 };
+
+// ---- What is waiting on the user ----
+// A number beside My Requests, COP Review and Approvals; none where nothing is waiting. Read when the
+// menu appears, on every page change, once a minute, and by the lists themselves after each load.
+const { counts: menuCounts, refresh: refreshMenuCounts } = useRemsMenuCounts();
+const countOf = (item) => (item.countKey ? menuCounts[item.countKey] || 0 : 0);
+const sectionCount = (section) => section.items.reduce((sum, item) => sum + countOf(item), 0);
+const badgeLabel = (n) => (n > 99 ? "99+" : n);
+let menuCountTimer = null;
+const stopRouteWatch = router.afterEach(() => { refreshMenuCounts(); });
+onMounted(() => {
+  refreshMenuCounts();
+  menuCountTimer = setInterval(refreshMenuCounts, 60000);
+});
+onBeforeUnmount(() => {
+  clearInterval(menuCountTimer);
+  stopRouteWatch();
+});
 </script>
 
 <style scoped>
@@ -315,5 +349,21 @@ const setOpen = (key, open) => {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--q-primary);
+}
+
+/* The to-do badge: right after the label, in a soft tint rather than the solid primary. */
+.app-menu__count {
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  vertical-align: middle;
+  color: var(--q-primary);
+  background: color-mix(in srgb, var(--q-primary) 18%, white);
+}
+/* On the rail it sits over the icon's corner, so it takes no left margin. */
+.app-menu__count--rail {
+  margin-left: 0;
 }
 </style>

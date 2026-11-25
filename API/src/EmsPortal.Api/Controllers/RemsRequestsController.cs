@@ -1,6 +1,7 @@
 using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
+using EmsPortal.Api.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
@@ -126,6 +127,7 @@ public sealed class RemsRequestsController : ControllerBase
         [FromQuery] DateTime? updatedTo = null,
         // The Client column's dropdown — any of the chosen clients (client ids).
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // A REMS.ClientSubmissionState code: the Client Submission column's values.
         [FromQuery] string? clientSubmissionState = null,
         [FromQuery] string? scope = null,
@@ -147,7 +149,8 @@ public sealed class RemsRequestsController : ControllerBase
             me, privileged, clientName, contact, status, type, assignedAdminUserId,
             createdFrom, createdTo, ParseScope(scope), ParsePoolFilter(poolScope),
             ParseOwnership(ownership), new SortRequest(sortBy, descending), page, limit,
-            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo);
+            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo,
+            RemsNumber: remsNumber);
         var (items, total) = await _rems.ListRequestsAsync(options, cancellationToken);
 
         var names = await _users.GetFullNamesAsync(
@@ -192,6 +195,22 @@ public sealed class RemsRequestsController : ControllerBase
         return Ok(ApiResponseFactory.Success(clients, "REMS request clients retrieved."));
     }
 
+    /// <summary>
+    /// The counts shown on a list's Conversation and Email log row actions, for the requests on the page.
+    /// A POST because a page of ids is too long for a query string. Email counts need the email-log permission.
+    /// </summary>
+    [HttpPost("activity-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsRowActivityCount>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ActivityCounts([FromBody] RemsRowActivityCountsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = (request?.Ids ?? Array.Empty<Guid>()).Distinct().Take(1000).ToList();
+        var counts = await _rems.CountRowActivityAsync(
+            ids, User.HasPermission(Permissions.RemsEmailLogRead), cancellationToken);
+        var rows = counts.Select(c => new RemsRowActivityCount(c.Key, c.Value.Conversation, c.Value.Emails));
+        return Ok(ApiResponseFactory.Success(rows, "Row activity counts retrieved."));
+    }
+
     /// <summary>The quick-filter counts for the list above, under the same visibility, scope and filters.</summary>
     [HttpGet("quick-counts")]
     [Authorize]
@@ -211,6 +230,7 @@ public sealed class RemsRequestsController : ControllerBase
         [FromQuery] DateTime? updatedTo = null,
         // The Client column's dropdown — any of the chosen clients (client ids).
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // A REMS.ClientSubmissionState code: the Client Submission column's values.
         [FromQuery] string? clientSubmissionState = null,
         [FromQuery] string? scope = null,
@@ -227,7 +247,8 @@ public sealed class RemsRequestsController : ControllerBase
             me, IsPrivileged(), clientName, contact, status, type, assignedAdminUserId,
             createdFrom, createdTo, ParseScope(scope), ParsePoolFilter(poolScope),
             ParseOwnership(ownership), SortRequest.Default, Page: 1, Limit: 1,
-            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo);
+            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo,
+            RemsNumber: remsNumber);
         var counts = await _rems.CountQuickFiltersAsync(options, cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "REMS request quick-filter counts retrieved."));
     }
@@ -361,7 +382,8 @@ public sealed class RemsRequestsController : ControllerBase
         var details = new ClientDetails(
             request.ClientName, request.ClientNameSuffix,
             request.CustomerEmail, request.CustomerMobileNumber,
-            request.ClientFirstName, request.ClientLastName, request.ClientCorporateName, request.ClientMiddleName);
+            request.ClientFirstName, request.ClientLastName, request.ClientCorporateName, request.ClientMiddleName,
+            PhoneCountry.Clean(request.CustomerMobileCountryCode));
 
         // Allocate the REMS number and stage the row + client + activity + attachment atomically. The client
         // is staged first: the request's FK points at them.
@@ -439,6 +461,7 @@ public sealed class RemsRequestsController : ControllerBase
             request.ClientName = request.ClientFirstName = request.ClientLastName = null;
             request.ClientCorporateName = request.ClientNameSuffix = request.ClientMiddleName = null;
             request.CustomerEmail = request.CustomerMobileNumber = null;
+            request.CustomerMobileCountryCode = null;
             // A Maconomy customer is somebody THF already has, whatever the request said before.
             if ((request.Type ?? rems.Type!.Value) == RemsRequestTypes.BrandNewClient)
             {
@@ -486,7 +509,8 @@ public sealed class RemsRequestsController : ControllerBase
             request.ClientFirstName ?? current?.Person?.FirstName,
             request.ClientLastName ?? current?.Person?.LastName,
             request.ClientCorporateName ?? current?.LegalName,
-            request.ClientMiddleName);
+            request.ClientMiddleName,
+            request.CustomerMobileCountryCode is null ? current?.PrimaryPhoneCountryCode : PhoneCountry.Clean(request.CustomerMobileCountryCode));
 
         // The client this request itself filed, who is not a match for their own name. A client the request
         // was linked to is somebody else's record — including one it is now leaving, who stays as they are.
@@ -943,12 +967,15 @@ public sealed class RemsRequestsController : ControllerBase
         await _rems.DetachCopiesAsync(rems.Id, cancellationToken);
 
         // The DbContext converts the delete into a soft-delete (Deleted flag). The status does not change,
-        // so no history is written; the client the draft filed stays on file.
+        // so no history is written. A client this draft was the only request of goes with it.
         _rems.Remove(rems);
+        var clientDeleted = await _clients.RemoveIfOnlyRequestAsync(rems.ClientId, rems.Id, cancellationToken);
         await _activity.WriteAsync(new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsDeleted), cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Ok(ApiResponseFactory.Success(new { id }, "REMS request deleted."));
+        return Ok(ApiResponseFactory.Success(
+            new { id, clientDeleted },
+            clientDeleted ? "REMS request deleted, and its client with it: this was their only request." : "REMS request deleted."));
     }
 
     // -------------------- Copy --------------------
@@ -1466,7 +1493,8 @@ public sealed class RemsRequestsController : ControllerBase
             client.IsOrganisation,
             EntityTypeOf(client),
             null,
-            client.Industry?.Value);
+            client.Industry?.Value,
+            client.PrimaryPhoneCountryCode);
     }
 
     /// <summary>
@@ -1626,6 +1654,7 @@ public sealed class RemsRequestsController : ControllerBase
             if (shape.Phone is not null && string.IsNullOrWhiteSpace(matched.PrimaryPhone))
             {
                 matched.PrimaryPhone = shape.Phone;
+                matched.PrimaryPhoneCountryCode = shape.PhoneCountry;
                 filled = true;
             }
             if (filled)
@@ -1669,6 +1698,7 @@ public sealed class RemsRequestsController : ControllerBase
             Status = ClientStatus.Prospect,
             PrimaryEmail = shape.Email,
             PrimaryPhone = shape.Phone,
+            PrimaryPhoneCountryCode = shape.PhoneCountry,
         };
         if (shape.IsOrganisation)
         {
@@ -1694,6 +1724,7 @@ public sealed class RemsRequestsController : ControllerBase
     {
         client.PrimaryEmail = shape.Email;
         client.PrimaryPhone = shape.Phone;
+        client.PrimaryPhoneCountryCode = shape.PhoneCountry;
         if (shape.IsOrganisation)
         {
             client.LegalName = shape.Corporate;
@@ -1764,7 +1795,8 @@ public sealed class RemsRequestsController : ControllerBase
         bool IsOrganisation, string? Corporate, string First, string Last, string? Suffix,
         string? Email, string? Phone,
         // Null when the request did not send one (leave the record's alone), "" to clear it.
-        string? Middle = null)
+        string? Middle = null,
+        string? PhoneCountry = null)
     {
         public static ClientShape Of(ClientDetails client)
         {
@@ -1784,7 +1816,8 @@ public sealed class RemsRequestsController : ControllerBase
                 isOrganisation, corporate, first, last,
                 isOrganisation ? null : Normalize(client.Suffix),
                 Normalize(client.Email), Normalize(client.Phone),
-                isOrganisation ? null : client.MiddleName?.Trim());
+                isOrganisation ? null : client.MiddleName?.Trim(),
+                client.PhoneCountryCode);
         }
 
         /// <summary>Whether this is what the record already says, so that saving it changes nothing.</summary>
@@ -1816,6 +1849,7 @@ public sealed class RemsRequestsController : ControllerBase
             person.DisplayName = string.Join(" ", new[] { First, Last }.Where(p => p.Length > 0));
             person.PrimaryEmail = Email;
             person.MobileNumber = Phone;
+            person.CountryCode = PhoneCountry;
         }
     }
 
@@ -2112,7 +2146,8 @@ public sealed class RemsRequestsController : ControllerBase
             IntakeReused: RemsDerived.IsIntakeReused(rems),
             FormSent: rems.InviteSentOnUtc is not null,
             CanCompleteIntake: canCompleteIntake,
-            IntakeCompletedBy: NameOf(names, rems.IntakeCompletedByUserId));
+            IntakeCompletedBy: NameOf(names, rems.IntakeCompletedByUserId),
+            CustomerMobileCountryCode: client is { IsMaconomyClient: false } ? client.PrimaryPhoneCountryCode : null);
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>

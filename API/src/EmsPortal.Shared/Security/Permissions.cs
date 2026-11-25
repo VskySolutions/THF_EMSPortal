@@ -39,6 +39,14 @@ public static class Permissions
     /// <summary>Create, edit, delete, set-active, and test-send SMTP email accounts. Reads require only <see cref="UsersRead"/>.</summary>
     public const string EmailManage = "email.manage";
 
+    // Error Log
+    /// <summary>Read the errors the application logged for the tenant. Held by Super Admin and Tenant Admin only.</summary>
+    public const string LogsRead = "logs.read";
+
+    // Background Jobs
+    /// <summary>See the background job queue, retry jobs and clear it. Held by Super Admin and Tenant Admin only.</summary>
+    public const string JobsManage = "jobs.manage";
+
     // Integrations
     /// <summary>Set up, test and remove the tenant's Maconomy connection. The customer lookup it powers needs no permission beyond signing in.</summary>
     public const string IntegrationsMaconomyManage = "integrations.maconomy.manage";
@@ -125,6 +133,7 @@ public static class Permissions
         RolesRead, RolesWrite, RolesAssign,
         GroupsManage,
         EmailManage,
+        LogsRead, JobsManage,
         IntegrationsMaconomyManage,
         BrandingManage,
         SettingsManage, RecordsAdminDelete,
@@ -155,6 +164,10 @@ public static class Permissions
         GroupsManage,
         // Tenant Admins manage their tenant's SMTP email accounts.
         EmailManage,
+        // Tenant Admins read their own tenant's error log.
+        LogsRead,
+        // Tenant Admins see and manage the background jobs queued for their own tenant.
+        JobsManage,
         // Tenant Admins connect their tenant to Maconomy.
         IntegrationsMaconomyManage,
         // Tenant Admins decide how their tenant's copy of the application looks.

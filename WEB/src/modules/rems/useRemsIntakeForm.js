@@ -26,7 +26,7 @@ const pushIf = (out, issue) => { if (issue) out.push(issue); };
 
 // `prefix` is still in the shape although no box in the app asks for one any more: a submission saved when
 // the contact block asked for a courtesy title carries.
-const blankRole = () => ({ prefix: "", suffix: "", firstName: "", lastName: "", email: "", phone: "" });
+const blankRole = () => ({ prefix: "", suffix: "", firstName: "", lastName: "", email: "", phone: "", phoneCountryCode: "" });
 const blankRoles = () => Object.fromEntries(ALL_ROLE_KEYS.map((k) => [k, blankRole()]));
 
 /** A blank editable payload — the RemsFormPayloadV1 camelCase wire shape (field names match
@@ -48,6 +48,8 @@ export const blankIntakePayload = () => reactive({
   clientLastName: "",
   email: "",            // LOCKED (to the request's customer email; ignored on submit)
   mobileNumber: "",
+  // The country picked for the number, ISO-2 ("CA"): the number alone cannot tell Canada from the US.
+  mobileCountryCode: "",
   referralSource: "",
   referralSourceDetail: "",
   physicalAddress: blankAddress(),
@@ -128,6 +130,7 @@ function fillRole (target, src) {
   target.name = src?.firstName || src?.lastName ? "" : (src?.name ?? "");
   target.email = src?.email ?? "";
   target.phone = src?.phone ?? "";
+  target.phoneCountryCode = src?.phoneCountryCode ?? "";
 }
 
 function makeEntity (e, i) {
@@ -135,7 +138,8 @@ function makeEntity (e, i) {
     sourceKey: e?.sourceKey || `related-${Date.now()}-${i}`,
     fullName: e?.fullName ?? "",
     emailAddress: e?.emailAddress ?? "",
-    phoneNumber: e?.phoneNumber ?? ""
+    phoneNumber: e?.phoneNumber ?? "",
+    phoneCountryCode: e?.phoneCountryCode ?? ""
   };
 }
 
@@ -144,7 +148,8 @@ export const newRelatedEntity = (index = 0) => ({
   sourceKey: `related-${Date.now()}-${index}`,
   fullName: "",
   emailAddress: "",
-  phoneNumber: ""
+  phoneNumber: "",
+  phoneCountryCode: ""
 });
 
 // ---------------------------------------------------------------------------------------------------
@@ -221,6 +226,7 @@ export const newAdditionalIndividual = (lastName = "") => ({
   suffix: "",
   email: "",
   phone: "",
+  phoneCountryCode: "",
   isMinor: null,
   billingPreference: "primary",
   billingFirstName: "",
@@ -237,6 +243,7 @@ const makeAdditionalIndividual = (row, i) => applyIndividualRules({
   suffix: s(row?.suffix),
   email: s(row?.email),
   phone: s(row?.phone),
+  phoneCountryCode: s(row?.phoneCountryCode),
   isMinor: typeof row?.isMinor === "boolean" ? row.isMinor : null,
   billingPreference: s(row?.billingPreference) || "primary",
   billingFirstName: s(row?.billingFirstName),
@@ -312,6 +319,7 @@ export function seedIntakePayload (payload, stored, prefill = null) {
   payload.clientLastName = d.clientLastName ?? prefill?.clientLastName ?? "";
   payload.email = prefill?.email ?? d.email ?? "";
   payload.mobileNumber = d.mobileNumber ?? prefill?.mobileNumber ?? "";
+  payload.mobileCountryCode = d.mobileCountryCode ?? prefill?.mobileCountryCode ?? "";
   payload.referralSource = d.referralSource ?? "";
   payload.referralSourceDetail = d.referralSourceDetail ?? "";
   payload.billingContactName = d.billingContactName ?? "";
@@ -358,7 +366,8 @@ const outRole = (r) => {
     lastName: s(r.lastName),
     name: joined || s(r.name),
     email: s(r.email),
-    phone: s(r.phone)
+    phone: s(r.phone),
+    phoneCountryCode: s(r.phoneCountryCode)
   };
 };
 
@@ -391,6 +400,7 @@ export function buildIntakePayload (payload, entityType) {
     clientLastName: s(payload.clientLastName),
     email: s(payload.email),
     mobileNumber: s(payload.mobileNumber),
+    mobileCountryCode: s(payload.mobileCountryCode),
     referralSource: s(payload.referralSource),
     referralSourceDetail: s(payload.referralSourceDetail),
     physicalAddress: fromAddress(payload.physicalAddress),
@@ -422,6 +432,7 @@ export function buildIntakePayload (payload, entityType) {
           suffix: s(out.suffix),
           email: s(out.email),
           phone: s(out.phone),
+          phoneCountryCode: s(out.phoneCountryCode),
           isMinor: typeof out.isMinor === "boolean" ? out.isMinor : null,
           billingPreference: s(out.billingPreference),
           billingFirstName: s(out.billingFirstName),
@@ -440,7 +451,8 @@ export function buildIntakePayload (payload, entityType) {
       sourceKey: e.sourceKey || `related-${i + 1}`,
       fullName: s(e.fullName),
       emailAddress: s(e.emailAddress),
-      phoneNumber: s(e.phoneNumber)
+      phoneNumber: s(e.phoneNumber),
+      phoneCountryCode: s(e.phoneCountryCode)
     }))
   };
 }

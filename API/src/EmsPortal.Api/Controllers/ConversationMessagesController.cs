@@ -179,9 +179,9 @@ public sealed class ConversationMessagesController : ControllerBase
 
     /// <summary>
     /// Whether the caller may read or post on this record's conversation: the parent entity's read
-    /// permission, or — on a REMS request — being on the request at all. The thread belongs to the
-    /// request, so everyone the request names reads the same one: the REMS admins, the initiator, the CSE,
-    /// the reviewing admin, the engagement's seats and commission recipients, and every approver.
+    /// permission, or — on a REMS request — being allowed to open the request. The thread belongs to the
+    /// request, so everyone who can see it reads the same one; while it is a draft that is the people on
+    /// it: the REMS admins, the initiator, the CSE, the engagement's seats and commission recipients.
     /// </summary>
     private async Task<bool> CanReadConversationAsync(
         EntityType entityType, Guid entityId, CancellationToken cancellationToken)
@@ -200,6 +200,11 @@ public sealed class ConversationMessagesController : ControllerBase
         if (rems is null)
         {
             return false;
+        }
+        // Whoever may open the request reads and posts on its thread: everyone once it has left its draft.
+        if (RemsSetupAccess.CanView(User, rems, me))
+        {
+            return true;
         }
         if (RemsSetupAccess.IsRemsAdmin(User) || RemsSetupAccess.IsParticipant(rems, me))
         {
@@ -233,7 +238,9 @@ public sealed class ConversationMessagesController : ControllerBase
             ? await _users.GetFullNamesAsync(new[] { aid }, cancellationToken)
             : new Dictionary<Guid, string>();
         var actorName = actorId is { } a && actorNames.TryGetValue(a, out var n) ? n : "Someone";
-        var preview = message.Body.Length > 140 ? message.Body[..140] + "…" : message.Body;
+        // Cut after the markup is out: 140 characters of rich text can be mostly tags, or end inside one.
+        var text = EmsPortal.Application.UniversalFeatures.NotificationText.Plain(message.Body);
+        var preview = text.Length > 140 ? text[..140] + "…" : text;
 
         foreach (var userId in mentionIds.Where(uid => uid != actorId))
         {

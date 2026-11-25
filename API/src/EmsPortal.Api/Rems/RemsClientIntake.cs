@@ -54,6 +54,7 @@ public sealed class RemsClientIntake
             ClientMiddleName = client.IsOrganisation ? null : person?.MiddleName,
             Email = lockedEmail.Length > 0 ? lockedEmail : client.ClientEmail,
             MobileNumber = client.PrimaryPhone,
+            MobileCountryCode = client.PrimaryPhoneCountryCode,
             ReferralSource = client.ReferralSource?.Value,
             ReferralSourceDetail = client.ReferralSourceDetail,
             Ein = client.EIN,
@@ -108,6 +109,7 @@ public sealed class RemsClientIntake
                     Suffix = related.Person?.Suffix,
                     Email = related.ClientEmail ?? related.Person?.PrimaryEmail,
                     Phone = related.ClientPhone ?? related.Person?.MobileNumber,
+                    PhoneCountryCode = related.PrimaryPhoneCountryCode ?? PhoneCountry.Clean(related.Person?.CountryCode),
                     IsMinor = r.IsMinor,
                     BillingPreference = r.BillingPreference?.Value,
                     BillingFirstName = billed?.FirstName,
@@ -125,6 +127,7 @@ public sealed class RemsClientIntake
                 FullName = r.RelatedClient!.LegalName,
                 EmailAddress = r.RelatedClient.ClientEmail,
                 PhoneNumber = r.RelatedClient.ClientPhone,
+                PhoneCountryCode = r.RelatedClient.PrimaryPhoneCountryCode,
             })
             .ToList();
 
@@ -165,6 +168,7 @@ public sealed class RemsClientIntake
 
         // The client row and, for an individual, the person it points at.
         client.PrimaryPhone = Clean(payload.MobileNumber);
+        client.PrimaryPhoneCountryCode = PhoneCountry.Clean(payload.MobileCountryCode);
         client.ReferralSourceId = await _codes.IdOfAsync(RemsOptionSetKeys.ReferralSource, Clean(payload.ReferralSource), cancellationToken);
         client.ReferralSourceDetail = Clean(payload.ReferralSourceDetail);
         client.EIN = isBusiness ? Clean(payload.Ein) : null;
@@ -351,6 +355,7 @@ public sealed class RemsClientIntake
                     EntityTypeId = individualTypeId,
                     PrimaryEmail = Clean(individual.Email),
                     PrimaryPhone = Clean(individual.Phone),
+                    PrimaryPhoneCountryCode = PhoneCountry.Clean(individual.PhoneCountryCode),
                     Person = person,
                 };
                 await _clients.AddAsync(related, cancellationToken);
@@ -372,6 +377,7 @@ public sealed class RemsClientIntake
                 }
                 related.PrimaryEmail = Clean(individual.Email);
                 related.PrimaryPhone = Clean(individual.Phone);
+                related.PrimaryPhoneCountryCode = PhoneCountry.Clean(individual.PhoneCountryCode);
                 _clients.Update(related);
                 match.RelationTypeId = relationTypeId;
                 _clients.UpdateRelationship(match);
@@ -441,6 +447,7 @@ public sealed class RemsClientIntake
                     LegalName = name,
                     PrimaryEmail = Clean(entity.EmailAddress),
                     PrimaryPhone = Clean(entity.PhoneNumber),
+                    PrimaryPhoneCountryCode = PhoneCountry.Clean(entity.PhoneCountryCode),
                 };
                 await _clients.AddAsync(related, cancellationToken);
                 match = new ClientRelationship
@@ -457,6 +464,7 @@ public sealed class RemsClientIntake
                 related.LegalName = name;
                 related.PrimaryEmail = Clean(entity.EmailAddress);
                 related.PrimaryPhone = Clean(entity.PhoneNumber);
+                related.PrimaryPhoneCountryCode = PhoneCountry.Clean(entity.PhoneCountryCode);
                 _clients.Update(related);
             }
             kept.Add(match.Id);
@@ -544,6 +552,7 @@ public sealed class RemsClientIntake
         LastName = address.LastName,
         Email = address.Email,
         Phone = address.PhoneNumber,
+        PhoneCountryCode = address.PhoneCountryCode,
     };
 
     private static bool SameAddress(Address a, Address b)
@@ -569,6 +578,7 @@ public sealed class RemsClientIntake
         address.LastName = Clean(payload.LastName);
         address.Email = Clean(payload.Email);
         address.PhoneNumber = Clean(payload.Phone);
+        address.PhoneCountryCode = PhoneCountry.Clean(payload.PhoneCountryCode);
     }
 
     private static RemsRolePayload RolePayload(Person? person) => new()
@@ -579,6 +589,7 @@ public sealed class RemsClientIntake
         Name = person?.DisplayName,
         Email = person?.PrimaryEmail,
         Phone = person?.MobileNumber,
+        PhoneCountryCode = PhoneCountry.Clean(person?.CountryCode),
     };
 
     private static Person NewPerson(RemsRequest request, RemsRolePayload role)
@@ -604,6 +615,7 @@ public sealed class RemsClientIntake
         person.DisplayName = Clean(role.NameWithSuffix) ?? role.EffectiveFirstName;
         person.PrimaryEmail = Clean(role.Email);
         person.MobileNumber = Clean(role.Phone);
+        person.CountryCode = PhoneCountry.Clean(role.PhoneCountryCode);
         person.LastProfileUpdatedOn = DateTime.UtcNow;
     }
 
@@ -615,6 +627,7 @@ public sealed class RemsClientIntake
         person.DisplayName = Clean(individual.DisplayName) ?? string.Join(" ", new[] { person.FirstName, person.LastName }.Where(p => p.Length > 0));
         person.PrimaryEmail = Clean(individual.Email);
         person.MobileNumber = Clean(individual.Phone);
+        person.CountryCode = PhoneCountry.Clean(individual.PhoneCountryCode);
         person.LastProfileUpdatedOn = DateTime.UtcNow;
     }
 

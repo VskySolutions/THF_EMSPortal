@@ -32,6 +32,9 @@ public class Client : AuditableEntity
     public string? PrimaryEmail { get; set; }
     public string? PrimaryPhone { get; set; }
 
+    /// <summary>The country picked for <see cref="PrimaryPhone"/>, ISO-2 ("CA"): +1 alone cannot tell Canada from the US.</summary>
+    public string? PrimaryPhoneCountryCode { get; set; }
+
     /// <summary>REMS.ReferralSource option, with the free-text detail the form asks for.</summary>
     public Guid? ReferralSourceId { get; set; }
     public string? ReferralSourceDetail { get; set; }

@@ -32,6 +32,12 @@ public interface IRemsApprovalTaskRepository
     Task<RemsApprovalTaskQuickCounts> CountInboxQuickFiltersAsync(RemsApprovalTaskQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The menu's Approvals number: the approver's own tasks still waiting for their decision, or, read
+    /// tenant-wide, the requests still out for approval.
+    /// </summary>
+    Task<int> CountAwaitingDecisionAsync(Guid approverId, Guid? tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The approver's current task per request — or, for a query scoped to the tenant, one row per request
     /// on its current round, carried by the round's last-updated task — with the request, its client and
     /// the sibling tasks of the round.

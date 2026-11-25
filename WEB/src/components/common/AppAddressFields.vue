@@ -94,7 +94,7 @@
            name and email without the phone, or the whole set. -->
       <div v-if="contactPhone" :class="[col('phone'), contactOrder]">
         <app-phone-input
-          v-model="address.phone" label="Phone Number" :required="contactPhoneRequired"
+          v-model="address.phone" v-model:country="address.phoneCountryCode" label="Phone Number" :required="contactPhoneRequired"
           :dense="dense" :disable="disable" :readonly="readonly"
         />
         <div v-if="errorFor('phone')" class="text-caption q-mt-xs" :class="address.phone ? 'text-validation' : 'text-negative'">{{ errorFor('phone') }}</div>

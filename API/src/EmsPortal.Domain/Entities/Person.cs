@@ -75,6 +75,7 @@ public class Person : AuditableEntity
     public string? PrimaryEmail { get; set; }
     public string? SecondaryEmail { get; set; }
     public string? MobileNumber { get; set; }
+    /// <summary>The country picked for <see cref="MobileNumber"/>, ISO-2 ("CA"). Older rows hold a dial code ("+91").</summary>
     public string? CountryCode { get; set; }
     public string? AlternateMobileNumber { get; set; }
     public string? EmergencyContactName { get; set; }

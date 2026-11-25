@@ -35,7 +35,7 @@
               </q-badge>
             </div>
             <div class="text-body2 text-grey-7 ellipsis"><app-email :email="user.email || ''" /></div>
-            <div v-if="user.phoneNumber" class="text-body2 text-grey-7">{{ user.phoneNumber }}</div>
+            <div v-if="user.phoneNumber" class="text-body2 text-grey-7">{{ formatPhone(user.phoneNumber) }}</div>
 
             <div class="row items-center q-gutter-xs q-mt-sm">
               <q-chip v-if="user.department" dense color="blue-grey-1" text-color="blue-grey-8" icon="o_apartment">
@@ -322,6 +322,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import AppEmail from "components/common/AppEmail.vue";
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";

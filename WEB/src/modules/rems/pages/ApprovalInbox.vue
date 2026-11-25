@@ -170,9 +170,6 @@
           <q-btn flat round dense color="primary" icon="o_fact_check" :to="taskRoute(cell.row)">
             <q-tooltip>{{ seesTenant ? "Open the task" : "Review and decide" }}</q-tooltip>
           </q-btn>
-          <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
-            <q-tooltip>Conversation</q-tooltip>
-          </q-btn>
           <!-- Sync now: post the approved client to Maconomy. Offered once the request is approved, while
                the client is not in Maconomy yet or the last attempt failed, and only with the sync on. -->
           <q-btn
@@ -194,6 +191,10 @@
               {{ cell.row.maconomyJobSync?.canSyncNow ? "Sync job now — create this engagement's job in Maconomy" : cell.row.maconomyJobSync?.blockedReason }}
             </q-tooltip>
           </q-btn>
+          <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
+            <row-count-badge :count="conversationCount(cell.row.remsId)" />
+            <q-tooltip>{{ conversationTip(cell.row.remsId) }}</q-tooltip>
+          </q-btn>
         </q-td>
       </template>
 
@@ -207,7 +208,10 @@
       </template>
     </app-data-table>
 
-    <conversation-dialog v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle" />
+    <conversation-dialog
+      v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
   </q-page>
 </template>
 
@@ -239,6 +243,8 @@ import AppDataTable from "components/common/AppDataTable.vue";
 import QuickFilterGroup from "components/common/QuickFilterGroup.vue";
 import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
+import RowCountBadge from "modules/rems/components/RowCountBadge.vue";
+import { useRemsRowCounts } from "modules/rems/useRemsRowCounts";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
 import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
 import { useMaconomyJobSync } from "modules/rems/useMaconomyJobSync";
@@ -311,7 +317,7 @@ onMounted(async () => {
 // count read off the round, which the Approval Status filter already stands for.
 // Computed: the CSE and client options arrive after the page does.
 const columns = computed(() => [
-  { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
+  { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true },
   { name: "client", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   // On by default: an approver deciding on a round needs to know who to ask about it, and the CSE is that
   // person.
@@ -371,6 +377,7 @@ const listFilters = () => {
   const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
   return {
     search: search.value || undefined,
+    remsNumber: filters.remsNumber?.trim() || undefined,
     status: seesTenant.value ? undefined : filters.status || undefined,
     roundStatus: filters.roundStatus || undefined,
     cseUserId: filters.cse || undefined,
@@ -415,6 +422,10 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+
+// How many messages and emails sit behind each row's icons: one read per page.
+const { sync: syncCounts, conversationCount, conversationTip } = useRemsRowCounts();
+watch(rows, (list) => syncCounts(list.map((r) => r.remsId)));
 useFilterMemory(pageKey, seesTenant.value
   ? { roundStatus: toRef(filters, "roundStatus") }
   : { roundStatus: toRef(filters, "roundStatus"), status: toRef(filters, "status") });

@@ -450,6 +450,7 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // The Approver column's dropdown on the tenant-wide inbox.
         [FromQuery] Guid? approverUserId = null,
         [FromQuery] DateTime? sentFrom = null,
@@ -481,7 +482,7 @@ public sealed class RemsApprovalController : ControllerBase
                 me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit,
                 roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
                 createdFrom, createdTo, updatedFrom, updatedTo,
-                TenantId: tenantScope, ApproverUserId: approverUserId),
+                TenantId: tenantScope, ApproverUserId: approverUserId, RemsNumber: remsNumber),
             cancellationToken);
 
         // The audit actors, each request's CSE and each row's approvers, resolved in one read: a name
@@ -551,6 +552,29 @@ public sealed class RemsApprovalController : ControllerBase
     /// whole of their active tenant. Anyone else reads their own tasks only, and gets null.
     /// </summary>
     private Guid? InboxTenantScope() => RemsSetupAccess.IsElevated(User) ? User.GetActiveTenantId() : null;
+
+    /// <summary>
+    /// The numbers beside the COP menu items: what is waiting on the caller in each list. Zero where
+    /// nothing is; COP Review is counted only for those who can open it.
+    /// </summary>
+    [HttpGet("menu-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsMenuCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MenuCounts(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var counts = new RemsMenuCounts(
+            await _requests.CountNeedingInitiatorAsync(me, cancellationToken),
+            User.HasPermission(Permissions.RemsEngagementsManage)
+                ? await _requests.CountNeedingAdminAsync(me, cancellationToken)
+                : 0,
+            await _tasks.CountAwaitingDecisionAsync(me, InboxTenantScope(), cancellationToken));
+        return Ok(ApiResponseFactory.Success(counts, "Menu counts retrieved."));
+    }
 
     /// <summary>
     /// The CSEs across the caller's inbox, for its CSE filter. Read off the inbox rather than the tenant's
@@ -626,6 +650,7 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         [FromQuery] Guid? approverUserId = null,
         [FromQuery] DateTime? sentFrom = null,
         [FromQuery] DateTime? sentTo = null,
@@ -650,7 +675,7 @@ public sealed class RemsApprovalController : ControllerBase
                 me, search, roleFilter, statusFilter, SortRequest.Default, Page: 1, Limit: 1,
                 roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
                 createdFrom, createdTo, updatedFrom, updatedTo,
-                TenantId: InboxTenantScope(), ApproverUserId: approverUserId),
+                TenantId: InboxTenantScope(), ApproverUserId: approverUserId, RemsNumber: remsNumber),
             cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "Approval inbox quick-filter counts retrieved."));
     }

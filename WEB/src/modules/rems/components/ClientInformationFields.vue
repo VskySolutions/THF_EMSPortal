@@ -30,6 +30,7 @@
             aria-label="Client"
             :error="attempted && !linkedClient && !clientFocused"
             :error-message="clientPickNote"
+            :hint="searchTooShort ? `Type at least ${LOOKUP_MIN_CHARS} characters to search.` : undefined"
             @update:model-value="onClientTyped"
             @focus="onClientFocus"
             @blur="onClientBlur"
@@ -249,7 +250,7 @@
       </app-text-field>
       <app-phone-input
         v-else
-        v-model:country="mobileCountry" :model-value="fieldValue('customerMobileNumber')"
+        v-model:country="model.customerMobileCountryCode" :model-value="fieldValue('customerMobileNumber')"
         label="Client Phone Number" :class="contactCols" :readonly="fieldLocked('customerMobileNumber')"
         @update:model-value="onFieldTyped('customerMobileNumber', $event)"
         @blur="commitField('customerMobileNumber')"
@@ -370,7 +371,7 @@ import {
   isIndividualEntityType
 } from "modules/rems/useRemsMeta";
 import { nameRules } from "utils/personName";
-import { dialFromIso, DEFAULT_COUNTRY_ISO } from "composables/useCountries";
+import { DEFAULT_COUNTRY_ISO } from "composables/useCountries";
 import {
   ATTACHMENT_ACCEPT, ATTACHMENT_HINT, MAX_ATTACHMENT_FILES, MAX_ATTACHMENT_TOTAL_MB, MAX_UPLOAD_MB
 } from "composables/useFileDrop";
@@ -454,8 +455,6 @@ const namePartCols = computed(() =>
 const contactCols = computed(() =>
   props.compact ? "col-12 col-sm-6" : "col-12 col-sm-6 col-md-4");
 
-const DEFAULT_DIAL_CODE = dialFromIso(DEFAULT_COUNTRY_ISO);
-const mobileCountry = ref(DEFAULT_DIAL_CODE);
 const attachments = ref([]);
 
 // The cap on the SET, not on each file — the picker enforces MAX_UPLOAD_MB per file.
@@ -824,7 +823,7 @@ watch(() => props.saved, (saved) => {
   }
   if (held.customerMobileNumber && fieldDraft.customerMobileNumber === null &&
     !samePhone(model.customerMobileNumber, held.customerMobileNumber)) {
-    mobileCountry.value = null;
+    model.customerMobileCountryCode = saved.customerMobileCountryCode || null;
     model.customerMobileNumber = held.customerMobileNumber;
   }
 });
@@ -884,13 +883,11 @@ const linkNameOnFile = async () => {
 };
 
 // ---- The search ----
-// Every term searches, however short: a minimum length would leave a client actually NAMED in two or three
-// characters unfindable by typing their name.
+// Nothing is searched, in the portal or in Maconomy, until this many characters are typed.
+const LOOKUP_MIN_CHARS = 3;
 const LOOKUP_DEBOUNCE_MS = 500;
 // The server's page size. Reaching it means there may be more than are shown.
 const LOOKUP_LIMIT = 20;
-// Maconomy is asked from two characters: one letter matches thousands of its customers.
-const MACONOMY_MIN_CHARS = 2;
 const MACONOMY_SEARCH_FAILED = "Maconomy could not be searched just now.";
 let lookupTimer = null;
 // Bumped on every query so a slow response for an abandoned term cannot land on top of a newer one.
@@ -928,7 +925,7 @@ const clearMaconomyOptions = (state = "idle") => {
 let maconomyNotConnected = false;
 
 const searchMaconomy = async (term, seq) => {
-  if (term.length < MACONOMY_MIN_CHARS || maconomyNotConnected) {
+  if (maconomyNotConnected) {
     clearMaconomyOptions();
     return;
   }
@@ -954,7 +951,7 @@ const runLookup = (term) => {
   const seq = lookupSeq;
   clientSearched.value = false;
   lookupFailed.value = false;
-  if (!term) {
+  if (term.length < LOOKUP_MIN_CHARS) {
     clientLoading.value = false;
     systemOptions.value = [];
     clearMaconomyOptions();
@@ -984,6 +981,11 @@ const runLookup = (term) => {
     linkExactMatchIfSettled();
   }, LOOKUP_DEBOUNCE_MS);
 };
+
+const searchTooShort = computed(() => {
+  const length = clientQuery.value.trim().length;
+  return !linkedClient.value && length > 0 && length < LOOKUP_MIN_CHARS;
+});
 
 // More matched than either half returned.
 const moreMatches = computed(() => systemOptions.value.length >= LOOKUP_LIMIT || maconomyMore.value);
@@ -1071,7 +1073,7 @@ const pickClient = (client) => {
     model.clientNameSuffix = client.suffix || "";
     model.customerEmail = client.email || "";
     // Blanked first so THIS client's number decides the country, not the last one's.
-    mobileCountry.value = client.phone ? null : DEFAULT_DIAL_CODE;
+    model.customerMobileCountryCode = client.phoneCountryCode || (client.phone ? null : DEFAULT_COUNTRY_ISO);
     model.customerMobileNumber = client.phone || "";
     holdFrom(client);
     composeClientName(client.isOrganisation ? "organisation" : "individual");
@@ -1170,7 +1172,7 @@ const resetClient = ({ keepQuery = false } = {}) => {
   model.type = "";
   model.customerEmail = "";
   model.customerMobileNumber = "";
-  mobileCountry.value = DEFAULT_DIAL_CODE;
+  model.customerMobileCountryCode = DEFAULT_COUNTRY_ISO;
   applyEntityType(null);
 };
 

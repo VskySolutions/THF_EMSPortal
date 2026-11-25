@@ -33,6 +33,15 @@ export const isoFromDial = (dial) => {
   return orderedCountries.find((c) => c.phonecode === normalized)?.isoCode || null;
 };
 
+/** ISO-2 code from what a phone's country is stored as: the ISO-2 code itself ("CA"), or the dial code
+    older rows hold ("+91" → "IN"). A dial code alone cannot say Canada: "+1" reads as the US. */
+export const isoFromCountry = (value) => {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (/^[A-Za-z]{2}$/.test(text)) return all.find((c) => c.isoCode === text.toUpperCase())?.isoCode || null;
+  return isoFromDial(text);
+};
+
 /** Dial code from an ISO-2 code ("IN" → "+91"). */
 export const dialFromIso = (isoCode) => {
   const c = all.find((x) => x.isoCode === isoCode);
@@ -48,6 +57,7 @@ export function useCountries () {
     countryNameOption,
     countryNameFromIso,
     isoFromDial,
+    isoFromCountry,
     dialFromIso,
     DEFAULT_COUNTRY_ISO
   };

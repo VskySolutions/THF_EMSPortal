@@ -40,7 +40,9 @@ public sealed record RemsApprovalTaskQuery(
     /// </summary>
     Guid? TenantId = null,
     /// <summary>One approver's tasks only — the Approver column's dropdown on the tenant-wide inbox.</summary>
-    Guid? ApproverUserId = null);
+    Guid? ApproverUserId = null,
+    /// <summary>Part of the request's number ("COP-12"). The Request ID box at the top of the filters.</summary>
+    string? RemsNumber = null);
 
 /// <summary>
 /// How many rows each quick-filter button on the Approvals inbox would list: the Approval Status group by

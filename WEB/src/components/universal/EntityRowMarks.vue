@@ -2,6 +2,39 @@
   <span class="uf-marks">
     <!-- `type="a"` on both, as on every other control in an Actions column: the column renders one kind of
          tag throughout, whether the control goes somewhere or does something. -->
+    <!-- Colour: a palette, so a menu. -->
+    <q-btn type="a" flat round dense :color="colour ? undefined : 'grey-7'" icon="o_palette" :disable="busy">
+      <q-icon v-if="colour" name="o_palette" class="uf-marks__swatch-icon" :style="{ color: colour }" />
+      <q-tooltip max-width="280px">
+        <div class="text-weight-medium">Highlight Request</div>
+        <div>Apply a personal highlight to this request for easier identification. This highlight is visible only to you.</div>
+      </q-tooltip>
+      <q-menu anchor="bottom right" self="top right">
+        <div class="uf-marks__palette">
+          <div class="uf-marks__title">Highlight Request</div>
+          <div class="uf-marks__swatches">
+            <button
+              v-for="c in palette"
+              :key="c"
+              v-close-popup
+              type="button"
+              class="uf-marks__swatch"
+              :class="{ 'uf-marks__swatch--on': c === colour }"
+              :style="{ backgroundColor: c }"
+              :aria-label="`Highlight request ${c}`"
+              @click.stop="$emit('set-colour', c)"
+            />
+          </div>
+          <q-btn
+            v-close-popup
+            flat dense no-caps size="sm" class="full-width q-mt-xs"
+            :disable="!colour" icon="o_format_color_reset" label="Clear"
+            @click.stop="$emit('set-colour', null)"
+          />
+          <div class="uf-marks__note">This highlight is visible only to you.</div>
+        </div>
+      </q-menu>
+    </q-btn>
     <!-- Pin: a toggle, so one control rather than a menu item. -->
     <q-btn
       type="a"
@@ -16,36 +49,6 @@
       <q-tooltip>{{ pinTooltip }}</q-tooltip>
     </q-btn>
 
-    <!-- Colour: a palette, so a menu. -->
-    <q-btn type="a" flat round dense :color="colour ? undefined : 'grey-7'" icon="o_palette" :disable="busy">
-      <q-icon v-if="colour" name="o_palette" class="uf-marks__swatch-icon" :style="{ color: colour }" />
-      <q-tooltip>{{ colour ? "Change this row's colour" : "Colour this row (only you see it)" }}</q-tooltip>
-      <q-menu anchor="bottom right" self="top right">
-        <div class="uf-marks__palette">
-          <div class="uf-marks__title">Colour this row</div>
-          <div class="uf-marks__swatches">
-            <button
-              v-for="c in palette"
-              :key="c"
-              v-close-popup
-              type="button"
-              class="uf-marks__swatch"
-              :class="{ 'uf-marks__swatch--on': c === colour }"
-              :style="{ backgroundColor: c }"
-              :aria-label="`Colour this row ${c}`"
-              @click.stop="$emit('set-colour', c)"
-            />
-          </div>
-          <q-btn
-            v-close-popup
-            flat dense no-caps size="sm" class="full-width q-mt-xs"
-            :disable="!colour" icon="o_format_color_reset" label="Clear"
-            @click.stop="$emit('set-colour', null)"
-          />
-          <div class="uf-marks__note">Private to you — nobody else sees it.</div>
-        </div>
-      </q-menu>
-    </q-btn>
   </span>
 </template>
 

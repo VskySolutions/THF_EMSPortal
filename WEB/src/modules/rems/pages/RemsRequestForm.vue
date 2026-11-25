@@ -504,6 +504,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 // THE REMS form: one component behind two pages — the read-only request, in sections, and the tabbed
 // form it is created and edited on. The read-only page is everybody's and offers Conversation, Copy and
 // Back alone; every move on the request is made from the form, which the lists open as Edit or Manage.
@@ -513,6 +514,7 @@ import { remsApi, getApiErrorMessage, webUrl } from "services/api";
 import { isRefusalMessage } from "services/apiRefusals";
 import { SHOW_MIDDLE_NAME, SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { formatDateOnly, useDateFormat } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
@@ -549,6 +551,7 @@ import ActivityDialog from "modules/rems/components/ActivityDialog.vue";
 const route = useRoute();
 const router = useRouter();
 const notify = useNotify();
+const { phonesValid } = usePhoneFields();
 const { confirm } = useConfirm();
 const { has } = usePermissions();
 const auth = useAuthStore();
@@ -629,6 +632,8 @@ const blankClient = () => ({
   clientMiddleName: "",
   customerEmail: "",
   customerMobileNumber: "",
+  // The country picked for that number, ISO-2 ("CA"); null until one is picked or a number is typed.
+  customerMobileCountryCode: null,
   type: "",
   existingClientReferenceId: null,
   // Set when the client is a Maconomy customer. The name, email and phone above are then Maconomy's,
@@ -1194,7 +1199,7 @@ const clientRows = computed(() => [
     : []),
   { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Client Email Address", value: clientForm.customerEmail },
-  { label: "Client Phone Number", value: clientForm.customerMobileNumber },
+  { label: "Client Phone Number", value: formatPhone(clientForm.customerMobileNumber) },
   { label: "Relationship to THF", value: labelOf(typeOptions.value, clientForm.type) },
   { label: "Industry", value: labelOf(industryOptions.value, setupForm.industry) },
   // Whose client this is. Read here rather than under the engagement setup, which is where it is asked.
@@ -1372,6 +1377,7 @@ const seedForms = (detail, ws) => {
   clientForm.clientMiddleName = detail.clientMiddleName || "";
   clientForm.customerEmail = detail.customerEmail || "";
   clientForm.customerMobileNumber = detail.customerMobileNumber || "";
+  clientForm.customerMobileCountryCode = detail.customerMobileCountryCode || null;
   clientForm.type = detail.type || "";
   clientForm.existingClientReferenceId = detail.existingClientReferenceId || null;
   clientForm.maconomyCustomerNumber = detail.maconomyCustomerNumber || null;
@@ -1416,6 +1422,7 @@ const clientProblem = () => {
       ? "Search for the client, or add a new one."
       : "Search for the client and pick them from the results.";
   }
+  if (!phonesValid.value) return "The client phone number is incomplete or not valid for its country.";
   if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
   // A Maconomy customer's name and email are Maconomy's to hold: nothing here is asked for or checked.
   // One with no email can still be filed as a draft; sending is what waits for the address.
@@ -1477,6 +1484,7 @@ const typedClientPayload = () => ({
   ...(SHOW_MIDDLE_NAME ? { clientMiddleName: (clientForm.clientMiddleName || "").trim() } : {}),
   customerEmail: clientForm.customerEmail || null,
   customerMobileNumber: clientForm.customerMobileNumber || null,
+  customerMobileCountryCode: clientForm.customerMobileCountryCode || null,
   existingClientReferenceId: clientForm.existingClientReferenceId || null
 });
 

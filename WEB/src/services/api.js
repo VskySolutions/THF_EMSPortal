@@ -371,6 +371,29 @@ export const emailLogApi = {
   get: (id) => api.get(`/api/admin/email-logs/${id}`).then(unwrap)
 };
 
+// The errors the application logged for the tenant, read-only (logs.read).
+export const errorLogApi = {
+  // params: { page, limit, search, level, from, to }
+  list: (params) => api.get("/api/admin/logs", { params }).then(envelope),
+  // → { log, exception, properties: [{ name, value }] }
+  get: (id) => api.get(`/api/admin/logs/${id}`).then(unwrap)
+};
+
+// The background job queue: what it holds, retry and clean-up (jobs.manage).
+export const backgroundJobsApi = {
+  // params: { state, page, limit }; state is Enqueued | Scheduled | Processing | Succeeded | Failed | Deleted
+  list: (params) => api.get("/api/admin/jobs", { params }).then(envelope),
+  // → { queued, scheduled, processing, succeeded, failed, deleted }
+  counts: () => api.get("/api/admin/jobs/counts").then(unwrap),
+  retry: (id) => api.post(`/api/admin/jobs/${id}/retry`).then(unwrap),
+  remove: (id) => api.delete(`/api/admin/jobs/${id}`).then(unwrap),
+  // Both → { count }
+  retryFailed: () => api.post("/api/admin/jobs/retry-failed").then(unwrap),
+  clearQueue: () => api.post("/api/admin/jobs/clear-queue").then(unwrap),
+  recurring: () => api.get("/api/admin/jobs/recurring").then(unwrap),
+  runRecurring: (id) => api.post(`/api/admin/jobs/recurring/${id}/run`).then(unwrap)
+};
+
 // How an option list orders its items. Mirrors EmsPortal.Domain.Enums.OptionItemSortMode.
 export const OptionItemSortMode = Object.freeze({
   AlphabeticalAsc: "AlphabeticalAsc",
@@ -681,6 +704,10 @@ export const remsApi = {
   // The request's email history and whether THIS caller may chase the client from it: { canRemind,
   // remindBlockedReason, events: [{ id, eventType, recipientEmail, occurredOnUtc, detail, sentBy.
   emailLog: (remsId) => api.get(`/api/rems/requests/${remsId}/email-log`).then(unwrap),
+  // What is waiting on the caller in each COP list, for the menu: { myRequests, copReview, approvals }.
+  menuCounts: () => api.get("/api/rems/menu-counts").then(unwrap),
+  // The counts on a list's Conversation and Email log row actions: [{ remsId, conversation, emails }].
+  activityCounts: (ids) => api.post("/api/rems/requests/activity-counts", { ids }).then(unwrap),
 
   // ---- COP Review + submitted-form review (WO-114, WO-116) ----
   // The admins' shared queue (paginated envelope), NOT one admin's own list — every request whose

@@ -22,6 +22,7 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(c => c.EIN).HasMaxLength(32);
         builder.Property(c => c.PrimaryEmail).HasMaxLength(256);
         builder.Property(c => c.PrimaryPhone).HasMaxLength(32);
+        builder.Property(c => c.PrimaryPhoneCountryCode).HasMaxLength(2);
         builder.Property(c => c.ReferralSourceDetail).HasMaxLength(500);
         builder.Property(c => c.MaconomyCustomerNumber).HasMaxLength(64);
         builder.Property(c => c.MaconomySyncStatus).HasConversion<string>().HasMaxLength(20).IsRequired();

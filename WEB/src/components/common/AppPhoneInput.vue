@@ -1,7 +1,7 @@
 <template>
   <!-- The dial code and the number are ONE answer, so they read as one field: a single label, and the two
        controls flush beneath it with the seam between them collapsed to a single line. -->
-  <div class="app-field app-phone">
+  <div ref="rootRef" class="app-field app-phone">
     <app-field-label :label="label" :required="required" />
     <div class="app-phone__row">
       <app-select
@@ -37,21 +37,22 @@
 
 <script setup>
 // Reusable phone field: a country dial-code dropdown + number input.
-import { ref, computed, toRef, watch } from "vue";
-// "Possible", not "valid": the library's validity check is keyed to the area codes its metadata knows to
-// be assigned, so a well-formed number in a code it has not caught up with — 232, 687 — was refused with a
-// message about the country. The field checks the shape and length for the country and leaves the rest.
-import { AsYouType, isPossiblePhoneNumber, parsePhoneNumber, getExampleNumber } from "libphonenumber-js";
+import { ref, reactive, computed, toRef, watch, markRaw, onMounted, onBeforeUnmount } from "vue";
+import { AsYouType, parsePhoneNumber, getExampleNumber } from "libphonenumber-js";
 import examples from "libphonenumber-js/mobile/examples";
-import { orderedCountries, dialCodeOption, isoFromDial, dialFromIso, DEFAULT_COUNTRY_ISO } from "composables/useCountries";
+import { orderedCountries, dialCodeOption, isoFromCountry, countryNameFromIso, DEFAULT_COUNTRY_ISO } from "composables/useCountries";
+import { registerPhoneField } from "composables/usePhoneFields";
+// What counts as a complete number for a country, its length and its format, is decided in one place.
+import { phoneFitsCountry, phoneProblem, phoneForStorage } from "utils/phoneNumber";
 import { useFieldLabel } from "composables/useFieldLabel";
 import AppSelect from "components/common/AppSelect.vue";
 import AppFieldLabel from "components/common/AppFieldLabel.vue";
 
 const props = defineProps({
-  // The phone number (stored value; normalised to E.164 when valid).
+  // The phone number, stored formatted as it reads: "(201) 555-0123", or "+91 98765 43210" outside the US.
   modelValue: { type: String, default: "" },
-  // Dial code for the number, e.g. "+91" (matches Person.CountryCode storage). May be null.
+  // The country picked for the number, ISO-2 ("CA"), kept beside it: the number alone cannot tell Canada
+  // from the US. A dial code ("+91"), which older rows hold, is read too. May be null.
   country: { type: String, default: null },
   label: { type: String, default: "Phone Number" },
   // Shows the mandatory marker, exactly as AppTextField does. Without it a phone the surrounding form
@@ -82,7 +83,14 @@ const isoFromNumber = (val) => {
   try { return parsePhoneNumber(String(val))?.country || null; } catch { return null; }
 };
 
-const iso = ref(isoFromDial(props.country) || isoFromNumber(props.modelValue) || props.defaultCountry);
+const iso = ref(isoFromCountry(props.country) || isoFromNumber(props.modelValue) || props.defaultCountry);
+// A country the parent handed over (or a loaded number implied) is not the user's pick: it is not echoed back.
+let quietIso = null;
+const followIso = (next) => {
+  if (!next || next === iso.value) return;
+  quietIso = next;
+  iso.value = next;
+};
 const display = ref(""); // the formatted national number shown in the input
 const localError = ref("");
 let lastEmitted = props.modelValue || "";
@@ -97,7 +105,7 @@ const exampleNational = computed(() => {
 const formatNational = (val, region) => {
   if (!val) return "";
   try {
-    if (isPossiblePhoneNumber(val, region)) return parsePhoneNumber(val, region).formatNational();
+    if (phoneFitsCountry(val, region)) return parsePhoneNumber(val, region).formatNational();
   } catch { /* fall through to as-you-type */ }
   return new AsYouType(region).input(String(val));
 };
@@ -109,8 +117,7 @@ watch(() => props.modelValue, (v) => {
   if ((v || "") === (lastEmitted || "")) return;
   // With no separately-stored dial code, sync the dropdown to the loaded number's country.
   if (!props.country) {
-    const derived = isoFromNumber(v);
-    if (derived && derived !== iso.value) iso.value = derived;
+    followIso(isoFromNumber(v));
   }
   display.value = formatNational(v, iso.value);
   // The guard above asks "is this value already on screen?", so it has to follow what the parent wrote just
@@ -118,30 +125,21 @@ watch(() => props.modelValue, (v) => {
   lastEmitted = v || "";
 });
 
-// A dial code that already matches the current pick names no new country, so it is left alone: +1 is the US
-// and Canada both.
-watch(() => props.country, (v) => {
-  if (!v || v === dialFromIso(iso.value)) return;
-  const next = isoFromDial(v);
-  if (next && next !== iso.value) iso.value = next;
-});
+watch(() => props.country, (v) => followIso(isoFromCountry(v)));
 
 watch(iso, (region) => {
-  emit("update:country", dialFromIso(region));
+  const quiet = region === quietIso;
+  quietIso = null;
+  if (!quiet) emit("update:country", region);
   // Reformat the current input under the new country's pattern.
   display.value = new AsYouType(region).input(display.value);
   emitValue();
   if (display.value) validate();
 }, { immediate: false });
 
-// Emit the stored value: E.164 when valid, otherwise the typed (formatted) value.
+// Emit the stored value: the formatted number when complete, otherwise the text as typed.
 const emitValue = () => {
-  let stored = display.value;
-  try {
-    if (isPossiblePhoneNumber(display.value, iso.value)) {
-      stored = parsePhoneNumber(display.value, iso.value).number;
-    }
-  } catch { /* keep the raw value */ }
+  const stored = phoneForStorage(display.value, iso.value);
   lastEmitted = stored;
   emit("update:modelValue", stored);
 };
@@ -149,30 +147,46 @@ const emitValue = () => {
 const onInput = (val) => {
   // Format as the user types using the selected country's pattern.
   display.value = new AsYouType(iso.value).input(val || "");
+  // A number typed under the default country is still a number of that country: say so.
+  if (display.value && isoFromCountry(props.country) !== iso.value) emit("update:country", iso.value);
   emitValue();
   validate();
 };
 
 const validate = () => {
-  localError.value = "";
-  if (display.value && iso.value && !isPossiblePhoneNumber(display.value, iso.value)) {
-    localError.value = exampleNational.value
-      ? `Enter a complete phone number for the selected country (e.g. ${exampleNational.value}).`
-      : "Enter a complete phone number for the selected country.";
-  }
+  localError.value = phoneProblem(
+    display.value, iso.value, countryNameFromIso(iso.value) || "the selected country", exampleNational.value);
   const valid = !localError.value;
   emit("update:valid", valid);
   return valid;
 };
 
 const onBlur = (e) => {
-  // Keep the national display, but ensure the stored value is E.164 when valid.
+  // Leaving the box settles the stored value on the formatted number.
   if (validate()) emitValue();
   emit("blur", e);
 };
 
 // Allow parents to force validation at submit time.
 defineExpose({ validate });
+
+// What the forms ask before saving (usePhoneFields). An empty field is not this check's business, and a
+// field nobody can type in is not theirs to correct.
+const rootRef = ref(null);
+const field = reactive({
+  el: null,
+  valid: computed(() => !display.value || phoneFitsCountry(display.value, iso.value)),
+  active: computed(() => !props.readonly && !props.disable),
+  show: validate
+});
+let unregister = null;
+onMounted(() => {
+  field.el = markRaw(rootRef.value);
+  unregister = registerPhoneField(field);
+  // A number that arrived wrong says so before anybody trips over it.
+  if (display.value && field.active) validate();
+});
+onBeforeUnmount(() => unregister?.());
 </script>
 
 <style scoped>

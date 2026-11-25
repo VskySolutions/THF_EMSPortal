@@ -24,6 +24,37 @@ internal sealed class ClientRepository : IClientRepository
     public Task<Client?> FindByMaconomyNumberAsync(string customerNumber, CancellationToken cancellationToken = default)
         => _dbContext.Clients.FullGraph().FirstOrDefaultAsync(c => c.MaconomyCustomerNumber == customerNumber, cancellationToken);
 
+    public async Task<bool> RemoveIfOnlyRequestAsync(Guid clientId, Guid deletedRemsId, CancellationToken cancellationToken = default)
+    {
+        var client = await _dbContext.Clients.FirstOrDefaultAsync(c => c.Id == clientId, cancellationToken);
+        if (client is null
+            || client.IsMaconomyClient
+            || client.MaconomySyncStatus != RemsMaconomyCustomerSyncStatus.NotSynced
+            || !string.IsNullOrWhiteSpace(client.MaconomyContactCompanyNumber)
+            || client.IsIntakeOnFile)
+        {
+            return false;
+        }
+        if (await _dbContext.RemsRequests.AnyAsync(r => r.ClientId == clientId && r.Id != deletedRemsId, cancellationToken)
+            || await _dbContext.ClientRelationships.AnyAsync(r => r.ClientId == clientId || r.RelatedClientId == clientId, cancellationToken))
+        {
+            return false;
+        }
+
+        // The Client_* rows stay attached, unreachable without their client, so a restore brings back the whole of it.
+        _dbContext.Clients.Remove(client);
+
+        if (client.PersonId is { } personId
+            && !await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.PersonId == personId, cancellationToken)
+            && !await _dbContext.Clients.AnyAsync(c => c.PersonId == personId && c.Id != clientId, cancellationToken)
+            && !await _dbContext.ClientContacts.AnyAsync(c => c.PersonId == personId && c.ClientId != clientId, cancellationToken)
+            && await _dbContext.Persons.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken) is { } person)
+        {
+            _dbContext.Persons.Remove(person);
+        }
+        return true;
+    }
+
     public async Task<IReadOnlyList<string>> ListMaconomyCustomerNumbersAsync(Guid tenantId, CancellationToken cancellationToken = default)
         => await _dbContext.Clients
             .IgnoreQueryFilters()

@@ -49,7 +49,7 @@
           </app-text-field>
           <div class="col-12 col-sm-6">
             <!-- Owed by a trust or estate, which must be reachable beyond the locked email. -->
-            <app-phone-input v-model="payload.mobileNumber" label="Phone Number" :required="clientPhoneRequired" />
+            <app-phone-input v-model="payload.mobileNumber" v-model:country="payload.mobileCountryCode" label="Phone Number" :required="clientPhoneRequired" />
             <div v-if="errors.mobileNumber" class="text-caption q-mt-xs" :class="payload.mobileNumber ? 'text-validation' : 'text-negative'">{{ errors.mobileNumber }}</div>
           </div>
           <!-- Each option's description is its own tooltip, maintained by staff in Administration →
@@ -335,7 +335,7 @@
                 />
                 <!-- The same dial-code + number control the client's own phone above uses. -->
                 <div class="col-12 col-sm-6 col-md-4">
-                  <app-phone-input v-model="entity.phoneNumber" label="Phone Number" />
+                  <app-phone-input v-model="entity.phoneNumber" v-model:country="entity.phoneCountryCode" label="Phone Number" />
                 </div>
               </div>
             </q-card-section>

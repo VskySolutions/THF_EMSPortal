@@ -89,6 +89,7 @@ import { ref, computed } from "vue";
 import { useQuasar } from "quasar";
 import { remsApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { useConfirm } from "composables/useConfirm";
 import { useRemsMeta } from "modules/rems/useRemsMeta";
 import {
@@ -116,6 +117,7 @@ const quasar = useQuasar();
 const maximized = computed(() => quasar.screen.lt.md);
 
 const notify = useNotify();
+const { phoneIssues } = usePhoneFields();
 const { confirm } = useConfirm();
 // The tenant's own Referral Source wording. Resolvable here, unlike on the client's anonymous page,
 // where the list has to travel with the form.
@@ -133,7 +135,7 @@ let baseline = "";
 
 const issues = computed(() => (loading.value || loadError.value
   ? []
-  : intakeIssues(payload.value, entityType.value)));
+  : [...intakeIssues(payload.value, entityType.value), ...phoneIssues.value]));
 
 const snapshot = () => JSON.stringify(buildIntakePayload(payload.value, entityType.value));
 const dirty = () => snapshot() !== baseline;

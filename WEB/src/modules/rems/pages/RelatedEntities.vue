@@ -147,10 +147,12 @@
             v-if="canReadEmailLog && !cell.row.intakeReused" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
           >
-            <q-tooltip>Email log</q-tooltip>
+            <row-count-badge :count="emailCount(cell.row.remsId)" />
+            <q-tooltip>{{ emailTip(cell.row.remsId) }}</q-tooltip>
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
-            <q-tooltip>Conversation</q-tooltip>
+            <row-count-badge :count="conversationCount(cell.row.remsId)" />
+            <q-tooltip>{{ conversationTip(cell.row.remsId) }}</q-tooltip>
           </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
                everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
@@ -180,11 +182,17 @@
       </template>
     </app-data-table>
 
-    <conversation-dialog v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle" />
+    <conversation-dialog
+      v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
 
     <!-- A sent reminder adds an email event and nothing else, but the row's Updated On is what this list
          shows of it, so it reloads on the way out. -->
-    <email-log-dialog v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load" />
+    <email-log-dialog
+      v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
   </q-page>
 </template>
 
@@ -217,6 +225,8 @@ import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
+import RowCountBadge from "modules/rems/components/RowCountBadge.vue";
+import { useRemsRowCounts } from "modules/rems/useRemsRowCounts";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 import RelatedClientsCell from "modules/rems/components/RelatedClientsCell.vue";
 
@@ -247,7 +257,7 @@ onMounted(async () => {
 // box; the client is a dropdown of the clients on the list, every date column filters as a From/To range,
 // and Related Clients is a count with no filter worth offering.
 const columns = computed(() => [
-  { name: "remsNumber", label: `${siteName.value} ID`, field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
+  { name: "remsNumber", label: `${siteName.value} ID`, field: "remsNumber", align: "left", sortable: true, default: true },
   { name: "clientName", label: "Client Name", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: true, filterOptions: entityTypeOptions.value },
   { name: "submittedOnUtc", label: "Submitted On", field: "submittedOnUtc", align: "left", sortable: true, default: true, filterType: "dateRange" },
@@ -274,6 +284,7 @@ const listFilters = () => {
   const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
   return {
     search: search.value || undefined,
+    remsNumber: filters.remsNumber?.trim() || undefined,
     entityType: filters.entityType || undefined,
     relatedStatus: extras.relatedStatus || undefined,
     clientPersonIds: filters.clientName?.length ? filters.clientName : undefined,
@@ -312,6 +323,10 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+
+// How many messages and emails sit behind each row's icons: one read per page.
+const { sync: syncCounts, conversationCount, emailCount, conversationTip, emailTip } = useRemsRowCounts();
+watch(rows, (list) => syncCounts(list.map((r) => r.remsId)));
 useFilterMemory("rems-related-entities", {
   relatedStatus: toRef(extras, "relatedStatus"), entityType: toRef(filters, "entityType")
 });
