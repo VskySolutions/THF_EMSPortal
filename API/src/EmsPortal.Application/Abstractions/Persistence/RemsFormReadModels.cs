@@ -53,7 +53,9 @@ public sealed record RemsClientFormQuery(
     DateTime? CreatedFromUtc = null,
     DateTime? CreatedToUtc = null,
     DateTime? UpdatedFromUtc = null,
-    DateTime? UpdatedToUtc = null);
+    DateTime? UpdatedToUtc = null,
+    /// <summary>Part of the request's number ("COP-12"). The Request ID box at the top of the filters.</summary>
+    string? RemsNumber = null);
 
 /// <summary>
 /// How many requests each quick-filter button on COP Review would list: the All / Assigned-to-me pair,

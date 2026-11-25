@@ -46,7 +46,9 @@ number.
 ```
 
 A client the search does not find is added with the **New client** button beside the box; the list itself
-offers no "add as new" row.
+offers no "add as new" row. Since 21 Nov 2026 the button, and filing a new client at all, needs the
+permission `rems.clients.create`: Partner, Admin and Tenant Admin hold it; Billing Manager and Engagement
+Executive do not, so they pick from the search only (the server refuses with `REMS_NEW_CLIENT_NOT_ALLOWED`).
 
 - `GET /api/rems/clients/lookup?q=` — clients the portal holds (unchanged; Maconomy clients are not in it).
 - `GET /api/rems/clients/maconomy?q=` — Maconomy customers, by name, number, email or telephone. The name

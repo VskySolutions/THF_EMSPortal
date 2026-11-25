@@ -1,7 +1,7 @@
 // The user import file: its heading line, the Excel template, and turning rows back into CSV text.
 
-const HEADINGS = ["MaconomyNumber", "FirstName", "LastName", "Email", "Phone", "Department", "Role"];
-const FIELDS = ["maconomyNumber", "firstName", "lastName", "email", "phone", "department", "roles"];
+const HEADINGS = ["MaconomyNumber", "FirstName", "LastName", "Email", "Phone", "Department", "Role", "Status"];
+const FIELDS = ["maconomyNumber", "firstName", "lastName", "email", "phone", "department", "roles", "accountStatus"];
 
 // The most one file may hold; the template's text-formatted rows run that far.
 const MAX_ROWS = 500;
@@ -35,6 +35,9 @@ export const downloadUserImportTemplate = async ({ roles = [], departments = [] 
     "FirstName, LastName, Email and Role are required.",
     "Several roles go in one Role cell, separated by a semicolon or a comma.",
     "Role and Department must match a name on this sheet.",
+    "Status is optional: Active or Inactive. Inactive switches the account off; Active never switches one back on.",
+    "With \"Update users that already exist\" ticked, a line whose Email is already a user updates that user.",
+    "On an update the Email is never changed, a blank cell leaves its value alone, and the Role cell replaces the user's roles.",
     "Fill in the Users sheet only, then import this workbook as it is."
   ];
   const length = Math.max(roles.length, departments.length, notes.length);
@@ -45,13 +48,13 @@ export const downloadUserImportTemplate = async ({ roles = [], departments = [] 
     {
       sheet: "Users",
       data: [HEADINGS.map(heading), ...blank],
-      columns: [18, 18, 18, 32, 18, 18, 36].map((width) => ({ width })),
+      columns: [18, 18, 18, 32, 18, 18, 36, 12].map((width) => ({ width })),
       stickyRowsCount: 1
     },
     {
       sheet: "Roles",
       data: [["Role", "Department", "Notes"].map(heading), ...lists],
-      columns: [{ width: 30 }, { width: 24 }, { width: 70 }],
+      columns: [{ width: 30 }, { width: 24 }, { width: 110 }],
       stickyRowsCount: 1
     }
   ]).toBlob();

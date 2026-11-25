@@ -135,7 +135,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         if (IsDone(client))
         {
             throw new MaconomyCustomerSyncException(
-                MaconomyCustomerSyncRefusal.NotEligible, $"This client is already Maconomy customer {client.MaconomyCustomerNumber}.");
+                MaconomyCustomerSyncRefusal.NotEligible, $"This client is already Maconomy client {client.MaconomyCustomerNumber}.");
         }
         if (WhyNotPosted(request, client, requireApproved: true) is { } reason)
         {
@@ -386,8 +386,8 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         await WriteActivityAsync(
             client, remsId, ActivityEventTypes.RemsMaconomyCustomerSynced,
             status == RemsMaconomyCustomerSyncStatus.Linked
-                ? $"Linked to Maconomy customer {customerNumber}"
-                : $"Created Maconomy customer {customerNumber}",
+                ? $"Linked to Maconomy client {customerNumber}"
+                : $"Created Maconomy client {customerNumber}",
             actorId, cancellationToken);
         // The engagement follows as a Maconomy job, now that there is a customer to put it under: recorded
         // with the customer, queued once both are committed.
@@ -446,7 +446,7 @@ public sealed class MaconomyCustomerSyncService : IMaconomyCustomerSyncService
         }
         if (client.IsMaconomyClient && !client.IsMaconomyContactSyncPending)
         {
-            return $"The client is already Maconomy customer {client.MaconomyCustomerNumber}.";
+            return $"The client is already Maconomy client {client.MaconomyCustomerNumber}.";
         }
         return null;
     }

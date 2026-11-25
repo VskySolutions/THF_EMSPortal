@@ -347,6 +347,11 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
         {
             query = query.WhereFormState(options.EmsFormState);
         }
+        if (!string.IsNullOrWhiteSpace(options.RemsNumber))
+        {
+            var number = options.RemsNumber.Trim();
+            query = query.Where(r => r.RemsNumber.Contains(number));
+        }
         if (options.ClientPersonIds is { Count: > 0 } clientIds)
         {
             query = query.Where(r => clientIds.Contains(r.ClientId));
@@ -422,6 +427,11 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
         if (query.CseUserId is { } cseId)
         {
             rems = rems.Where(r => r.CSEId == cseId);
+        }
+        if (!string.IsNullOrWhiteSpace(query.RemsNumber))
+        {
+            var number = query.RemsNumber.Trim();
+            rems = rems.Where(r => r.RemsNumber.Contains(number));
         }
         if (query.ClientPersonIds is { Count: > 0 } clientIds)
         {
@@ -652,6 +662,11 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
         {
             rems = WhereRelatedStatus(rems, query.RelatedStatus);
         }
+        if (!string.IsNullOrWhiteSpace(query.RemsNumber))
+        {
+            var number = query.RemsNumber.Trim();
+            rems = rems.Where(r => r.RemsNumber.Contains(number));
+        }
         if (query.ClientPersonIds is { Count: > 0 } clientIds)
         {
             rems = rems.Where(r => clientIds.Contains(r.ClientId));
@@ -846,6 +861,15 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
 
     public void Remove(RemsRequest request) => _dbContext.RemsRequests.Remove(request);
 
+    public async Task DetachCopiesAsync(Guid sourceRemsId, CancellationToken cancellationToken = default)
+    {
+        var copies = await Requests.Where(r => r.CopiedFromRemsId == sourceRemsId).ToListAsync(cancellationToken);
+        foreach (var copy in copies)
+        {
+            copy.CopiedFromRemsId = null;
+        }
+    }
+
     public async Task AddFileAsync(RemsFile file, CancellationToken cancellationToken = default)
         => await _dbContext.RemsFiles.AddAsync(file, cancellationToken);
 
@@ -860,6 +884,80 @@ internal sealed class RemsRequestRepository : IRemsRequestRepository
             .OrderByDescending(e => e.OccurredOnUtc)
             .ThenByDescending(e => e.CreatedOnUtc)
             .ToListAsync(cancellationToken);
+
+    public Task<int> CountNeedingInitiatorAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        const string draft = RemsRequestStatuses.Draft;
+        const string returned = RemsRequestStatuses.ReturnedToInitiator;
+        const string declined = RemsRequestStatuses.ChangesRequested;
+        var history = _dbContext.RemsStatusHistory;
+        return Requests
+            .Where(r => r.Status!.Value == draft || r.Status!.Value == returned || r.Status!.Value == declined)
+            .Select(r => new
+            {
+                Status = r.Status!.Value,
+                IsInitiator = r.CreatedById == userId || r.OnBehalfOfUserId == userId,
+                r.CreatedById,
+                // Who the open send-back went to: the latest history row names them.
+                ReturnedTo = history.Where(h => h.REMSId == r.Id)
+                    .OrderByDescending(h => h.ChangedOnUtc)
+                    .Select(h => h.ReturnedToUserId)
+                    .FirstOrDefault(),
+            })
+            .Where(x => x.Status == returned
+                ? x.ReturnedTo == userId || (x.IsInitiator && (x.ReturnedTo == null || x.ReturnedTo == x.CreatedById))
+                : x.IsInitiator)
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<int> CountNeedingAdminAsync(Guid adminUserId, CancellationToken cancellationToken = default)
+    {
+        const string draft = RemsRequestStatuses.Draft;
+        const string review = RemsRequestStatuses.AdminReview;
+        const string confirmation = RemsRequestStatuses.AwaitingAdminConfirmation;
+        // The COP Review queue, as ReviewRequests reads it.
+        var queue = Requests.Where(r => r.Status!.Value != draft && (r.InviteCode != null || r.FormSubmittedOnUtc != null));
+        var waiting = await queue.WhereStatus(RemsRequestStatuses.WaitingForPickup).CountAsync(cancellationToken);
+        var mine = await queue
+            .Where(r => r.AdminAssignedToId == adminUserId && (r.Status!.Value == review || r.Status!.Value == confirmation))
+            .CountAsync(cancellationToken);
+        return waiting + mine;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, (int Conversation, int Emails)>> CountRowActivityAsync(
+        IReadOnlyCollection<Guid> remsIds, bool withEmails, CancellationToken cancellationToken = default)
+    {
+        var ids = remsIds.Distinct().ToList();
+        var counts = new Dictionary<Guid, (int Conversation, int Emails)>();
+        if (ids.Count == 0)
+        {
+            return counts;
+        }
+
+        var messages = await _dbContext.ConversationMessages
+            .Where(m => m.EntityType == EntityType.Rems && ids.Contains(m.EntityId))
+            .GroupBy(m => m.EntityId)
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        foreach (var row in messages)
+        {
+            counts[row.Id] = (row.Count, 0);
+        }
+
+        if (withEmails)
+        {
+            var emails = await _dbContext.RemsEmailEvents
+                .Where(e => ids.Contains(e.REMSId))
+                .GroupBy(e => e.REMSId)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken);
+            foreach (var row in emails)
+            {
+                counts[row.Id] = (counts.TryGetValue(row.Id, out var have) ? have.Conversation : 0, row.Count);
+            }
+        }
+        return counts;
+    }
 
     public Task<RemsEmailEvent?> GetSentEventByProviderMessageIdUnscopedAsync(string providerMessageId, CancellationToken cancellationToken = default)
         => _dbContext.RemsEmailEvents

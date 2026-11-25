@@ -30,7 +30,8 @@
               <!-- The title WRAPS. It was `ellipsis` — one line, cut off with a "…" — and a title is
                    the one part of a notification that has to be readable without opening. -->
               <q-item-label class="text-weight-medium notif__title">{{ n.title }}</q-item-label>
-              <q-item-label caption lines="2">{{ n.body }}</q-item-label>
+              <!-- Older notifications were stored with the markup of the message they quote. -->
+              <q-item-label caption lines="2">{{ stripHtml(n.body) }}</q-item-label>
               <q-item-label caption>{{ formatDateTime(n.createdOnUtc) }}</q-item-label>
             </q-item-section>
           </q-item>
@@ -50,6 +51,7 @@ import { ref, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import { ufNotificationApi } from "services/api";
 import { useDateFormat } from "composables/useDateFormat";
+import { stripHtml } from "utils/richText";
 import { useNotificationMeta } from "composables/uf/useNotificationMeta";
 import { useNotificationRoute } from "composables/uf/useNotificationRoute";
 

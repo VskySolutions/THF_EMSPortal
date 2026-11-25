@@ -37,6 +37,9 @@ public sealed class CreateRemsRequestRequest
     public string? CustomerEmail { get; set; }
     public string? CustomerMobileNumber { get; set; }
 
+    /// <summary>The country picked for <see cref="CustomerMobileNumber"/>, ISO-2 ("CA").</summary>
+    public string? CustomerMobileCountryCode { get; set; }
+
     /// <summary>Optional Client Service Executive (User id).</summary>
     public Guid? CSEId { get; set; }
 
@@ -83,6 +86,9 @@ public sealed class UpdateRemsRequestRequest
 
     public string? CustomerEmail { get; set; }
     public string? CustomerMobileNumber { get; set; }
+
+    /// <inheritdoc cref="CreateRemsRequestRequest.CustomerMobileCountryCode"/>
+    public string? CustomerMobileCountryCode { get; set; }
     public Guid? CSEId { get; set; }
     public Guid? ExistingClientReferenceId { get; set; }
 
@@ -98,6 +104,18 @@ public sealed class UpdateRemsRequestRequest
     // Saving a request cannot re-point who reviews it: an admin gains a request by picking it up and loses
     // it by handing it back, both actions of their own rather than a field somebody else writes on an edit.
 }
+
+/// <summary>What is waiting on the caller in each COP list, for the menu.</summary>
+public sealed record RemsMenuCounts(int MyRequests, int CopReview, int Approvals);
+
+/// <summary>The requests on a list page whose row-action counts are wanted.</summary>
+public sealed class RemsRowActivityCountsRequest
+{
+    public IReadOnlyList<Guid> Ids { get; set; } = Array.Empty<Guid>();
+}
+
+/// <summary>How many conversation messages and email-log entries a request has.</summary>
+public sealed record RemsRowActivityCount(Guid RemsId, int Conversation, int Emails);
 
 /// <summary>Attach already-uploaded media to an existing request (POST /api/media first).</summary>
 public sealed class AddRemsFilesRequest
@@ -270,7 +288,9 @@ public sealed record RemsRequestDetail(
     /// <summary>The form is out with the client, unanswered, and THIS caller may complete it for them.</summary>
     bool CanCompleteIntake = false,
     /// <summary>The user who completed this request's form for the client; null when the client did.</summary>
-    string? IntakeCompletedBy = null);
+    string? IntakeCompletedBy = null,
+    /// <summary>The country picked for the client's phone number, ISO-2 ("CA"); null when none was.</summary>
+    string? CustomerMobileCountryCode = null);
 
 /// <summary>A client's intake on file: when it was completed, on which request, and by whom if not the client.</summary>
 public sealed record RemsIntakeOnFileView(
@@ -306,7 +326,9 @@ public sealed record RemsClientLookupItem(
     /// <summary>Set for a Maconomy customer: everything above was read from Maconomy by this number.</summary>
     string? MaconomyCustomerNumber = null,
     /// <summary>The REMS.Industry code Maconomy's specification 1 stands for, so the picker can fill the industry in. Null otherwise.</summary>
-    string? Industry = null);
+    string? Industry = null,
+    /// <summary>The country picked for <see cref="Phone"/>, ISO-2 ("CA"); null for a Maconomy customer.</summary>
+    string? PhoneCountryCode = null);
 
 /// <summary>The Maconomy half of the client search.</summary>
 public sealed record RemsMaconomyLookup(
@@ -354,7 +376,9 @@ public sealed record ClientDetails(
     /// <summary>The legal name, for an ORGANISATION client.</summary>
     string? CorporateName = null,
     /// <summary>An individual's middle name: null leaves the record's alone, "" clears it.</summary>
-    string? MiddleName = null)
+    string? MiddleName = null,
+    /// <summary>The country picked for <see cref="Phone"/>, ISO-2.</summary>
+    string? PhoneCountryCode = null)
 {
     /// <summary>Whether these details describe a company rather than a human.</summary>
     public bool IsOrganisation => !string.IsNullOrWhiteSpace(CorporateName);

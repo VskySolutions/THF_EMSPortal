@@ -75,7 +75,7 @@
             <div v-for="r in g.rows" :key="r.role" class="role-row">
               <div class="rems-label">{{ r.role }}</div>
               <div class="rems-value"><app-name-with-suffix :name="r.name" :suffix="r.suffix" /></div>
-              <div class="text-caption text-grey-7"><app-email :email="r.email || ''" empty="no email" /> · {{ r.phone || "no phone" }}</div>
+              <div class="text-caption text-grey-7"><app-email :email="r.email || ''" empty="no email" /> · {{ formatPhone(r.phone) || "no phone" }}</div>
             </div>
           </div>
           <div v-else class="text-grey-6">No contacts provided.</div>
@@ -92,7 +92,7 @@
               />
             </div>
             <div class="text-caption text-grey-7 ellipsis">
-              <app-email :email="p.email || ''" empty="no email" /><template v-if="p.phone"> · {{ p.phone }}</template>
+              <app-email :email="p.email || ''" empty="no email" /><template v-if="p.phone"> · {{ formatPhone(p.phone) }}</template>
             </div>
             <div class="text-caption text-grey-8">
               {{ p.filing }}<template v-if="p.minor"> · {{ p.minor }}</template> · {{ p.billing }}
@@ -127,7 +127,7 @@
               <div class="rems-value"><app-name-with-suffix :name="person.name" :suffix="person.suffix" /></div>
               <!-- The phone only where one was given: the billing block never asks for it. -->
               <div class="text-caption text-grey-7">
-                <app-email :email="person.email || ''" empty="no email" /><template v-if="person.phone"> · {{ person.phone }}</template>
+                <app-email :email="person.email || ''" empty="no email" /><template v-if="person.phone"> · {{ formatPhone(person.phone) }}</template>
               </div>
             </div>
           </div>
@@ -138,6 +138,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import AppEmail from "components/common/AppEmail.vue";
 // Renders one REMS request's submitted client form.
 import { ref, computed, watch } from "vue";
@@ -225,7 +226,7 @@ const groups = computed(() => {
     : [{ label: "Client/Entity Name", value: val(p.clientName) }];
   contact.push(
     { label: "Email (locked)", value: val(view.value?.lockedEmail || p.email) },
-    { label: "Phone Number", value: val(p.mobileNumber) },
+    { label: "Phone Number", value: val(formatPhone(p.mobileNumber)) },
     { label: "Referral Source", value: referralSourceLabel(p.referralSource) },
     { label: "Referral Details", value: val(p.referralSourceDetail) }
   );
@@ -236,7 +237,7 @@ const groups = computed(() => {
     // Retired from the form — the spouse is a contact now, and shows under Contacts.
     if (p.spouseName) contact.push({ label: "Spouse Name", value: p.spouseName });
     if (p.spouseEmail) contact.push({ label: "Spouse Email Address", value: p.spouseEmail });
-    if (p.spousePhone) contact.push({ label: "Spouse Phone", value: p.spousePhone });
+    if (p.spousePhone) contact.push({ label: "Spouse Phone", value: formatPhone(p.spousePhone) });
   }
   if (isBusiness.value) contact.push({ label: "EIN", value: val(p.ein) });
   result.push({ title: "Contact", icon: "o_person", kind: "fields", rows: contact });
@@ -261,7 +262,7 @@ const groups = computed(() => {
     ...addresseeParts(b),
     fields: [
       { label: "Email Address", value: val(b?.email) },
-      { label: "Phone Number", value: val(b?.phone) },
+      { label: "Phone Number", value: val(formatPhone(b?.phone)) },
       { label: "Address", value: b ? addressText(b) : "—", wide: true }
     ]
   }));
@@ -342,7 +343,7 @@ const groups = computed(() => {
     .map((e, i) => {
       const rows = [];
       if (e.emailAddress) rows.push({ label: "Email Address", value: e.emailAddress });
-      if (e.phoneNumber) rows.push({ label: "Phone Number", value: e.phoneNumber });
+      if (e.phoneNumber) rows.push({ label: "Phone Number", value: formatPhone(e.phoneNumber) });
       return { key: e.sourceKey || `entity-${i}`, name: e.fullName, rows };
     });
   if (!isIndividual.value || entities.length) {

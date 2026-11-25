@@ -391,6 +391,7 @@
                   :cse-hint="cseHint"
                   :readonly="!canEditClient"
                   :client-locked="clientLocked"
+                  :can-add-new="canAddNewClient"
                   :saved="request"
                   :compact="showSubmittedPane"
                   :setup-readonly="!canEditSetup"
@@ -503,14 +504,17 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 // THE REMS form: one component behind two pages — the read-only request, in sections, and the tabbed
 // form it is created and edited on. The read-only page is everybody's and offers Conversation, Copy and
 // Back alone; every move on the request is made from the form, which the lists open as Edit or Manage.
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { remsApi, getApiErrorMessage, webUrl } from "services/api";
+import { isRefusalMessage } from "services/apiRefusals";
 import { SHOW_MIDDLE_NAME, SHOW_BILL_RATES } from "modules/rems/remsFeatureFlags";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { formatDateOnly, useDateFormat } from "composables/useDateFormat";
 import { useConfirm } from "composables/useConfirm";
 import { usePermissions, Permissions } from "composables/usePermissions";
@@ -547,6 +551,7 @@ import ActivityDialog from "modules/rems/components/ActivityDialog.vue";
 const route = useRoute();
 const router = useRouter();
 const notify = useNotify();
+const { phonesValid } = usePhoneFields();
 const { confirm } = useConfirm();
 const { has } = usePermissions();
 const auth = useAuthStore();
@@ -627,6 +632,8 @@ const blankClient = () => ({
   clientMiddleName: "",
   customerEmail: "",
   customerMobileNumber: "",
+  // The country picked for that number, ISO-2 ("CA"); null until one is picked or a number is typed.
+  customerMobileCountryCode: null,
   type: "",
   existingClientReferenceId: null,
   // Set when the client is a Maconomy customer. The name, email and phone above are then Maconomy's,
@@ -699,6 +706,8 @@ const frozen = computed(() =>
   [REMS_STATUS.PENDING_APPROVAL, REMS_STATUS.APPROVED].includes(status.value));
 
 const isAdmin = computed(() => has(Permissions.RemsEngagementsManage));
+// Filing a brand-new client is a right of its own; without it the client block is search-only.
+const canAddNewClient = computed(() => has(Permissions.RemsClientsCreate));
 
 // THE admin on this request, not just an admin.
 const assignedAdminId = computed(() => request.value?.assignedAdmin?.id || null);
@@ -1186,11 +1195,11 @@ const clientRows = computed(() => [
   { label: "Client", value: clientForm.clientName, suffix: clientForm.clientNameSuffix || "" },
   // Only where there is one: a client typed into the portal has no Maconomy number to show.
   ...(clientForm.maconomyCustomerNumber
-    ? [{ label: "Maconomy Customer", value: clientForm.maconomyCustomerNumber }]
+    ? [{ label: "Maconomy Client", value: clientForm.maconomyCustomerNumber }]
     : []),
   { label: "Entity Type", value: labelOf(entityTypeOptions.value, setupForm.entityType) },
   { label: "Client Email Address", value: clientForm.customerEmail },
-  { label: "Client Phone Number", value: clientForm.customerMobileNumber },
+  { label: "Client Phone Number", value: formatPhone(clientForm.customerMobileNumber) },
   { label: "Relationship to THF", value: labelOf(typeOptions.value, clientForm.type) },
   { label: "Industry", value: labelOf(industryOptions.value, setupForm.industry) },
   // Whose client this is. Read here rather than under the engagement setup, which is where it is asked.
@@ -1345,7 +1354,7 @@ const reservedCommissionRecipients = computed(() => {
     [setupForm.cseUserId, "CSE"],
     [live?.departmentDirector?.id, "Department Director"],
     [mappedDirector, "Department Director"],
-    ...(policy?.shareholders || []).map((s) => [s.id, "Shareholder"])
+    ...(policy?.managingShareholders || []).map((s) => [s.id, "Managing Shareholder"])
   ];
   const reserved = [];
   for (const [id, seat] of seats) {
@@ -1368,6 +1377,7 @@ const seedForms = (detail, ws) => {
   clientForm.clientMiddleName = detail.clientMiddleName || "";
   clientForm.customerEmail = detail.customerEmail || "";
   clientForm.customerMobileNumber = detail.customerMobileNumber || "";
+  clientForm.customerMobileCountryCode = detail.customerMobileCountryCode || null;
   clientForm.type = detail.type || "";
   clientForm.existingClientReferenceId = detail.existingClientReferenceId || null;
   clientForm.maconomyCustomerNumber = detail.maconomyCustomerNumber || null;
@@ -1407,7 +1417,12 @@ const clientChosen = () => {
 // The client half, which is what the API requires to accept a request at all. Top to bottom, as the section
 // reads: who the client is, what kind of entity they are, then what they are called.
 const clientProblem = () => {
-  if (!clientChosen()) return "Search for the client, or add a new one.";
+  if (!clientChosen()) {
+    return canAddNewClient.value
+      ? "Search for the client, or add a new one."
+      : "Search for the client and pick them from the results.";
+  }
+  if (!phonesValid.value) return "The client phone number is incomplete or not valid for its country.";
   if (!setupForm.entityType) return "Choose an entity type — it decides what the client is asked.";
   // A Maconomy customer's name and email are Maconomy's to hold: nothing here is asked for or checked.
   // One with no email can still be filed as a draft; sending is what waits for the address.
@@ -1469,6 +1484,7 @@ const typedClientPayload = () => ({
   ...(SHOW_MIDDLE_NAME ? { clientMiddleName: (clientForm.clientMiddleName || "").trim() } : {}),
   customerEmail: clientForm.customerEmail || null,
   customerMobileNumber: clientForm.customerMobileNumber || null,
+  customerMobileCountryCode: clientForm.customerMobileCountryCode || null,
   existingClientReferenceId: clientForm.existingClientReferenceId || null
 });
 
@@ -1577,7 +1593,8 @@ const saveChip = computed(() => ({
   saved: { tone: "ok", icon: "o_cloud_done", text: "All changes saved" },
   pending: { tone: "busy", icon: "o_edit", text: "Unsaved changes" },
   blocked: { tone: "warn", icon: "o_pending", text: "Not saved yet" },
-  error: { tone: "bad", icon: "o_cloud_off", text: "Not saved" }
+  // A save the API refused is something to put right (warn); one that failed is an error (bad).
+  error: { tone: isRefusalMessage(saveMessage.value) ? "warn" : "bad", icon: "o_cloud_off", text: "Not saved" }
 }[saveState.value] || { tone: "idle", icon: "o_cloud_sync", text: "Saves as you type" }));
 
 // Said out loud as well as in the chip: a refused save nobody noticed is how a request went to the client
@@ -1660,7 +1677,9 @@ const maconomySyncNote = computed(() => {
     case "synced":
       return `Created in Maconomy${when}.`;
     case "linked":
-      return `A Maconomy customer with this client's email already existed; linked to it${when}.`;
+      return s.syncedOnUtc
+        ? `A Maconomy client with this client's email already existed; linked to it${when}.`
+        : "This client is already a Maconomy client.";
     case "failed":
       return s.failureReason || "The last attempt failed.";
     case "pending":
@@ -1691,10 +1710,10 @@ const maconomyJobSyncNote = computed(() => {
       return "Posting the job to Maconomy now.";
     default:
       if (!s.syncEnabled) {
-        return "No Maconomy job: the job sync is switched off. Start it under Tenant Settings → Maconomy → Job.";
+        return "No Maconomy engagement: the job sync is switched off. Start it under Tenant Settings → Maconomy → Job.";
       }
       return s.blockedReason ||
-        "No Maconomy job yet. Sync job now is on the Approvals list, COP Review and the Maconomy settings page's Job tab.";
+        "No Maconomy engagement yet. Sync job now is on the Approvals list, COP Review and the Maconomy settings page's Job tab.";
   }
 });
 

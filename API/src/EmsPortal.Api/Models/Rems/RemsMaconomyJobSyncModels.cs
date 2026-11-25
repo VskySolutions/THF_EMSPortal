@@ -210,7 +210,7 @@ public static class RemsMaconomyJobSyncViews
 
     public static string MessageFor(RemsMaconomyJobSyncView view) => view.Status switch
     {
-        RemsMaconomySyncStatuses.Synced => $"Maconomy job {view.JobNumber} is in place.",
+        RemsMaconomySyncStatuses.Synced => $"Maconomy engagement {view.JobNumber} is in place.",
         RemsMaconomySyncStatuses.Failed => $"The job sync failed: {view.FailureReason}",
         _ => "Sync recorded.",
     };

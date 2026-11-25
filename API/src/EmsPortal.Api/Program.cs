@@ -29,12 +29,13 @@ var dotEnvPath = DotEnv.Load(Directory.GetCurrentDirectory(), AppContext.BaseDir
 var builder = WebApplication.CreateBuilder(args);
 
 // Structured logging to SQL Server, enriched with correlation ID, service, environment.
-builder.Host.UseSerilog((context, _, loggerConfiguration) =>
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
     SerilogConfigurator.Configure(
         loggerConfiguration,
         context.Configuration,
         "EmsPortal.Api",
-        context.HostingEnvironment.EnvironmentName));
+        context.HostingEnvironment.EnvironmentName,
+        new TenantLogEnricher(services.GetRequiredService<IHttpContextAccessor>())));
 
 // API host services.
 builder.Services.AddControllers(options =>

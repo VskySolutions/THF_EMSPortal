@@ -16,10 +16,10 @@ export const maconomySyncLabel = (status) => (status ? (MACONOMY_SYNC_LOOKS[stat
 
 // The same for the ENGAGEMENT posted to Maconomy as a job. No linked: a job is never linked to an existing one.
 export const MACONOMY_JOB_SYNC_LOOKS = Object.freeze({
-  notSynced: { label: "No Maconomy job", color: "grey-5", textColor: "white", icon: "o_work_off" },
-  pending: { label: "Maconomy job: queued", color: "blue-6", textColor: "white", icon: "o_schedule" },
+  notSynced: { label: "No Maconomy engagement", color: "grey-5", textColor: "white", icon: "o_work_off" },
+  pending: { label: "Maconomy engagement: queued", color: "blue-6", textColor: "white", icon: "o_schedule" },
   syncing: { label: "Posting job to Maconomy", color: "blue-6", textColor: "white", icon: "o_sync" },
-  synced: { label: "Maconomy job", color: "positive", textColor: "white", icon: "o_work" },
+  synced: { label: "Maconomy engagement", color: "positive", textColor: "white", icon: "o_work" },
   failed: { label: "Job sync failed", color: "negative", textColor: "white", icon: "o_work_off" }
 });
 

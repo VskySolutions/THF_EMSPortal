@@ -132,7 +132,7 @@
                   <div v-for="c in entityContacts" :key="c.id" class="rems-value">
                     <span class="text-weight-medium">{{ roleText(c.role) }}:</span>
                     <app-name-with-suffix :name="nameWithoutSuffix(c)" :suffix="c.suffix" />
-                    <span class="text-grey-6">(<app-email :email="c.email || ''" empty="no email" /> · {{ c.phone || "no phone" }})</span>
+                    <span class="text-grey-6">(<app-email :email="c.email || ''" empty="no email" /> · {{ formatPhone(c.phone) || "no phone" }})</span>
                   </div>
                 </div>
                 <div v-else class="rems-value text-grey-6">No contacts.</div>
@@ -384,7 +384,7 @@
                   <q-item>
                     <q-item-section><q-item-label class="text-weight-medium">Total allocated</q-item-label></q-item-section>
                     <q-item-section side>
-                      <q-badge :color="commissionTotal > 100 ? 'negative' : 'grey-7'">{{ commissionTotal }}%</q-badge>
+                      <q-badge :color="commissionTotal > 100 ? 'warning' : 'grey-7'">{{ commissionTotal }}%</q-badge>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -416,7 +416,7 @@
                   </q-banner>
                 </div>
 
-                <!-- Server order: by role — shareholder, director, CSE, commission recipient, then anyone
+                <!-- Server order: by role — managing shareholder, director, CSE, commission recipient, then anyone
                      added by hand — so the list reads the same way every time. -->
                 <div class="rems-subhead">Approvers</div>
                 <q-list bordered separator class="rounded-borders">
@@ -562,6 +562,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import AppEmail from "components/common/AppEmail.vue";
 // The REMS approval-task review screen (WO-117 Part B, AC-REMS-019/020).
 import { ref, computed, onMounted } from "vue";
@@ -701,7 +702,7 @@ const requestRows = computed(() => {
     { label: "Type", value: typeLabel(r.type), hint: typeHint(r.type) },
     { label: "Request Status", type: "status" },
     { label: "Customer Email", value: text(r.customerEmail) },
-    { label: "Customer Phone Number", value: text(r.customerMobileNumber) },
+    { label: "Customer Phone Number", value: text(formatPhone(r.customerMobileNumber)) },
     { label: "Entity Type", value: r.entityType ? entityTypeLabel(r.entityType) : "—" },
     // Read off the option, so the wording and the explanation are the tenant's own — the same two rows
     // the request lists render as badges.
@@ -726,7 +727,7 @@ const clientRows = computed(() => {
   const rows = [
     { label: "Name", value: text(c.name) },
     { label: "Email", value: text(c.email) },
-    { label: "Phone Number", value: text(c.mobileNumber) },
+    { label: "Phone Number", value: text(formatPhone(c.mobileNumber)) },
     // The packet carries the option-set CODE (RemsApprovalClientView reads ReferralSource.Value).
     { label: "Referral Source", value: c.referralSource ? referralSourceLabel(c.referralSource) : "—" }
   ];
@@ -870,7 +871,7 @@ const billingAddresses = computed(() =>
 // Who the invoice is addressed to, under the address it belongs to.
 const addressee = (address) => {
   const parts = addresseeParts(address);
-  const reach = [address?.email, address?.phoneNumber].map((v) => String(v ?? "").trim()).filter(Boolean);
+  const reach = [address?.email, formatPhone(address?.phoneNumber)].map((v) => String(v ?? "").trim()).filter(Boolean);
   if (!parts.name && !reach.length) return null;
   return { ...parts, reach: reach.join(" · ") };
 };

@@ -110,8 +110,8 @@ public sealed class RemsApprovalController : ControllerBase
     // -------------------- Suggested approvers (live) --------------------
 
     /// <summary>
-    /// The engagement's approver list (AC-REMS-018): the automatic approvers — the firm's
-    /// shareholders, the Department Director.
+    /// The engagement's approver list (AC-REMS-018): the automatic approvers — the Managing
+    /// Shareholder, the Department Director.
     /// </summary>
     [HttpGet("engagements/{id:guid}/approvers")]
     [RequirePermission(Permissions.RemsEngagementsManage)]
@@ -136,12 +136,12 @@ public sealed class RemsApprovalController : ControllerBase
     public async Task<IActionResult> ApprovalPolicy(CancellationToken cancellationToken)
     {
         var policy = await _policy.ForTenantAsync(User.GetActiveTenantId(), cancellationToken);
-        var ids = policy.TaxExceptionCses.Concat(policy.Shareholders).Select(u => u.Id).ToList();
+        var ids = policy.TaxExceptionCses.Concat(policy.ManagingShareholders).Select(u => u.Id).ToList();
         var names = await _users.GetFullNamesAsync(ids, cancellationToken);
 
         var view = new RemsApprovalPolicyView(
             policy.StaticRouting,
-            policy.Shareholders.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList(),
+            policy.ManagingShareholders.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList(),
             policy.TaxExceptionCses.Select(u => RemsWorkspaceMapper.UserRef(u.Id, names)!).ToList());
         return Ok(ApiResponseFactory.Success(view, "REMS approval policy retrieved."));
     }
@@ -207,7 +207,7 @@ public sealed class RemsApprovalController : ControllerBase
             if (policy.StaticRouting && requested.Intersect(RemsStaticApprovalRoute.ReservedUserIds(rems, policy)).Any())
             {
                 return ConflictResult(CodeApproverReserved,
-                    "The CSE, the Department Director and the Shareholders already approve and cannot be added again.");
+                    "The CSE, the Department Director and the Managing Shareholder already approve and cannot be added again.");
             }
         }
 
@@ -393,7 +393,7 @@ public sealed class RemsApprovalController : ControllerBase
                 EffectiveThreshold(threshold, r.Tasks.Count),
                 r.DeclineCount,
                 r.Tasks
-                    // The firm's own order — shareholder, director, CSE, commission recipient, then
+                    // The firm's own order — managing shareholder, director, CSE, commission recipient, then
                     // anyone added by hand — and NOT the enum's declaration order.
                     .OrderBy(t => DisplayRank(t.ApproverRole))
                     .ThenBy(t => t.CreatedOnUtc)
@@ -450,6 +450,7 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // The Approver column's dropdown on the tenant-wide inbox.
         [FromQuery] Guid? approverUserId = null,
         [FromQuery] DateTime? sentFrom = null,
@@ -481,7 +482,7 @@ public sealed class RemsApprovalController : ControllerBase
                 me, search, roleFilter, statusFilter, new SortRequest(sortBy, descending), page, limit,
                 roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
                 createdFrom, createdTo, updatedFrom, updatedTo,
-                TenantId: tenantScope, ApproverUserId: approverUserId),
+                TenantId: tenantScope, ApproverUserId: approverUserId, RemsNumber: remsNumber),
             cancellationToken);
 
         // The audit actors, each request's CSE and each row's approvers, resolved in one read: a name
@@ -551,6 +552,29 @@ public sealed class RemsApprovalController : ControllerBase
     /// whole of their active tenant. Anyone else reads their own tasks only, and gets null.
     /// </summary>
     private Guid? InboxTenantScope() => RemsSetupAccess.IsElevated(User) ? User.GetActiveTenantId() : null;
+
+    /// <summary>
+    /// The numbers beside the COP menu items: what is waiting on the caller in each list. Zero where
+    /// nothing is; COP Review is counted only for those who can open it.
+    /// </summary>
+    [HttpGet("menu-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<RemsMenuCounts>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MenuCounts(CancellationToken cancellationToken)
+    {
+        if (User.GetUserId() is not { } me)
+        {
+            return Unauthorized(ApiResponseFactory.Unauthorized("No user context."));
+        }
+
+        var counts = new RemsMenuCounts(
+            await _requests.CountNeedingInitiatorAsync(me, cancellationToken),
+            User.HasPermission(Permissions.RemsEngagementsManage)
+                ? await _requests.CountNeedingAdminAsync(me, cancellationToken)
+                : 0,
+            await _tasks.CountAwaitingDecisionAsync(me, InboxTenantScope(), cancellationToken));
+        return Ok(ApiResponseFactory.Success(counts, "Menu counts retrieved."));
+    }
 
     /// <summary>
     /// The CSEs across the caller's inbox, for its CSE filter. Read off the inbox rather than the tenant's
@@ -626,6 +650,7 @@ public sealed class RemsApprovalController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         [FromQuery] Guid? approverUserId = null,
         [FromQuery] DateTime? sentFrom = null,
         [FromQuery] DateTime? sentTo = null,
@@ -650,7 +675,7 @@ public sealed class RemsApprovalController : ControllerBase
                 me, search, roleFilter, statusFilter, SortRequest.Default, Page: 1, Limit: 1,
                 roundStatus, cseUserId, clientPersonIds, sentFrom, sentTo, decidedFrom, decidedTo,
                 createdFrom, createdTo, updatedFrom, updatedTo,
-                TenantId: InboxTenantScope(), ApproverUserId: approverUserId),
+                TenantId: InboxTenantScope(), ApproverUserId: approverUserId, RemsNumber: remsNumber),
             cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "Approval inbox quick-filter counts retrieved."));
     }
@@ -943,7 +968,7 @@ public sealed class RemsApprovalController : ControllerBase
             recipients.Add(admin);
         }
 
-        // And everyone the round was routed to — the shareholders, the department director, the CSE and the
+        // And everyone the round was routed to — the managing shareholder, the department director, the CSE and the
         // commission recipients, plus anyone added by hand.
         foreach (var approverId in round.Tasks.Select(t => t.ApproverId))
         {
@@ -1035,8 +1060,8 @@ public sealed class RemsApprovalController : ControllerBase
 
     // -------------------- Approver-list generation --------------------
 
-    /// <summary>The firm's shareholders: everyone holding the <c>Shareholder</c> role in the caller's tenant.</summary>
-    private async Task<IReadOnlyList<Guid>> ShareholderIdsAsync(CancellationToken cancellationToken)
+    /// <summary>Everyone holding the <c>Managing Shareholder</c> role in the caller's tenant.</summary>
+    private async Task<IReadOnlyList<Guid>> ManagingShareholderIdsAsync(CancellationToken cancellationToken)
     {
         if (User.GetActiveTenantId() is not { } tenantId)
         {
@@ -1044,7 +1069,7 @@ public sealed class RemsApprovalController : ControllerBase
         }
 
         var holders = await _users.ListByTenantRolesAsync(
-            tenantId, new[] { Roles.Shareholder }, cancellationToken);
+            tenantId, new[] { Roles.ManagingShareholder }, cancellationToken);
         return holders.Select(u => u.Id).Distinct().ToList();
     }
 
@@ -1064,13 +1089,13 @@ public sealed class RemsApprovalController : ControllerBase
             return fixedRoute with { Approvers = fixedRoute.Approvers.OrderBy(a => DisplayRank(a.Role)).ToList() };
         }
 
-        var shareholders = await ShareholderIdsAsync(cancellationToken);
+        var managingShareholders = await ManagingShareholderIdsAsync(cancellationToken);
 
         // Added approvers come ON TOP of the automatic ones — picking somebody never removes an approver
         // who holds their place by standing on the engagement.
-        var approvers = AutomaticApproverIds(request, shareholders).Concat(picked)
+        var approvers = AutomaticApproverIds(request, managingShareholders).Concat(picked)
             .Distinct()
-            .Select(userId => (UserId: userId, Role: RoleFor(request, shareholders, userId)))
+            .Select(userId => (UserId: userId, Role: RoleFor(request, managingShareholders, userId)))
             .OrderBy(a => DisplayRank(a.Role))
             .ToList();
 
@@ -1080,7 +1105,7 @@ public sealed class RemsApprovalController : ControllerBase
     /// <summary>Where each role sits in the approver list, most senior first.</summary>
     private static int DisplayRank(RemsApproverRole role) => role switch
     {
-        RemsApproverRole.Shareholder => 0,
+        RemsApproverRole.ManagingShareholder => 0,
         RemsApproverRole.DepartmentDirector => 1,
         RemsApproverRole.CSE => 2,
         RemsApproverRole.CommissionRecipient => 3,
@@ -1111,12 +1136,12 @@ public sealed class RemsApprovalController : ControllerBase
     }
 
     /// <summary>
-    /// The approvers every engagement routes to whatever is picked on the Approval tab: the firm's
-    /// shareholders, the Department Director and CSE from the request's own setup.
+    /// The approvers every engagement routes to whatever is picked on the Approval tab: the Managing
+    /// Shareholder, the Department Director and CSE from the request's own setup.
     /// </summary>
-    private static List<Guid> AutomaticApproverIds(RemsRequest request, IReadOnlyList<Guid> shareholderIds)
+    private static List<Guid> AutomaticApproverIds(RemsRequest request, IReadOnlyList<Guid> managingShareholderIds)
     {
-        var ids = new List<Guid>(shareholderIds);
+        var ids = new List<Guid>(managingShareholderIds);
         if (request.DepartmentDirectorId is { } director)
         {
             ids.Add(director);
@@ -1131,7 +1156,7 @@ public sealed class RemsApprovalController : ControllerBase
 
     /// <summary>The role a user acts under on this engagement, most specific first.</summary>
     private static RemsApproverRole RoleFor(
-        RemsRequest request, IReadOnlyList<Guid> shareholderIds, Guid userId)
+        RemsRequest request, IReadOnlyList<Guid> managingShareholderIds, Guid userId)
     {
         if (request.CSEId == userId)
         {
@@ -1145,9 +1170,9 @@ public sealed class RemsApprovalController : ControllerBase
         {
             return RemsApproverRole.CommissionRecipient;
         }
-        if (shareholderIds.Contains(userId))
+        if (managingShareholderIds.Contains(userId))
         {
-            return RemsApproverRole.Shareholder;
+            return RemsApproverRole.ManagingShareholder;
         }
         return RemsApproverRole.Approver;
     }
@@ -1162,7 +1187,7 @@ public sealed class RemsApprovalController : ControllerBase
                 new RemsUserRef(a.UserId, names.TryGetValue(a.UserId, out var n) ? n : string.Empty), a.Role.ToString()))
             .ToList();
 
-        // Only the approvers somebody ADDED. The automatic ones — shareholders, director, CSE, commission
+        // Only the approvers somebody ADDED. The automatic ones — the managing shareholder, director, CSE, commission
         // recipients — are left out: the picker must not show back somebody who is on the list anyway.
         var selected = (await _requests.ListApproversAsync(request.Id, cancellationToken))
             .Select(a => a.UserId)
@@ -1401,7 +1426,7 @@ public sealed class RemsApprovalController : ControllerBase
 
         var engagementView = await BuildApprovalEngagementViewAsync(task, request, client, names, cancellationToken);
 
-        // By ROLE — shareholder, director, CSE, commission recipient, then anyone added by hand — which is
+        // By ROLE — managing shareholder, director, CSE, commission recipient, then anyone added by hand — which is
         // the order the Approval tab lists and the order the history reads in.
         var decisions = round.Tasks
             .OrderBy(t => DisplayRank(t.ApproverRole))

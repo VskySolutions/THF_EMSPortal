@@ -150,6 +150,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("PhoneCountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)");
+
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
@@ -498,6 +502,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<string>("PrimaryPhone")
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("PrimaryPhoneCountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)");
 
                     b.Property<string>("ReferralSourceDetail")
                         .HasMaxLength(500)
@@ -4159,6 +4167,9 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<int>("FailedCount")
                         .HasColumnType("int");
 
+                    b.Property<int>("UpdatedCount")
+                        .HasColumnType("int");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(260)
@@ -4188,6 +4199,10 @@ namespace EmsPortal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AccountStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uniqueidentifier");

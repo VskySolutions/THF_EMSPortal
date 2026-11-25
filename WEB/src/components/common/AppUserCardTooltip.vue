@@ -17,6 +17,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import { ref, computed, watch } from "vue";
 import { loadUserCard } from "composables/useUserCard";
 
@@ -49,7 +50,7 @@ watch(() => props.userId, () => {
 
 const rows = computed(() => [
   { label: "Email", value: card.value.email || "—" },
-  { label: "Phone", value: card.value.phone || "—" },
+  { label: "Phone", value: formatPhone(card.value.phone) || "—" },
   { label: "Department", value: card.value.department || "—" },
   { label: "Roles", value: (card.value.roles || []).join(", ") || "—" },
   { label: "Maconomy No.", value: card.value.maconomyNumber || "—" }

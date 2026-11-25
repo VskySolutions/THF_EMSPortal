@@ -80,6 +80,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 // The nested cell on Related Entities: a client and the clients they brought with them.
 import { computed } from "vue";
 import AppNameWithSuffix from "components/common/AppNameWithSuffix.vue";
@@ -114,7 +115,7 @@ const relationLabel = (relation) => {
   return relationTypeLabel(relation);
 };
 
-const contactHint = (row) => [row.email, row.phoneNumber].filter(Boolean).join(" · ");
+const contactHint = (row) => [row.email, formatPhone(row.phoneNumber)].filter(Boolean).join(" · ");
 </script>
 
 <style scoped>

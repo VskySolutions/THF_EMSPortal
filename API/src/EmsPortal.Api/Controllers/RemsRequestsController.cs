@@ -1,6 +1,7 @@
 using EmsPortal.Api.Filters;
 using EmsPortal.Api.Models;
 using EmsPortal.Api.Models.Rems;
+using EmsPortal.Api.Rems;
 using EmsPortal.Api.Security;
 using EmsPortal.Api.Validators.Rems;
 using EmsPortal.Application.Abstractions.Integrations.Maconomy;
@@ -42,6 +43,7 @@ public sealed class RemsRequestsController : ControllerBase
     private const string CodeNotDeletable = "REMS_REQUEST_NOT_DELETABLE";
     private const string CodeDuplicateEmail = "REMS_DUPLICATE_CLIENT_EMAIL";
     private const string CodeClientLocked = "REMS_CLIENT_LOCKED";
+    private const string CodeNewClientNotAllowed = "REMS_NEW_CLIENT_NOT_ALLOWED";
     private const string CodeMaconomyCustomerNotFound = "REMS_MACONOMY_CUSTOMER_NOT_FOUND";
     private const string CodeNotSubmittable = "REMS_NOT_SUBMITTABLE";
     private const string CodeIntakeNotOnFile = "REMS_INTAKE_NOT_ON_FILE";
@@ -125,6 +127,7 @@ public sealed class RemsRequestsController : ControllerBase
         [FromQuery] DateTime? updatedTo = null,
         // The Client column's dropdown — any of the chosen clients (client ids).
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // A REMS.ClientSubmissionState code: the Client Submission column's values.
         [FromQuery] string? clientSubmissionState = null,
         [FromQuery] string? scope = null,
@@ -146,7 +149,8 @@ public sealed class RemsRequestsController : ControllerBase
             me, privileged, clientName, contact, status, type, assignedAdminUserId,
             createdFrom, createdTo, ParseScope(scope), ParsePoolFilter(poolScope),
             ParseOwnership(ownership), new SortRequest(sortBy, descending), page, limit,
-            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo);
+            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo,
+            RemsNumber: remsNumber);
         var (items, total) = await _rems.ListRequestsAsync(options, cancellationToken);
 
         var names = await _users.GetFullNamesAsync(
@@ -191,6 +195,22 @@ public sealed class RemsRequestsController : ControllerBase
         return Ok(ApiResponseFactory.Success(clients, "REMS request clients retrieved."));
     }
 
+    /// <summary>
+    /// The counts shown on a list's Conversation and Email log row actions, for the requests on the page.
+    /// A POST because a page of ids is too long for a query string. Email counts need the email-log permission.
+    /// </summary>
+    [HttpPost("activity-counts")]
+    [Authorize]
+    [ProducesResponseType<ApiResponse<IEnumerable<RemsRowActivityCount>>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ActivityCounts([FromBody] RemsRowActivityCountsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = (request?.Ids ?? Array.Empty<Guid>()).Distinct().Take(1000).ToList();
+        var counts = await _rems.CountRowActivityAsync(
+            ids, User.HasPermission(Permissions.RemsEmailLogRead), cancellationToken);
+        var rows = counts.Select(c => new RemsRowActivityCount(c.Key, c.Value.Conversation, c.Value.Emails));
+        return Ok(ApiResponseFactory.Success(rows, "Row activity counts retrieved."));
+    }
+
     /// <summary>The quick-filter counts for the list above, under the same visibility, scope and filters.</summary>
     [HttpGet("quick-counts")]
     [Authorize]
@@ -210,6 +230,7 @@ public sealed class RemsRequestsController : ControllerBase
         [FromQuery] DateTime? updatedTo = null,
         // The Client column's dropdown — any of the chosen clients (client ids).
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // A REMS.ClientSubmissionState code: the Client Submission column's values.
         [FromQuery] string? clientSubmissionState = null,
         [FromQuery] string? scope = null,
@@ -226,7 +247,8 @@ public sealed class RemsRequestsController : ControllerBase
             me, IsPrivileged(), clientName, contact, status, type, assignedAdminUserId,
             createdFrom, createdTo, ParseScope(scope), ParsePoolFilter(poolScope),
             ParseOwnership(ownership), SortRequest.Default, Page: 1, Limit: 1,
-            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo);
+            cseUserId, emsFormState, entityType, clientPersonIds, clientSubmissionState, updatedFrom, updatedTo,
+            RemsNumber: remsNumber);
         var counts = await _rems.CountQuickFiltersAsync(options, cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "REMS request quick-filter counts retrieved."));
     }
@@ -328,6 +350,12 @@ public sealed class RemsRequestsController : ControllerBase
             }
         }
 
+        // Neither a Maconomy customer nor a client on file: this save would file somebody new.
+        if (maconomyClient is null && request.ExistingClientReferenceId is null && !MayFileNewClient())
+        {
+            return NewClientRefused();
+        }
+
         // Whose request this is.
         var seat = await RemsActingAs.ResolveAsync(this, _delegations, me, cancellationToken);
         if (seat is { CanPrepare: false })
@@ -354,7 +382,8 @@ public sealed class RemsRequestsController : ControllerBase
         var details = new ClientDetails(
             request.ClientName, request.ClientNameSuffix,
             request.CustomerEmail, request.CustomerMobileNumber,
-            request.ClientFirstName, request.ClientLastName, request.ClientCorporateName, request.ClientMiddleName);
+            request.ClientFirstName, request.ClientLastName, request.ClientCorporateName, request.ClientMiddleName,
+            PhoneCountry.Clean(request.CustomerMobileCountryCode));
 
         // Allocate the REMS number and stage the row + client + activity + attachment atomically. The client
         // is staged first: the request's FK points at them.
@@ -432,6 +461,7 @@ public sealed class RemsRequestsController : ControllerBase
             request.ClientName = request.ClientFirstName = request.ClientLastName = null;
             request.ClientCorporateName = request.ClientNameSuffix = request.ClientMiddleName = null;
             request.CustomerEmail = request.CustomerMobileNumber = null;
+            request.CustomerMobileCountryCode = null;
             // A Maconomy customer is somebody THF already has, whatever the request said before.
             if ((request.Type ?? rems.Type!.Value) == RemsRequestTypes.BrandNewClient)
             {
@@ -479,7 +509,8 @@ public sealed class RemsRequestsController : ControllerBase
             request.ClientFirstName ?? current?.Person?.FirstName,
             request.ClientLastName ?? current?.Person?.LastName,
             request.ClientCorporateName ?? current?.LegalName,
-            request.ClientMiddleName);
+            request.ClientMiddleName,
+            request.CustomerMobileCountryCode is null ? current?.PrimaryPhoneCountryCode : PhoneCountry.Clean(request.CustomerMobileCountryCode));
 
         // The client this request itself filed, who is not a match for their own name. A client the request
         // was linked to is somebody else's record — including one it is now leaving, who stays as they are.
@@ -512,6 +543,12 @@ public sealed class RemsRequestsController : ControllerBase
                 referenceId, details.Email, keepsOwnClient ? ownClient!.Id : null, cancellationToken) is { } emailClash)
         {
             return emailClash;
+        }
+
+        // As on create: a save that leaves the request with nobody on file to name would file somebody new.
+        if (!sameMaconomyClient && maconomyClient is null && referenceId is null && !keepsOwnClient && !MayFileNewClient())
+        {
+            return NewClientRefused();
         }
 
         // Description is no longer held on the request; the field is accepted and ignored.
@@ -911,10 +948,10 @@ public sealed class RemsRequestsController : ControllerBase
             return NotFound(ApiResponseFactory.NotFound("REMS request not found."));
         }
 
-        if (!CanAct(rems, me, IsPrivileged()))
+        if (!MayDelete(rems, me))
         {
             return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponseFactory.Forbidden("Not permitted to delete this request."));
+                ApiResponseFactory.Forbidden("Only the person who raised this draft, or a Tenant Admin, can delete it."));
         }
 
         // Hiding the action in the UI is not enough — the same window applies to a direct call.
@@ -923,16 +960,22 @@ public sealed class RemsRequestsController : ControllerBase
             return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
                 CodeNotDeletable,
                 "This request can no longer be deleted.",
-                "A request can only be deleted while it is a draft, or submitted and not yet assigned to an admin."));
+                "A request can only be deleted while it is a draft."));
         }
 
+        // A copy waits on its source's intake form, so one left pointing at a deleted draft could never be sent.
+        await _rems.DetachCopiesAsync(rems.Id, cancellationToken);
+
         // The DbContext converts the delete into a soft-delete (Deleted flag). The status does not change,
-        // so no history is written; the client the draft filed stays on file.
+        // so no history is written. A client this draft was the only request of goes with it.
         _rems.Remove(rems);
+        var clientDeleted = await _clients.RemoveIfOnlyRequestAsync(rems.ClientId, rems.Id, cancellationToken);
         await _activity.WriteAsync(new CreateActivityEventDto(EntityType.Rems, rems.Id, ActivityEventTypes.RemsDeleted), cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Ok(ApiResponseFactory.Success(new { id }, "REMS request deleted."));
+        return Ok(ApiResponseFactory.Success(
+            new { id, clientDeleted },
+            clientDeleted ? "REMS request deleted, and its client with it: this was their only request." : "REMS request deleted."));
     }
 
     // -------------------- Copy --------------------
@@ -1233,7 +1276,7 @@ public sealed class RemsRequestsController : ControllerBase
             }
             return Ok(ApiResponseFactory.Success(
                 new RemsMaconomyLookup(RemsMaconomyLookupStatuses.Ok, null, found.More, items),
-                "Maconomy customers retrieved."));
+                "Maconomy clients retrieved."));
         }
         catch (MaconomyException ex)
         {
@@ -1260,7 +1303,7 @@ public sealed class RemsRequestsController : ControllerBase
     {
         if (User.GetActiveTenantId() is not { } tenantId || Normalize(number) is not { } customerNumber)
         {
-            return NotFound(ApiResponseFactory.NotFound("Maconomy customer not found."));
+            return NotFound(ApiResponseFactory.NotFound("Maconomy client not found."));
         }
 
         MaconomyClientDetails? customer;
@@ -1279,7 +1322,7 @@ public sealed class RemsRequestsController : ControllerBase
 
         var client = await _clients.FindByMaconomyNumberAsync(customer.Number, cancellationToken);
         return Ok(ApiResponseFactory.Success(
-            ToLookupItem(customer, client?.Id, client?.EntityType?.Value), "Maconomy customer retrieved."));
+            ToLookupItem(customer, client?.Id, client?.EntityType?.Value), "Maconomy client retrieved."));
     }
 
     /// <summary>The tenant's Admin and Super Admin users.</summary>
@@ -1339,8 +1382,8 @@ public sealed class RemsRequestsController : ControllerBase
             : StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponseFactory.Forbidden("Only an admin who reviews REMS requests can pick one up."));
 
-    /// <summary>An Admin-role or Super Admin caller (sees the whole tenant; everyone else is record-scoped).</summary>
-    private bool IsPrivileged() => RemsSetupAccess.IsRemsAdmin(User);
+    /// <summary>An Admin-role, Tenant Admin or Super Admin caller (sees the whole tenant; everyone else is record-scoped).</summary>
+    private bool IsPrivileged() => RemsSetupAccess.IsRemsAdmin(User) || RemsSetupAccess.IsElevated(User);
 
     /// <summary>
     /// Record-level VISIBILITY: privileged callers see the tenant, drafts included; everyone else sees
@@ -1364,9 +1407,13 @@ public sealed class RemsRequestsController : ControllerBase
     /// </summary>
     private static bool IsMine(RemsRequest r, Guid me) => r.CreatedById == me || r.OnBehalfOfUserId == me;
 
-    /// <summary>Record-level ACT (edit/delete): the creator or a privileged caller.</summary>
+    /// <summary>Record-level ACT (edit): the creator or a privileged caller.</summary>
     private static bool CanAct(RemsRequest r, Guid me, bool privileged)
         => privileged || IsMine(r, me);
+
+    /// <summary>Whose draft it is to delete: its owner's, or any draft for a Tenant Admin or Super Admin. Not a REMS Admin's.</summary>
+    private bool MayDelete(RemsRequest r, Guid me)
+        => IsMine(r, me) || RemsSetupAccess.IsElevated(User);
 
     private static bool IsDraft(RemsRequest r) => r.Status is null || r.Status.Value == RemsRequestStatuses.Draft;
 
@@ -1446,7 +1493,8 @@ public sealed class RemsRequestsController : ControllerBase
             client.IsOrganisation,
             EntityTypeOf(client),
             null,
-            client.Industry?.Value);
+            client.Industry?.Value,
+            client.PrimaryPhoneCountryCode);
     }
 
     /// <summary>
@@ -1548,6 +1596,16 @@ public sealed class RemsRequestsController : ControllerBase
             "The client can no longer be changed.",
             "This request's intake form has been sent, so the client it names is fixed."));
 
+    /// <summary>Whether the caller may file a brand-new client; without the right a request names one already on file.</summary>
+    private bool MayFileNewClient() => User.HasPermission(Permissions.RemsClientsCreate);
+
+    private IActionResult NewClientRefused()
+        => StatusCode(StatusCodes.Status403Forbidden, ApiResponseFactory.Error(
+            CodeNewClientNotAllowed,
+            "Pick an existing client.",
+            "Your role can raise a request for a client already on file or in Maconomy, not for a new one. "
+                + "Search for the client in the Client box and pick them from the results."));
+
     /// <summary>
     /// Puts the request's client on the client master and returns who they are: the Maconomy customer it
     /// names, the client on file it is linked to, its own client rewritten in place, or a new one.
@@ -1596,6 +1654,7 @@ public sealed class RemsRequestsController : ControllerBase
             if (shape.Phone is not null && string.IsNullOrWhiteSpace(matched.PrimaryPhone))
             {
                 matched.PrimaryPhone = shape.Phone;
+                matched.PrimaryPhoneCountryCode = shape.PhoneCountry;
                 filled = true;
             }
             if (filled)
@@ -1639,6 +1698,7 @@ public sealed class RemsRequestsController : ControllerBase
             Status = ClientStatus.Prospect,
             PrimaryEmail = shape.Email,
             PrimaryPhone = shape.Phone,
+            PrimaryPhoneCountryCode = shape.PhoneCountry,
         };
         if (shape.IsOrganisation)
         {
@@ -1664,6 +1724,7 @@ public sealed class RemsRequestsController : ControllerBase
     {
         client.PrimaryEmail = shape.Email;
         client.PrimaryPhone = shape.Phone;
+        client.PrimaryPhoneCountryCode = shape.PhoneCountry;
         if (shape.IsOrganisation)
         {
             client.LegalName = shape.Corporate;
@@ -1734,7 +1795,8 @@ public sealed class RemsRequestsController : ControllerBase
         bool IsOrganisation, string? Corporate, string First, string Last, string? Suffix,
         string? Email, string? Phone,
         // Null when the request did not send one (leave the record's alone), "" to clear it.
-        string? Middle = null)
+        string? Middle = null,
+        string? PhoneCountry = null)
     {
         public static ClientShape Of(ClientDetails client)
         {
@@ -1754,7 +1816,8 @@ public sealed class RemsRequestsController : ControllerBase
                 isOrganisation, corporate, first, last,
                 isOrganisation ? null : Normalize(client.Suffix),
                 Normalize(client.Email), Normalize(client.Phone),
-                isOrganisation ? null : client.MiddleName?.Trim());
+                isOrganisation ? null : client.MiddleName?.Trim(),
+                client.PhoneCountryCode);
         }
 
         /// <summary>Whether this is what the record already says, so that saving it changes nothing.</summary>
@@ -1786,6 +1849,7 @@ public sealed class RemsRequestsController : ControllerBase
             person.DisplayName = string.Join(" ", new[] { First, Last }.Where(p => p.Length > 0));
             person.PrimaryEmail = Email;
             person.MobileNumber = Phone;
+            person.CountryCode = PhoneCountry;
         }
     }
 
@@ -1904,7 +1968,7 @@ public sealed class RemsRequestsController : ControllerBase
             CanPickUp: User.HasPermission(Permissions.RemsRequestsAssign)
                 && !IsDraft(r)
                 && r.AdminAssignedToId is null,
-            CanDelete: canAct && User.HasPermission(Permissions.RemsRequestsDelete) && IsDeletable(r),
+            CanDelete: IsDeletable(r) && MayDelete(r, me) && User.HasPermission(Permissions.RemsRequestsDelete),
             // Copy raises a request from this one's setup: the create permission, on anything the caller may read.
             CanCopy: User.HasPermission(Permissions.RemsRequestsCreate) && CanView(r, me, privileged));
     }
@@ -2082,7 +2146,8 @@ public sealed class RemsRequestsController : ControllerBase
             IntakeReused: RemsDerived.IsIntakeReused(rems),
             FormSent: rems.InviteSentOnUtc is not null,
             CanCompleteIntake: canCompleteIntake,
-            IntakeCompletedBy: NameOf(names, rems.IntakeCompletedByUserId));
+            IntakeCompletedBy: NameOf(names, rems.IntakeCompletedByUserId),
+            CustomerMobileCountryCode: client is { IsMaconomyClient: false } ? client.PrimaryPhoneCountryCode : null);
     }
 
     /// <summary>The client's intake link while the form is out with them, or null.</summary>

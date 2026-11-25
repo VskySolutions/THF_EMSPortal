@@ -60,4 +60,7 @@ public class Address : AuditableEntity
 
     /// <summary>The addressee's phone number, stored in E.164 like every other number on the platform.</summary>
     public string? PhoneNumber { get; set; }
+
+    /// <summary>The country picked for <see cref="PhoneNumber"/>, ISO-2 ("CA"): +1 alone cannot tell Canada from the US.</summary>
+    public string? PhoneCountryCode { get; set; }
 }

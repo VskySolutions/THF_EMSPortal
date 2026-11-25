@@ -70,6 +70,8 @@ public static class RemsMaconomySyncViews
             RemsMaconomyCustomerSyncStatus.Synced => RemsMaconomySyncStatuses.Synced,
             RemsMaconomyCustomerSyncStatus.Linked => RemsMaconomySyncStatuses.Linked,
             RemsMaconomyCustomerSyncStatus.Failed => RemsMaconomySyncStatuses.Failed,
+            // A client picked from Maconomy holds its number without ever having been posted: it is in.
+            _ when client.IsMaconomyClient && !client.IsMaconomyContactSyncPending => RemsMaconomySyncStatuses.Linked,
             _ => RemsMaconomySyncStatuses.NotSynced,
         };
 

@@ -47,7 +47,9 @@ public sealed record RemsClientFormRow(
     /// <summary>The caller may raise a new request from this one's engagement setup.</summary>
     bool CanCopy = false,
     /// <summary>The request reused the client's intake on file instead of sending its own form: there is no email log to read.</summary>
-    bool IntakeReused = false);
+    bool IntakeReused = false,
+    /// <summary>The client's Maconomy customer number, once it has one.</summary>
+    string? MaconomyCustomerNumber = null);
 
 /// <summary>
 /// The intake form as the request page shows it: the client's answers, rebuilt from their rows. A completed

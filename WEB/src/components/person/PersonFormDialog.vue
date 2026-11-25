@@ -32,6 +32,7 @@
 import { ref, reactive, computed, watch } from "vue";
 import { personApi, getApiErrorMessage } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { blankPersonForm } from "composables/personForm";
 import { useTenantOptions } from "composables/useTenantOptions";
 import PersonFormFields from "components/person/PersonFormFields.vue";
@@ -45,6 +46,7 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "created"]);
 
 const notify = useNotify();
+const { validatePhones } = usePhoneFields();
 const formRef = ref(null);
 const saving = ref(false);
 const form = reactive(blankPersonForm());
@@ -75,6 +77,10 @@ const close = () => { open.value = false; };
 
 const submit = async () => {
   if (!(await formRef.value?.validate())) return;
+  if (!validatePhones()) {
+    notify.warning("Please correct the phone number.");
+    return;
+  }
   saving.value = true;
   try {
     const detail = await personApi.create({ ...form, dateOfBirth: form.dateOfBirth || null });

@@ -118,7 +118,7 @@
            read-only here, since Sync job now lives on the Approvals list and COP Review. -->
       <template #body-cell-maconomyJobSync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" number-only :sync="cell.row.maconomyJobSync" />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -158,10 +158,12 @@
             v-if="canReadEmailLog && emsFormActivity(cell.row)" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click="openEmailLog(cell.row)"
           >
-            <q-tooltip>Email log</q-tooltip>
+            <row-count-badge :count="emailCount(cell.row.id)" />
+            <q-tooltip>{{ emailTip(cell.row.id) }}</q-tooltip>
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click="openConversation(cell.row)">
-            <q-tooltip>Conversation</q-tooltip>
+            <row-count-badge :count="conversationCount(cell.row.id)" />
+            <q-tooltip>{{ conversationTip(cell.row.id) }}</q-tooltip>
           </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
                everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
@@ -176,6 +178,15 @@
             @toggle-pin="togglePin(cell.row.id, cell.row.remsNumber)"
             @set-colour="applyColour(cell.row.id, $event, cell.row.remsNumber)"
           />
+          <!-- Delete: drafts only, and the server says whose (the owner's, or any for a Tenant Admin).
+               Last on the row, as on every list: View…, Email log, Conversation, Colour, Pin, Delete. -->
+          <q-btn
+            v-if="cell.row.actions?.canDelete" type="a"
+            flat round dense color="negative" icon="o_delete"
+            :loading="deleting === cell.row.id" @click.stop="deleteDraft(cell.row)"
+          >
+            <q-tooltip>Delete draft</q-tooltip>
+          </q-btn>
         </q-td>
       </template>
 
@@ -197,15 +208,22 @@
       v-if="canManageDeleted" :entity-type="EntityType.Rems" :show="showDeleted" @restored="load"
     />
 
-    <conversation-dialog v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle" />
+    <conversation-dialog
+      v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
 
     <!-- A sent reminder adds an email event and nothing else, but the row's COP State and Updated On are
          what the list shows of it, so it reloads on the way out. -->
-    <email-log-dialog v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load" />
+    <email-log-dialog
+      v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
   </q-page>
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import { ref, reactive, computed, watch, toRef, onMounted } from "vue";
 import { debounce } from "quasar";
 import { useRouter } from "vue-router";
@@ -241,6 +259,8 @@ import DeletedRecordsPanel from "components/universal/DeletedRecordsPanel.vue";
 import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
+import RowCountBadge from "modules/rems/components/RowCountBadge.vue";
+import { useRemsRowCounts } from "modules/rems/useRemsRowCounts";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 
 const router = useRouter();
@@ -263,9 +283,9 @@ const {
 const canCreate = computed(() => has(Permissions.RemsRequestsCreate));
 const canReadEmailLog = computed(() => has(Permissions.RemsEmailLogRead));
 
-// Who gets the two views.
+// Who gets the two views: the roles the API shows the whole tenant's requests to.
 const isRemsAdmin = computed(() =>
-  auth.roles.includes("SuperAdmin") || auth.roles.includes("Admin"));
+  ["SuperAdmin", "TenantAdmin", "Admin"].some((role) => auth.roles.includes(role)));
 
 // Which of the two readings of this list is on screen.
 const OWNERSHIP_FILTERS = [
@@ -304,7 +324,7 @@ onMounted(async () => {
 // Ordered as the list reads: what the request is, then who it is for, then where it has got to, then the
 // trail behind it.
 const columns = computed(() => [
-  { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
+  { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true },
   { name: "type", label: "Type", field: "type", align: "left", sortable: true, default: true, filterOptions: typeOptions.value },
   { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "status", label: "Status", field: "status", align: "left", sortable: true, default: true, filterOptions: statusFilterOptions.value },
@@ -335,12 +355,12 @@ const columns = computed(() => [
     ...(canSeeAdmins.value ? { filterOptions: cseFilterOptions.value } : { filterable: false })
   },
   { name: "emsFormState", label: "COP State", field: "emsFormState", align: "left", sortable: true, default: true, filterOptions: formStateFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
-  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Client", field: (r) => maconomySyncLabel(r.maconomySync?.status), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy Engagement", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   // Off by default, but every field the row carries is offered in the Columns menu rather than being
   // unreachable.
   { name: "customerEmail", label: "Client Email", field: (r) => r.customerEmail || "—", align: "left", sortable: true, default: false, filterable: false },
-  { name: "customerMobileNumber", label: "Client Phone Number", field: (r) => r.customerMobileNumber || "—", align: "left", sortable: true, default: false, filterable: false },
+  { name: "customerMobileNumber", label: "Client Phone Number", field: (r) => formatPhone(r.customerMobileNumber) || "—", align: "left", sortable: true, default: false, filterable: false },
   // The cell draws the badge; the field is the LABEL so the column reads as its wording rather than as
   // the stored code (`not_for_profit`) wherever the field is what is read.
   { name: "entityType", label: "Entity Type", field: (r) => entityTypeLabel(r.entityType), align: "left", sortable: true, default: false, filterOptions: entityTypeOptions.value },
@@ -367,6 +387,7 @@ const listFilters = () => {
     // Only the admins choose.
     ownership: isRemsAdmin.value ? ownership.value : "all",
     clientName: search.value || undefined,
+    remsNumber: filters.remsNumber?.trim() || undefined,
     clientPersonIds: filters.clientName?.length ? filters.clientName : undefined,
     status: filters.status || undefined,
     type: filters.type || undefined,
@@ -412,6 +433,10 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+
+// How many messages and emails sit behind each row's icons: one read per page.
+const { sync: syncCounts, conversationCount, emailCount, conversationTip, emailTip } = useRemsRowCounts();
+watch(rows, (list) => syncCounts(list.map((r) => r.id)));
 // Draft is preselected for a reader who has never changed or cleared these shortcuts.
 useFilterMemory("rems-partner", {
   ownership, status: toRef(filters, "status"), emsFormState: toRef(filters, "emsFormState")
@@ -476,6 +501,32 @@ const copyRequest = async (row) => {
     notify.error(getApiErrorMessage(err));
   } finally {
     copying.value = null;
+  }
+};
+
+// ---- Delete ----
+// A soft delete: the draft leaves the list and stays restorable from Show deleted.
+const deleting = ref(null);
+const deleteDraft = async (row) => {
+  const ok = await confirm({
+    title: "Delete this draft",
+    message: `Delete draft ${row.remsNumber} for ${row.clientName}? It is removed from the list. ` +
+      "If this is the client's only request, the client is removed as well.",
+    confirmLabel: "Delete",
+    type: "danger"
+  });
+  if (!ok) return;
+  deleting.value = row.id;
+  try {
+    const res = await remsApi.remove(row.id);
+    notify.success(res?.data?.clientDeleted
+      ? `${row.remsNumber} deleted, and ${row.clientName} with it: this was their only request.`
+      : `${row.remsNumber} deleted.`);
+    load();
+  } catch (err) {
+    notify.error(getApiErrorMessage(err));
+  } finally {
+    deleting.value = null;
   }
 };
 

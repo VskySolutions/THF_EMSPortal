@@ -47,7 +47,7 @@
         <q-card-section class="import-view__body">
           <div v-if="viewing" class="text-body2 text-grey-8 q-mb-md">
             Imported by {{ viewing.importedBy || "—" }} on {{ formatDateTime(viewing.importedOnUtc) }} ·
-            {{ viewing.createdCount }} created, {{ viewing.failedCount }} failed
+            {{ viewing.createdCount }} created, {{ viewing.updatedCount || 0 }} updated, {{ viewing.failedCount }} failed
           </div>
           <user-import-rows :rows="viewRows" :file-name="viewing?.fileName" />
           <q-inner-loading :showing="loadingRows" />
@@ -86,6 +86,7 @@ const columns = computed(() => [
   { name: "importedBy", label: "Imported By", field: "importedBy", align: "left", default: true },
   { name: "totalCount", label: "Lines", field: "totalCount", align: "left", default: true },
   { name: "createdCount", label: "Created", field: "createdCount", align: "left", default: true },
+  { name: "updatedCount", label: "Updated", field: (r) => r.updatedCount || 0, align: "left", default: true },
   { name: "failedCount", label: "Failed", field: "failedCount", align: "left", default: true },
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);

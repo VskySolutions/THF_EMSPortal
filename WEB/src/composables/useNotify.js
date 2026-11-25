@@ -1,4 +1,5 @@
 import { Notify } from "quasar";
+import { isRefusalMessage } from "services/apiRefusals";
 
 // Standardized notification templates (UI Development Standards §4.3).
 const base = {
@@ -22,8 +23,13 @@ function create (type, icon, message, opts = {}) {
 
 export function useNotify () {
   const notifyPositive = (message, opts) => create("positive", "o_check_circle", message, opts);
-  const notifyNegative = (message, opts) => create("negative", "o_error", message, opts);
   const notifyWarning = (message, opts) => create("warning", "o_warning", message, opts);
+  // Red is for errors only. A sentence the API gave as a refusal (a validation, a rule, a missing right)
+  // is a warning, so the usual notify.error(getApiErrorMessage(err)) colours itself.
+  const notifyNegative = (message, opts) => (
+    isRefusalMessage(typeof message === "string" ? message : message?.message)
+      ? notifyWarning(message, opts)
+      : create("negative", "o_error", message, opts));
   const notifyInfo = (message, opts) => create("info", "o_info", message, opts);
 
   return {

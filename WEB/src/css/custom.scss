@@ -400,3 +400,42 @@ body {
   color: var(--q-primary);
   margin: 16px 0 8px;
 }
+
+/* =========================================================================
+   Validation and warnings wear the warning colour. Red is for errors, and for a required answer that is
+   missing: an empty field that fails its rules keeps Quasar's red.
+   --warning-ink is that colour deepened so small text reads on white and on the tint. Both follow a
+   tenant's own warning colour where the browser can mix colours, and fall back to the stock gold.
+   ========================================================================= */
+:root {
+  --warning-ink: #896323;
+  --warning-tint: #f4ecde;
+}
+@supports (color: color-mix(in srgb, #000, #fff)) {
+  :root {
+    --warning-ink: color-mix(in srgb, var(--q-warning) 74%, #000);
+    --warning-tint: color-mix(in srgb, var(--q-warning) 16%, #fff);
+  }
+}
+
+/* A field failing its rules while it HOLDS a value: the value is the thing to put right, so the outline,
+   the icon and the message Quasar paints negative are repainted. An empty one is left red.
+   app-field--has-value is put on by boot/field-has-value.js. */
+.q-field--error.app-field--has-value .q-field__control.text-negative,
+.q-field--error.app-field--has-value .q-field__append .q-icon.text-negative {
+  color: var(--q-warning) !important;
+}
+.q-field.q-field--error.app-field--has-value .q-field__bottom {
+  color: var(--warning-ink);
+}
+
+/* A line of validation text under a control that is not a q-field (text-negative when the answer is missing). */
+.text-validation {
+  color: var(--warning-ink) !important;
+}
+
+/* A validation summary or a note about something to put right. */
+.bg-validation {
+  background: var(--warning-tint) !important;
+  color: var(--warning-ink) !important;
+}

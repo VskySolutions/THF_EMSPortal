@@ -35,7 +35,7 @@
               </q-badge>
             </div>
             <div class="text-body2 text-grey-7 ellipsis"><app-email :email="user.email || ''" /></div>
-            <div v-if="user.phoneNumber" class="text-body2 text-grey-7">{{ user.phoneNumber }}</div>
+            <div v-if="user.phoneNumber" class="text-body2 text-grey-7">{{ formatPhone(user.phoneNumber) }}</div>
 
             <div class="row items-center q-gutter-xs q-mt-sm">
               <q-chip v-if="user.department" dense color="blue-grey-1" text-color="blue-grey-8" icon="o_apartment">
@@ -133,7 +133,7 @@
               <div class="text-subtitle1 text-weight-medium">Department</div>
               <app-info-tip
                 v-if="canEdit && inActiveTenant"
-                text="Saves as soon as you change it. Taking a headship from somebody else asks first — the head of a department is its REMS Department Director, and that is who new engagements are routed to."
+                text="Saves as soon as you change it. Taking a headship from somebody else asks first — the head of a department is its COP Department Director, and that is who new engagements are routed to."
               />
               <q-space />
               <app-auto-save-state :state="departmentSave.state" :message="departmentSave.message" />
@@ -146,7 +146,7 @@
               <app-select
                 v-model="department" :options="departmentOptions" :loading="loadingDepartments" label="Department"
                 class="col-12 col-sm-6" :readonly="!canEdit"
-                info="From the REMS Department option list (Administration → Option Sets). A department has one head, and that head is its REMS Department Director."
+                info="From the REMS Department option list (Administration → Option Sets). A department has one head, and that head is its COP Department Director."
                 @update:model-value="onDepartmentChange"
               />
               <div class="col-12 col-sm-6">
@@ -322,6 +322,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import AppEmail from "components/common/AppEmail.vue";
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
@@ -492,7 +493,7 @@ const currentHead = computed(() => departmentHeads.value.find((h) => h.departmen
 const headHint = computed(() => {
   if (!department.value) return "Pick a department to set a head.";
   if (!currentHead.value) return `${departmentLabel(department.value)} has no head yet.`;
-  if (sameId(currentHead.value.userId, userId)) return "Heads this department, and is its REMS Department Director.";
+  if (sameId(currentHead.value.userId, userId)) return "Heads this department, and is its COP Department Director.";
   return `${currentHead.value.fullName} currently heads ${departmentLabel(department.value)}.`;
 });
 
@@ -584,7 +585,7 @@ const commitEmail = async () => {
   }
 
   if (!/^\S+@\S+\.\S+$/.test(next)) {
-    notify.error("Enter a valid username (email address).");
+    notify.warning("Enter a valid username (email address).");
     email.value = current;
     return;
   }
@@ -736,11 +737,11 @@ const openAssign = async () => {
 const submitAssign = async ({ clearDraft } = {}) => {
   if (!(await assignForm.value?.validate())) return;
   if (!assign.tenantId) {
-    notify.error("Select a tenant.");
+    notify.warning("Select a tenant.");
     return;
   }
   if (!assign.roleIds.length) {
-    notify.error("Select at least one role.");
+    notify.warning("Select at least one role.");
     return;
   }
   assignSaving.value = true;

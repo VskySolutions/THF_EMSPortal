@@ -81,9 +81,14 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
         // platform role is the Super Admin's to put back.
         AddNullableTenant(map, EntityType.Role, _dbContext.Roles, r => r.Name, r => r.TenantId);
 
-        // Global, with no tenant column at all: visible to whoever may manage them. A user belongs to
-        // tenants through their role assignments rather than by a column, and a tenant is the scope.
-        AddGlobal(map, EntityType.User, _dbContext.Users, u => u.DisplayName);
+        // A user has no tenant column: they are in a tenant through a role assignment there, and the
+        // assignments stay on a deleted user.
+        Register<User>(map, EntityType.User, _dbContext.Users, u => u.DisplayName, _ => null, scoped: false,
+            membership: (users, tenant) => users.Where(u =>
+                _dbContext.UserTenantRoles.IgnoreQueryFilters().Any(r => r.UserId == u.Id && r.TenantId == tenant)));
+        map[EntityType.User] = map[EntityType.User] with { PurgeChildren = PurgeUserChildrenAsync };
+
+        // Global, with no tenant column at all: visible to whoever may manage them.
         AddGlobal(map, EntityType.Tenant, _dbContext.Tenants, t => t.Name);
 
         // A REMS request roots an aggregate rather than standing alone, so purging one has to take its
@@ -122,13 +127,18 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
         IQueryable<T> set,
         Expression<Func<T, string>> identity,
         Expression<Func<T, Guid?>> tenantOf,
-        bool scoped) where T : AuditableEntity
+        bool scoped,
+        Func<IQueryable<T>, Guid, IQueryable<T>>? membership = null) where T : AuditableEntity
     {
         // The soft-delete query filter is bypassed throughout — deleted rows are precisely what this
         // repository exists to find — so the tenant predicate is applied by hand instead.
         IQueryable<T> InTenant(Guid? tenant)
         {
             var query = set.IgnoreQueryFilters();
+            if (membership is not null && tenant is { } own)
+            {
+                return membership(query, own);
+            }
             if (!scoped || tenant is not { } t)
             {
                 return query;
@@ -167,19 +177,26 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
         var parameter = identity.Parameters[0];
         var tenantBody = new ParameterSwap(tenantOf.Parameters[0], parameter).Visit(tenantOf.Body)!;
 
-        // TenantId is non-nullable on the row; a platform-wide record reports Guid.Empty rather than
-        // inventing an owner.
-        var tenantValue = Expression.Coalesce(tenantBody, Expression.Constant(Guid.Empty));
+        // The tenant stays nullable in SQL: a Guid.Empty literal comes back from SQL Server as text and
+        // cannot be read as a Guid, which broke the list for every type without a tenant column.
+        var tenantValue = tenantBody;
 
+        // The members are named so the list can be ordered by a column of the row: without them EF cannot
+        // tell which constructor argument a property reads, and every sort fails to translate.
         var ctor = typeof(DeletedRecordRow).GetConstructors()[0];
+        var members = ctor.GetParameters().Select(p => (System.Reflection.MemberInfo)typeof(DeletedRecordRow).GetProperty(p.Name!)!);
         return Expression.Lambda<Func<T, DeletedRecordRow>>(
             Expression.New(
                 ctor,
-                Expression.Call(typeof(EF), nameof(EF.Property), new[] { typeof(Guid) }, parameter, Expression.Constant("Id")),
-                identity.Body,
-                tenantValue,
-                Expression.Property(parameter, nameof(AuditableEntity.UpdatedById)),
-                Expression.Property(parameter, nameof(AuditableEntity.DeletedOnUtc))),
+                new[]
+                {
+                    Expression.Call(typeof(EF), nameof(EF.Property), new[] { typeof(Guid) }, parameter, Expression.Constant("Id")),
+                    identity.Body,
+                    tenantValue,
+                    Expression.Property(parameter, nameof(AuditableEntity.UpdatedById)),
+                    Expression.Property(parameter, nameof(AuditableEntity.DeletedOnUtc)),
+                },
+                members),
             parameter);
     }
 
@@ -252,14 +269,90 @@ internal sealed class DeletedRecordsRepository : IDeletedRecordsRepository
             return false;
         }
 
+        // A user's person record was deleted with the account, so it comes back with it.
+        if (entityType == EntityType.User)
+        {
+            await _dbContext.Persons.IgnoreQueryFilters()
+                .Where(p => p.Deleted && _dbContext.Users.IgnoreQueryFilters().Any(u => u.Id == entityId && u.PersonId == p.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Deleted, false).SetProperty(p => p.DeletedOnUtc, (DateTime?)null), cancellationToken);
+        }
+
+        // A client deleted with their only request, and the person behind them, come back with it.
+        if (entityType == EntityType.Rems)
+        {
+            var clients = _dbContext.Clients.IgnoreQueryFilters()
+                .Where(c => c.Deleted && _dbContext.RemsRequests.IgnoreQueryFilters().Any(r => r.Id == entityId && r.ClientId == c.Id));
+            await _dbContext.Persons.IgnoreQueryFilters()
+                .Where(p => p.Deleted && clients.Any(c => c.PersonId == p.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Deleted, false).SetProperty(p => p.DeletedOnUtc, (DateTime?)null), cancellationToken);
+            await clients
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.Deleted, false).SetProperty(c => c.DeletedOnUtc, (DateTime?)null), cancellationToken);
+        }
+
         await RestoreUniversalFeaturesAsync(entityType, entityId, cancellationToken);
         return true;
+    }
+
+    public async Task<string?> GetRestoreBlockerAsync(
+        EntityType entityType, Guid entityId, CancellationToken cancellationToken = default)
+    {
+        if (entityType == EntityType.Rems)
+        {
+            // The email was free for another client while this one was deleted, and an email belongs to one client.
+            var clientEmail = await _dbContext.RemsRequests.IgnoreQueryFilters()
+                .Where(r => r.Id == entityId && r.Deleted && r.Client!.Deleted)
+                .Select(r => r.Client!.PrimaryEmail).FirstOrDefaultAsync(cancellationToken);
+            return !string.IsNullOrWhiteSpace(clientEmail) && await _dbContext.Clients.AnyAsync(c => c.PrimaryEmail == clientEmail && c.MaconomyCustomerNumber == null, cancellationToken)
+                ? $"Another client now has the email {clientEmail}."
+                : null;
+        }
+
+        if (entityType != EntityType.User)
+        {
+            return null;
+        }
+
+        // The email is free for reuse while its user is deleted, and two live users cannot share one.
+        var email = await _dbContext.Users.IgnoreQueryFilters()
+            .Where(u => u.Id == entityId && u.Deleted).Select(u => u.Email).FirstOrDefaultAsync(cancellationToken);
+        return email is not null && await _dbContext.Users.AnyAsync(u => u.Email == email, cancellationToken)
+            ? $"Another user now has the email {email}."
+            : null;
+    }
+
+    /// <summary>
+    /// Clears what would otherwise hold a user's row in place, and takes the person deleted with it. What
+    /// is left to stop the purge is real history (requests, approvals, delegations).
+    /// </summary>
+    private async Task PurgeUserChildrenAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await _dbContext.UserImportRows.IgnoreQueryFilters().Where(r => r.CreatedUserId == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.CreatedUserId, (Guid?)null), cancellationToken);
+        await _dbContext.RefreshTokens.IgnoreQueryFilters().Where(t => t.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var personId = await _dbContext.Users.IgnoreQueryFilters()
+            .Where(u => u.Id == userId).Select(u => u.PersonId).FirstOrDefaultAsync(cancellationToken);
+        if (personId is { } id
+            && await _dbContext.Persons.IgnoreQueryFilters().AnyAsync(p => p.Id == id && p.Deleted, cancellationToken))
+        {
+            await _dbContext.Users.IgnoreQueryFilters().Where(u => u.Id == userId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.PersonId, (Guid?)null), cancellationToken);
+            await CascadeDeleteUniversalFeaturesAsync(EntityType.Person, id, cancellationToken);
+            await _dbContext.Persons.IgnoreQueryFilters().Where(p => p.Id == id).ExecuteDeleteAsync(cancellationToken);
+        }
     }
 
     public async Task<bool> HardDeleteAsync(
         EntityType entityType, Guid entityId, Guid? tenantId, CancellationToken cancellationToken = default)
     {
         if (!_handlers.TryGetValue(entityType, out var handler))
+        {
+            return false;
+        }
+
+        // Nothing is touched for a record that is not deleted, or not this tenant's.
+        if (!await handler.ById(entityId, Effective(tenantId)).AnyAsync(cancellationToken))
         {
             return false;
         }

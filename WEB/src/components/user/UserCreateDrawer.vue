@@ -43,7 +43,7 @@
           <app-select
             v-model="form.department" :options="departmentOptions" :loading="loadingDepartments"
             label="Department" class="q-mb-md"
-            info="From the REMS Department option list. The department's head is its REMS Department Director, which is what prefills that field on an engagement."
+            info="From the REMS Department option list. The department's head is its COP Department Director, which is what prefills that field on an engagement."
             @update:model-value="onDepartmentChange"
           />
           <q-toggle v-model="form.isDepartmentHead" :disable="!form.department" label="Department head" />
@@ -319,17 +319,17 @@ const tempPassword = ref("");
 const submitForm = async ({ clearDraft } = {}) => {
   emailError.value = "";
   if (!form.personId) {
-    notify.error("Select a person.");
+    notify.warning("Select a person.");
     return;
   }
   if (!(await formRef.value?.validate())) return;
   if (!form.roleIds.length) {
-    notify.error("Select at least one role.");
+    notify.warning("Select at least one role.");
     return;
   }
   const tenantId = targetTenantId.value;
   if (!tenantId) {
-    notify.error("Select a tenant.");
+    notify.warning("Select a tenant.");
     return;
   }
   // A department has one head, so taking it demotes the incumbent — name them before anything is created.

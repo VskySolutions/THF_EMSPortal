@@ -151,8 +151,10 @@ const restoreBulk = async (sel) => {
   const ok = await confirm({ title: "Restore selected", message: `Restore ${sel.length} record(s)?`, confirmLabel: "Restore" });
   if (!ok) return;
   try {
-    await ufDeletedApi.restoreBulk({ entityType: props.entityType, entityIds: sel.map((r) => r.entityId) });
-    notify.success("Records restored.");
+    const results = await ufDeletedApi.restoreBulk({ entityType: props.entityType, entityIds: sel.map((r) => r.entityId) });
+    const failed = (results || []).filter((r) => !r.success);
+    if (failed.length < sel.length) notify.success("Records restored.");
+    if (failed.length) notify.warning(`${failed.length} not restored. ${failed[0].message || ""}`);
     emit("restored");
     selected.value = [];
     await load();

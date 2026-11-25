@@ -964,7 +964,7 @@ public sealed class RemsFormController : ControllerBase
                 ? null
                 : client.IsMaconomyClient
                     ? $"“{client.ClientName}” is held in Maconomy under a different entity type. A request for a "
-                        + "Maconomy customer is filed under the entity type Maconomy gives them."
+                        + "Maconomy client is filed under the entity type Maconomy gives them."
                     : $"“{client.ClientName}” is already on file under a different entity type. A request "
                         + "for a client on file is filed under the entity type their record holds.";
         }

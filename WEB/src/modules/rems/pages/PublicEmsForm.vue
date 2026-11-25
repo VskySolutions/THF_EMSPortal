@@ -58,8 +58,8 @@
       <!-- ============================ FORM STEP ============================ -->
       <template v-if="step === 'form'">
         <!-- Server-side validation summary (from review/submit) — surfaced field-by-field below too. -->
-        <q-banner v-if="serverSummary.length" dense class="pef-card bg-red-1 text-red-9 q-mb-md rounded-borders">
-          <template #avatar><q-icon name="o_error" color="red-9" /></template>
+        <q-banner v-if="serverSummary.length" dense class="pef-card bg-validation q-mb-md rounded-borders">
+          <template #avatar><q-icon name="o_warning" /></template>
           <div class="text-weight-medium">Please fix the following:</div>
           <ul class="q-my-xs q-pl-md">
             <li v-for="(m, i) in serverSummary" :key="i">{{ m }}</li>
@@ -143,6 +143,7 @@ import { useRoute } from "vue-router";
 import { debounce } from "quasar";
 import { remsPublicApi, getApiErrorMessage, getApiErrorCode, ApiErrorCodes } from "services/api";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { useConfirm } from "composables/useConfirm";
 import { useBrandingStore } from "stores/branding";
 import {
@@ -157,6 +158,7 @@ import RemsReviewSummary from "modules/rems/components/RemsReviewSummary.vue";
 
 const route = useRoute();
 const notify = useNotify();
+const { phoneIssues } = usePhoneFields();
 const { confirm } = useConfirm();
 const branding = useBrandingStore();
 const inviteCode = route.params.inviteCode;
@@ -210,7 +212,7 @@ const saveText = computed(() => ({
 }[saveState.value] || "Your progress saves automatically"));
 
 // What still has to be filled in before Review. Mirrors RemsFormPayloadValidator — see useRemsIntakeForm.
-const clientIssues = computed(() => intakeIssues(payload.value, entityType.value));
+const clientIssues = computed(() => [...intakeIssues(payload.value, entityType.value), ...phoneIssues.value]);
 const canReview = computed(() => clientIssues.value.length === 0);
 
 const buildPayload = () => buildIntakePayload(payload.value, entityType.value);
@@ -323,7 +325,7 @@ async function handleActionError (err, fallback) {
   if (getApiErrorCode(err) === ApiErrorCodes.ValidationFailed) {
     applyServerValidation(err);
     step.value = "form";
-    notify.error("Please fix the highlighted fields.");
+    notify.warning("Please fix the highlighted fields.");
     scrollTop();
     return;
   }

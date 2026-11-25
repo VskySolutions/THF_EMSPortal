@@ -49,8 +49,8 @@
           </app-text-field>
           <div class="col-12 col-sm-6">
             <!-- Owed by a trust or estate, which must be reachable beyond the locked email. -->
-            <app-phone-input v-model="payload.mobileNumber" label="Phone Number" :required="clientPhoneRequired" />
-            <div v-if="errors.mobileNumber" class="text-negative text-caption q-mt-xs">{{ errors.mobileNumber }}</div>
+            <app-phone-input v-model="payload.mobileNumber" v-model:country="payload.mobileCountryCode" label="Phone Number" :required="clientPhoneRequired" />
+            <div v-if="errors.mobileNumber" class="text-caption q-mt-xs" :class="payload.mobileNumber ? 'text-validation' : 'text-negative'">{{ errors.mobileNumber }}</div>
           </div>
           <!-- Each option's description is its own tooltip, maintained by staff in Administration →
                Option Sets. -->
@@ -238,6 +238,7 @@
           <app-date-field
             v-model="payload.contractStartDate" label="Contract Start Date" class="col-12 col-sm-6"
             :max-date="payload.contractEndDate"
+            @update:model-value="(v) => { if (!v) payload.contractEndDate = ''; }"
           />
           <!-- Each pair has to run forwards; said on the end date, and again by the server on Review. -->
           <app-date-field
@@ -250,6 +251,7 @@
           <app-date-field
             v-model="payload.poStartDate" label="Purchase Order Start Date" class="col-12 col-sm-6"
             :max-date="payload.poEndDate"
+            @update:model-value="(v) => { if (!v) payload.poEndDate = ''; }"
           />
           <app-date-field
             v-model="payload.poEndDate" label="Purchase Order End Date" class="col-12 col-sm-6"
@@ -281,15 +283,25 @@
     <q-card v-if="!isIndividual" flat bordered class="cif-card q-mb-sm">
       <q-card-section class="cif-card__head">
         Other Entities
+        <q-icon name="o_info" size="15px" color="grey-6" class="cif-subhead__info">
+          <q-tooltip anchor="top middle" self="bottom middle" max-width="320px" :delay="200">
+            Example: you are filling this in for ABC Holdings LLC, and you also own ABC Rentals LLC, which
+            needs its own return. Add ABC Rentals LLC here.
+          </q-tooltip>
+        </q-icon>
         <div class="text-caption text-grey-7 text-weight-regular">
-          We will set each one up separately and get in touch about it.
+          Add an entity here only if it is a separate business, trust or organization that also needs our
+          services. Each one is set up as its own client, and we email it its own form at the address you give.
+        </div>
+        <div class="text-caption text-grey-7 text-weight-regular">
+          Do not add this entity's owners, contacts or staff here; they go under Contacts.
         </div>
       </q-card-section>
       <q-separator />
       <q-card-section>
         <q-toggle
           :model-value="hasRelatedEntities"
-          label="Are there more entities?"
+          label="Do you have other entities that also need our services?"
           color="primary"
           @update:model-value="onToggleRelated"
         />
@@ -323,7 +335,7 @@
                 />
                 <!-- The same dial-code + number control the client's own phone above uses. -->
                 <div class="col-12 col-sm-6 col-md-4">
-                  <app-phone-input v-model="entity.phoneNumber" label="Phone Number" />
+                  <app-phone-input v-model="entity.phoneNumber" v-model:country="entity.phoneCountryCode" label="Phone Number" />
                 </div>
               </div>
             </q-card-section>

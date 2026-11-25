@@ -40,4 +40,7 @@ public interface IPersonRepository
 
     /// <summary>Soft-deletes the person (the DbContext converts the delete to a <c>Deleted</c> flag).</summary>
     void Remove(Person person);
+
+    /// <summary>True when a client, or a client's contact, is this person.</summary>
+    Task<bool> IsClientPartyAsync(Guid personId, CancellationToken cancellationToken = default);
 }

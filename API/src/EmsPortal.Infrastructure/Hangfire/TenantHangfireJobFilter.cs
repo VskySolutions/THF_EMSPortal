@@ -2,6 +2,8 @@ using global::Hangfire;
 using global::Hangfire.Client;
 using global::Hangfire.Server;
 using EmsPortal.Application.Abstractions.Tenancy;
+using EmsPortal.Infrastructure.Logging;
+using Serilog.Context;
 
 namespace EmsPortal.Infrastructure.Hangfire;
 
@@ -20,6 +22,7 @@ public sealed class TenantHangfireJobFilter : IClientFilter, IServerFilter
 {
     public const string TenantIdParameter = "TenantId";
     public const string TenantIdentifierParameter = "TenantIdentifier";
+    private const string LogScopeItem = "TenantLogScope";
 
     private readonly Func<TenantSnapshot?>? _clientTenantProvider;
 
@@ -62,9 +65,16 @@ public sealed class TenantHangfireJobFilter : IClientFilter, IServerFilter
         {
             tenantContext.Set(tenantId, identifier);
         }
+
+        // What the job logs is filed under its tenant.
+        context.Items[LogScopeItem] = LogContext.PushProperty(SerilogConfigurator.TenantIdProperty, tenantId);
     }
 
     public void OnPerformed(PerformedContext context)
     {
+        if (context.Items.TryGetValue(LogScopeItem, out var scope))
+        {
+            (scope as IDisposable)?.Dispose();
+        }
     }
 }

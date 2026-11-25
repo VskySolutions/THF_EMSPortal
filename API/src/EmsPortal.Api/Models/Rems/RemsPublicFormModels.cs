@@ -42,6 +42,9 @@ public sealed class RemsFormPayloadV1
     public string? Email { get; set; }
 
     public string? MobileNumber { get; set; }
+
+    /// <summary>The country picked for <see cref="MobileNumber"/>, ISO-2 ("CA").</summary>
+    public string? MobileCountryCode { get; set; }
     public string? ReferralSource { get; set; }
 
     /// <summary>Free-text follow-up for the chosen referral source, e.g. who referred them.</summary>
@@ -202,6 +205,9 @@ public sealed class RemsAddressPayload
     public string? Email { get; set; }
     public string? Phone { get; set; }
 
+    /// <summary>The country picked for <see cref="Phone"/>, ISO-2 ("CA").</summary>
+    public string? PhoneCountryCode { get; set; }
+
     /// <summary>True when at least one postal line carries content (an all-blank node is treated as absent).</summary>
     [JsonIgnore]
     public bool HasAny =>
@@ -243,6 +249,9 @@ public sealed class RemsRolePayload
 
     public string? Email { get; set; }
     public string? Phone { get; set; }
+
+    /// <summary>The country picked for <see cref="Phone"/>, ISO-2 ("CA").</summary>
+    public string? PhoneCountryCode { get; set; }
 
     /// <summary>
     /// The joined name, from the two boxes when they carry anything and from <see cref="Name"/>
@@ -423,6 +432,9 @@ public sealed class RemsAdditionalIndividualPayload
     public string? Email { get; set; }
     public string? Phone { get; set; }
 
+    /// <summary>The country picked for <see cref="Phone"/>, ISO-2 ("CA").</summary>
+    public string? PhoneCountryCode { get; set; }
+
     /// <summary>Whether a child is still a minor.</summary>
     public bool? IsMinor { get; set; }
 
@@ -496,6 +508,9 @@ public sealed class RemsRelatedEntityPayload
     public string? EmailAddress { get; set; }
     public string? PhoneNumber { get; set; }
 
+    /// <summary>The country picked for <see cref="PhoneNumber"/>, ISO-2 ("CA").</summary>
+    public string? PhoneCountryCode { get; set; }
+
     // An additional entity is a CONTACT, not a second legal entity: it produces no REMSEntity, no engagement
     // and no approval round of its own.
 }
@@ -542,7 +557,8 @@ public sealed record RemsPublicPrefill(
     string? ClientSuffix,
     string Email,
     string? MobileNumber,
-    string? ClientMiddleName = null);
+    string? ClientMiddleName = null,
+    string? MobileCountryCode = null);
 
 /// <summary>Draft auto-save acknowledgement (WO-113 PUT draft).</summary>
 public sealed record RemsDraftSavedResponse(DateTime LastSavedOnUtc);

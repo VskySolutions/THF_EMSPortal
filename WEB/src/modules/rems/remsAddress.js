@@ -21,7 +21,8 @@ export const toAddress = (wire) => ({
   firstName: wire?.firstName ?? "",
   lastName: wire?.lastName ?? "",
   email: wire?.email ?? "",
-  phone: wire?.phone ?? ""
+  phone: wire?.phone ?? "",
+  phoneCountryCode: wire?.phoneCountryCode ?? ""
 });
 
 /** A blank canonical address, with the app-wide default country pre-selected. */
@@ -41,7 +42,8 @@ export const fromAddress = (a) => ({
   firstName: str(a?.firstName),
   lastName: str(a?.lastName),
   email: str(a?.email),
-  phone: str(a?.phone)
+  phone: str(a?.phone),
+  phoneCountryCode: str(a?.phoneCountryCode)
 });
 
 /** The postal half of a canonical address, copied into an existing object. */

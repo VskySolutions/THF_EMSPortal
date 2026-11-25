@@ -12,14 +12,13 @@ namespace EmsPortal.Api.Approval;
 // deleting the file and the marker-commented lines elsewhere puts the platform back on its own list.
 
 /// <summary>
-/// The policy resolved against one tenant's people: who signs as the shareholders (the mandatory
-/// shareholders, or the Shareholder role's holders when none of those names resolves), which CSEs are
-/// the tax exception.
+/// The policy resolved against one tenant's people: who signs as the managing shareholder (the holders
+/// of the Managing Shareholder role), which CSEs are the tax exception.
 /// </summary>
 public sealed record RemsApprovalPolicySnapshot(
     bool StaticRouting,
     decimal TaxFeeCeilingWithoutShareholder,
-    IReadOnlyList<User> Shareholders,
+    IReadOnlyList<User> ManagingShareholders,
     IReadOnlyList<User> TaxExceptionCses)
 {
     public bool IsTaxExceptionCse(Guid? userId) => userId is { } id && TaxExceptionCses.Any(u => u.Id == id);
@@ -30,7 +29,7 @@ public interface IRemsApprovalPolicy
     Task<RemsApprovalPolicySnapshot> ForTenantAsync(Guid? tenantId, CancellationToken cancellationToken);
 }
 
-/// <summary>Resolves the policy against the tenant: the Shareholder role's holders, and the named CSEs by the person's "First Last".</summary>
+/// <summary>Resolves the policy against the tenant: the Managing Shareholder role's holders, and the named CSEs by the person's "First Last".</summary>
 internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
 {
     private readonly IUserRepository _users;
@@ -52,16 +51,11 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
         var people = await _users.ListActiveByTenantAsync(tid, cancellationToken);
         var exceptions = FindAll(people, _options.TaxExceptionCses);
 
-        // The mandatory shareholders are the seat; the Shareholder role's holders fill it only when none
-        // of the configured names resolves, so names nobody carries never block a send.
-        var shareholders = FindAll(people, _options.MandatoryShareholders);
-        if (shareholders.Count == 0)
-        {
-            shareholders = (await _users.ListByTenantRolesAsync(tid, new[] { Roles.Shareholder }, cancellationToken))
-                .DistinctBy(u => u.Id).ToList();
-        }
+        // The role is the only way into the seat: nobody is named in settings.
+        var managingShareholders = (await _users.ListByTenantRolesAsync(tid, new[] { Roles.ManagingShareholder }, cancellationToken))
+            .DistinctBy(u => u.Id).ToList();
 
-        return new RemsApprovalPolicySnapshot(true, _options.TaxFeeCeilingWithoutShareholder, shareholders, exceptions);
+        return new RemsApprovalPolicySnapshot(true, _options.TaxFeeCeilingWithoutShareholder, managingShareholders, exceptions);
     }
 
     /// <summary>Every configured name that resolves to one user, each once.</summary>
@@ -86,6 +80,8 @@ internal sealed class RemsApprovalPolicy : IRemsApprovalPolicy
         var candidates = new[]
         {
             $"{user.Person?.FirstName} {user.Person?.LastName}",
+            // Imported users can carry their names the other way round ("Previte James").
+            $"{user.Person?.LastName} {user.Person?.FirstName}",
             user.Person?.DisplayName,
             user.DisplayName,
         };
@@ -102,8 +98,8 @@ public sealed record RemsApprovalRoute(IReadOnlyList<(Guid UserId, RemsApproverR
 
 /// <summary>
 /// The fixed approver list: every commission recipient, the CSE, the department director (unless the
-/// CSE is the tax exception), anyone added by hand, and the Shareholder role's holders (unless the
-/// engagement is a small tax one). Everyone is asked at the same time; a person in two seats is asked once.
+/// CSE is the tax exception), anyone added by hand, and the Managing Shareholder role's holders (unless
+/// the engagement is a small tax one). Everyone is asked at the same time; a person in two seats is asked once.
 /// </summary>
 public static class RemsStaticApprovalRoute
 {
@@ -112,7 +108,7 @@ public static class RemsStaticApprovalRoute
     {
         var cse = request.CSEId;
         var director = request.DepartmentDirectorId;
-        var shareholders = policy.Shareholders.Select(u => u.Id).ToList();
+        var managingShareholders = policy.ManagingShareholders.Select(u => u.Id).ToList();
         var recipients = request.CommissionSplits.Where(s => !s.Deleted).Select(s => s.EmployeeId).Distinct().ToList();
         // The exception is the TAX department's: one of its named CSEs on an engagement placed anywhere
         // else is routed like everybody.
@@ -122,9 +118,9 @@ public static class RemsStaticApprovalRoute
         {
             return Blocked("Name a CSE on the request first — every engagement needs the CSE's approval.");
         }
-        if (recipients.Any(r => r == cse || r == director || shareholders.Contains(r)))
+        if (recipients.Any(r => r == cse || r == director || managingShareholders.Contains(r)))
         {
-            return Blocked("A commission recipient cannot also be the CSE, the Department Director or a Shareholder on this request.");
+            return Blocked("A commission recipient cannot also be the CSE, the Department Director or the Managing Shareholder on this request.");
         }
         if (director is null && !cseIsException)
         {
@@ -145,20 +141,20 @@ public static class RemsStaticApprovalRoute
         }
         Add(pickedApproverIds.Distinct().Select(p => (p, RemsApproverRole.Approver)));
 
-        if (NeedsShareholder(request, policy, cseIsException))
+        if (NeedsManagingShareholder(request, policy, cseIsException))
         {
-            if (shareholders.Count == 0)
+            if (managingShareholders.Count == 0)
             {
-                return Blocked("There is no shareholder to approve this: none of the mandatory shareholders is an active user here and nobody holds the Shareholder role.");
+                return Blocked("There is no Managing Shareholder to approve this. Give somebody the Managing Shareholder role on their user page, then send it again.");
             }
-            Add(shareholders.Select(s => (s, RemsApproverRole.Shareholder)));
+            Add(managingShareholders.Select(s => (s, RemsApproverRole.ManagingShareholder)));
         }
 
         return new RemsApprovalRoute(approvers, null);
     }
 
     /// <summary>Required for every engagement except a tax engagement priced at or under the ceiling, unless the CSE is the tax exception.</summary>
-    private static bool NeedsShareholder(RemsRequest request, RemsApprovalPolicySnapshot policy, bool cseIsException)
+    private static bool NeedsManagingShareholder(RemsRequest request, RemsApprovalPolicySnapshot policy, bool cseIsException)
     {
         if (cseIsException)
         {
@@ -168,7 +164,7 @@ public static class RemsStaticApprovalRoute
         {
             return true;
         }
-        // No fee entered reads as "not known to be small", so the shareholders are asked.
+        // No fee entered reads as "not known to be small", so the managing shareholder is asked.
         return request.FirstYearFeeEstimate is not { } fee || fee > policy.TaxFeeCeilingWithoutShareholder;
     }
 
@@ -176,7 +172,7 @@ public static class RemsStaticApprovalRoute
     public static IReadOnlyList<Guid> ReservedUserIds(RemsRequest request, RemsApprovalPolicySnapshot policy)
         => new[] { request.CSEId, request.DepartmentDirectorId }
             .Where(id => id.HasValue).Select(id => id!.Value)
-            .Concat(policy.Shareholders.Select(u => u.Id))
+            .Concat(policy.ManagingShareholders.Select(u => u.Id))
             .Distinct().ToList();
 
     private static RemsApprovalRoute Blocked(string reason) => new(Array.Empty<(Guid, RemsApproverRole)>(), reason);

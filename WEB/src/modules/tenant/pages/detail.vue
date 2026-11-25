@@ -153,6 +153,7 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { debounce } from "quasar";
@@ -296,7 +297,7 @@ const tempPassword = ref("");
 const userColumns = [
   { name: "fullName", label: "Name", field: "fullName", align: "left", sortable: true, default: true },
   { name: "email", label: "Email", field: "email", align: "left", sortable: true, default: true },
-  { name: "phoneNumber", label: "Phone", field: "phoneNumber", align: "left", sortable: true },
+  { name: "phoneNumber", label: "Phone", field: (r) => formatPhone(r.phoneNumber), align: "left", sortable: true },
   { name: "roles", label: "Role", field: (r) => (r.roles || []).join(", "), align: "left", sortable: false, default: true },
   { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, default: true },
   ...auditColumns(),

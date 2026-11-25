@@ -23,7 +23,14 @@
     <div ref="scrollerRef" class="uf-chat__thread" @scroll="onScroll">
       <q-inner-loading :showing="loading && !messages.length" />
 
-      <div v-if="!loading && !messages.length" class="uf-chat__empty">
+      <!-- A thread that could not be read is not an empty one: saying "No messages yet." hid the failure. -->
+      <div v-if="!loading && loadError" class="uf-chat__empty">
+        <q-icon name="o_error_outline" size="34px" color="negative" />
+        <div class="q-mt-sm">This conversation could not be loaded.</div>
+        <div class="text-caption">{{ loadError }}</div>
+        <q-btn flat dense no-caps color="primary" icon="o_refresh" label="Try again" class="q-mt-xs" @click="load()" />
+      </div>
+      <div v-else-if="!loading && !messages.length" class="uf-chat__empty">
         <q-icon :name="search ? 'o_search_off' : 'o_forum'" size="34px" />
         <div class="q-mt-sm">{{ search ? "No messages match that." : "No messages yet." }}</div>
         <div v-if="!search" class="text-caption">Start the conversation below — type @ to bring somebody in.</div>
@@ -209,6 +216,7 @@ const toolbar = [
 
 const messages = ref([]);
 const loading = ref(false);
+const loadError = ref("");
 const search = ref("");
 const searchable = computed(() => !!search.value || messages.value.length > 1);
 
@@ -247,8 +255,11 @@ const load = async ({ keepPosition = false } = {}) => {
     // OLDEST first, regardless of server ordering — a conversation is read downwards, and a reply
     // sitting above the message it answers was the single thing that made the old panel hard to follow.
     messages.value = rows.sort((a, b) => new Date(a.createdOnUtc) - new Date(b.createdOnUtc));
+    loadError.value = "";
   } catch (err) {
-    notify.error(getApiErrorMessage(err));
+    loadError.value = getApiErrorMessage(err);
+    messages.value = [];
+    notify.error(loadError.value);
   } finally {
     loading.value = false;
     if (!keepPosition) await scrollToBottom();

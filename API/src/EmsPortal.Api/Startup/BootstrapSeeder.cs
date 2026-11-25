@@ -108,15 +108,15 @@ public static class BootstrapSeeder
             (Roles.SuperAdmin, "Full platform access.", Permissions.ForSuperAdmin()),
             (Roles.TenantAdmin, "Manage a tenant's users and configuration.", Permissions.ForTenantAdmin()),
             // REMS operational roles (WO-122). Assigned per (user, tenant), stackable with other roles.
-            (Roles.Partner, "REMS Partner: create and manage their own requests.", Permissions.ForPartner()),
+            (Roles.Partner, "REMS Partner: create and manage their own requests, for new and existing clients.", Permissions.ForPartner()),
             (Roles.Admin, "REMS Admin: full request lifecycle, COP Review, forms, engagements, approvals routing and email log, plus deciding approval tasks assigned to them (as CSE or commission recipient).", Permissions.ForAdmin()),
             // The REMS seats.
             (Roles.Cse, "REMS CSE: offerable as the Client Service Executive on an engagement, and as a commission recipient.", Permissions.ForSeatRole()),
-            (Roles.EngagementExecutive, "REMS Engagement Executive: offerable as the Engagement Executive on an engagement.", Permissions.ForSeatRole()),
-            (Roles.BillingManager, "REMS Billing Manager: offerable as the Billing Manager on an engagement.", Permissions.ForSeatRole()),
-            // Not a seat an engagement names: a shareholder is on every engagement's approver list
-            // automatically, like the director and the CSE, and cannot be taken off it.
-            (Roles.Shareholder, "REMS Shareholder: approves every engagement the firm routes, automatically and without being added to it.", Permissions.ForSeatRole()),
+            (Roles.EngagementExecutive, "REMS Engagement Executive: offerable as the Engagement Executive on an engagement, and may raise requests for existing clients.", Permissions.ForExistingClientInitiator()),
+            (Roles.BillingManager, "REMS Billing Manager: offerable as the Billing Manager on an engagement, and may raise requests for existing clients.", Permissions.ForExistingClientInitiator()),
+            // Not a seat an engagement names: its holders are on every approver list automatically.
+            (Roles.ManagingShareholder, "REMS Managing Shareholder: approves every engagement the firm routes, automatically and without being added to it.", Permissions.ForSeatRole()),
+            (Roles.Shareholder, "REMS Shareholder: a shareholder of the firm. Grants nothing and does not approve.", Permissions.ForSeatRole()),
         };
 
         foreach (var (name, description, permissions) in definitions)
@@ -135,8 +135,9 @@ public static class BootstrapSeeder
             }
             else
             {
-                // Keep the seeded permission set authoritative for system roles.
+                // Keep the seeded permission set and description authoritative for system roles.
                 existing.IsSystem = true;
+                existing.Description = description;
                 existing.Permissions = permissions.ToList();
                 roles.Update(existing);
             }

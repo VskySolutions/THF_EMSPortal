@@ -35,7 +35,7 @@ public sealed class DashboardController : ControllerBase
         IUnitOfWork unitOfWork)
     {
         _query = query;
-        _cache = cache;
+        _cache = cache; 
         _layouts = layouts;
         _unitOfWork = unitOfWork;
     }

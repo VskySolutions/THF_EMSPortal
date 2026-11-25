@@ -92,11 +92,33 @@ public interface IRemsRequestRepository
     void Update(RemsRequest request);
     void Remove(RemsRequest request);
 
+    /// <summary>Unlinks every request copied from this one: a copy of a deleted source carries on as an ordinary request.</summary>
+    Task DetachCopiesAsync(Guid sourceRemsId, CancellationToken cancellationToken = default);
+
     Task AddFileAsync(RemsFile file, CancellationToken cancellationToken = default);
     void RemoveFile(RemsFile file);
 
     Task AddEmailEventAsync(RemsEmailEvent emailEvent, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RemsEmailEvent>> ListEmailEventsAsync(Guid remsId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many conversation messages and email-log entries each of the given requests has, for the
+    /// counts on a list's row actions. A request with neither is left out.
+    /// </summary>
+    /// <summary>
+    /// The menu's My Requests number: the user's drafts, and the requests sent back to them for rework
+    /// (by an admin, to whoever the send-back named; by the approvers, to the initiator).
+    /// </summary>
+    Task<int> CountNeedingInitiatorAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The menu's COP Review number: requests no admin has picked up, plus the ones this admin holds
+    /// that are still under review.
+    /// </summary>
+    Task<int> CountNeedingAdminAsync(Guid adminUserId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, (int Conversation, int Emails)>> CountRowActivityAsync(
+        IReadOnlyCollection<Guid> remsIds, bool withEmails, CancellationToken cancellationToken = default);
     Task<RemsEmailEvent?> GetSentEventByProviderMessageIdUnscopedAsync(string providerMessageId, CancellationToken cancellationToken = default);
     Task<bool> EmailEventExistsAsync(Guid tenantId, string providerMessageId, RemsFormEmailEventType eventType, CancellationToken cancellationToken = default);
     /// <summary>Appends a provider-reported event; false when the same message already has one of that type.</summary>

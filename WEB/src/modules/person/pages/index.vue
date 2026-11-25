@@ -96,11 +96,13 @@
 </template>
 
 <script setup>
+import { formatPhone } from "utils/phoneNumber";
 import { ref, reactive, computed, watch, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { personApi, getApiErrorMessage, EntityType } from "services/api";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { useSiteName } from "composables/useSiteName";
 import { useConfirm } from "composables/useConfirm";
 import { useListTable } from "composables/useListTable";
@@ -123,6 +125,7 @@ const router = useRouter();
 const siteName = useSiteName();
 const { showDeleted, canManageDeleted } = useDeletedRecords();
 const notify = useNotify();
+const { validatePhones } = usePhoneFields();
 const { confirm } = useConfirm();
 const { has } = usePermissions();
 const auditColumns = useAuditColumns();
@@ -157,7 +160,7 @@ const columns = computed(() => [
   { name: "personCode", label: "Code", field: "personCode", align: "left", sortable: true, filterable: false },
   { name: "fullName", label: "Name", field: "fullName", align: "left", sortable: true, default: true, filterable: false },
   { name: "primaryEmail", label: "Email", field: "primaryEmail", align: "left", sortable: true, default: true, filterable: false },
-  { name: "mobileNumber", label: "Phone", field: "mobileNumber", align: "left", sortable: true, filterable: false },
+  { name: "mobileNumber", label: "Phone", field: (r) => formatPhone(r.mobileNumber), align: "left", sortable: true, filterable: false },
   { name: "isUser", label: "Account", field: "isUser", align: "left", sortable: true, default: true, filterOptions: [{ label: "User", value: true }, { label: "Not a user", value: false }] },
   { name: "isActive", label: "Status", field: "isActive", align: "left", sortable: true, filterOptions: [{ label: "Active", value: true }, { label: "Inactive", value: false }] },
   // Where the record came from. Filtering is client-side over the loaded page (this list is not
@@ -212,6 +215,10 @@ const openCreate = async () => {
 
 const submitForm = async ({ clearDraft } = {}) => {
   if (!(await formRef.value?.validate())) return;
+  if (!validatePhones()) {
+    notify.warning("Please correct the phone number.");
+    return;
+  }
   saving.value = true;
   try {
     const payload = { ...form, dateOfBirth: form.dateOfBirth || null };
@@ -254,7 +261,7 @@ const bulkDelete = async (sel) => {
   const deletable = sel.filter((r) => !r.isUser);
   const skipped = sel.length - deletable.length;
   if (!deletable.length) {
-    notify.error("Selected persons are linked to users and can't be deleted.");
+    notify.warning("Selected persons are linked to users and can't be deleted.");
     return;
   }
   const ok = await confirm({

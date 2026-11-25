@@ -80,6 +80,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         [FromQuery] string? relatedStatus = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // The request's status, in the terms the column shows.
         [FromQuery] string? requestStatus = null,
         [FromQuery] DateTime? submittedFrom = null,
@@ -96,7 +97,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
             new RemsRelatedEntityQuery(
                 search, entityType, relatedStatus, new SortRequest(sortBy, descending), page, limit,
                 clientPersonIds, requestStatus, submittedFrom, submittedTo, createdFrom, createdTo,
-                updatedFrom, updatedTo),
+                updatedFrom, updatedTo, RemsNumber: remsNumber),
             cancellationToken);
 
         var remsIds = items.Select(i => i.RemsId).ToList();
@@ -174,6 +175,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
         [FromQuery] string? relatedStatus = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         // The request's status, in the terms the column shows.
         [FromQuery] string? requestStatus = null,
         [FromQuery] DateTime? submittedFrom = null,
@@ -188,7 +190,7 @@ public sealed class RemsRelatedEntitiesController : ControllerBase
             new RemsRelatedEntityQuery(
                 search, entityType, relatedStatus, SortRequest.Default, Page: 1, Limit: 1,
                 clientPersonIds, requestStatus, submittedFrom, submittedTo, createdFrom, createdTo,
-                updatedFrom, updatedTo),
+                updatedFrom, updatedTo, RemsNumber: remsNumber),
             cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "REMS related entity quick-filter counts retrieved."));
     }

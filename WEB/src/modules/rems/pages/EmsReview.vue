@@ -97,7 +97,10 @@
            brand-new client to post. -->
       <template #body-cell-maconomySync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomySyncStatus" :sync="cell.row.maconomySyncStatus" />
+          <maconomy-sync-chip
+            v-if="cell.row.maconomySyncStatus"
+            :sync="{ status: cell.row.maconomySyncStatus, customerNumber: cell.row.maconomyCustomerNumber }"
+          />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -105,7 +108,7 @@
       <!-- Whether the approved engagement has become a Maconomy job. Blank until the request is approved. -->
       <template #body-cell-maconomyJobSync="cell">
         <q-td :props="cell">
-          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" :sync="cell.row.maconomyJobSync" />
+          <maconomy-sync-chip v-if="cell.row.maconomyJobSync" kind="job" number-only :sync="cell.row.maconomyJobSync" />
           <template v-else>—</template>
         </q-td>
       </template>
@@ -127,8 +130,21 @@
 
       <template #body-cell-actions="cell">
         <q-td :props="cell">
-          <!-- Claiming the request, and the first thing to do with one nobody holds — so it leads the row
-               rather than sitting behind the read actions. -->
+          <!-- Two pages. View reads the whole request on one page and is everybody's; Manage opens it as
+               the form, with the review moves in its header. -->
+          <q-btn
+            flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)"
+          >
+            <q-tooltip>View</q-tooltip>
+          </q-btn>
+          <q-btn
+            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
+            :disable="!!editBlocked(cell.row)"
+          >
+            <q-tooltip>{{ editBlocked(cell.row) || workAction.label }}</q-tooltip>
+          </q-btn>
+          <!-- Claiming the request: the first thing to do with one nobody holds. After View and Manage,
+               which lead the row on every list. -->
           <q-btn
             v-if="cell.row.canPickUp" type="a"
             flat round dense color="amber-8" icon="o_pan_tool_alt"
@@ -160,19 +176,6 @@
             </q-tooltip>
           </q-btn>
 
-          <!-- Two pages. View reads the whole request on one page and is everybody's; Manage opens it as
-               the form, with the review moves in its header. -->
-          <q-btn
-            flat round dense color="primary" icon="o_visibility" :to="viewRoute(cell.row)"
-          >
-            <q-tooltip>View</q-tooltip>
-          </q-btn>
-          <q-btn
-            flat round dense color="primary" :icon="workAction.icon" :to="editRoute(cell.row)"
-            :disable="!!editBlocked(cell.row)"
-          >
-            <q-tooltip>{{ editBlocked(cell.row) || workAction.label }}</q-tooltip>
-          </q-btn>
           <!-- Copy: a new draft for the same client with the setup carried over and the tax card blank. On an
                approved request too — a return added later starts here. -->
           <q-btn
@@ -189,10 +192,12 @@
             v-if="canReadEmailLog && !cell.row.intakeReused" type="a"
             flat round dense color="primary" icon="o_mark_email_read" @click.stop="openEmailLog(cell.row)"
           >
-            <q-tooltip>Email log</q-tooltip>
+            <row-count-badge :count="emailCount(cell.row.remsId)" />
+            <q-tooltip>{{ emailTip(cell.row.remsId) }}</q-tooltip>
           </q-btn>
           <q-btn type="a" flat round dense color="primary" icon="o_forum" @click.stop="openConversation(cell.row)">
-            <q-tooltip>Conversation</q-tooltip>
+            <row-count-badge :count="conversationCount(cell.row.remsId)" />
+            <q-tooltip>{{ conversationTip(cell.row.remsId) }}</q-tooltip>
           </q-btn>
           <!-- The reader's own marks on this row, sitting with the actions rather than apart from them:
                everything before them acts on the REQUEST, and these two are private to whoever is looking. -->
@@ -225,8 +230,14 @@
       </template>
     </app-data-table>
 
-    <conversation-dialog v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle" />
-    <email-log-dialog v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load" />
+    <conversation-dialog
+      v-model="conversationOpen" :request-id="conversationId" :subtitle="conversationSubtitle"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
+    <email-log-dialog
+      v-model="emailLogOpen" :rems-id="emailLogId" :subtitle="emailLogSubtitle" @sent="load"
+      @update:model-value="(open) => !open && syncCounts()"
+    />
   </q-page>
 </template>
 
@@ -260,6 +271,8 @@ import QuickFilterBar from "components/common/QuickFilterBar.vue";
 import EntityPinnedMark from "components/universal/EntityPinnedMark.vue";
 import EntityRowMarks from "components/universal/EntityRowMarks.vue";
 import ConversationDialog from "modules/rems/components/ConversationDialog.vue";
+import RowCountBadge from "modules/rems/components/RowCountBadge.vue";
+import { useRemsRowCounts } from "modules/rems/useRemsRowCounts";
 import EmailLogDialog from "modules/rems/components/EmailLogDialog.vue";
 import MaconomySyncChip from "modules/rems/components/MaconomySyncChip.vue";
 import { maconomySyncLabel, maconomyJobSyncLabel } from "modules/rems/maconomySync";
@@ -321,7 +334,7 @@ const editBlocked = (row) => {
 // The REMS number is covered by the quick search, so it gets no duplicate filter box; the client is a
 // dropdown of the clients on the queue, and every date column filters as a From/To range.
 const columns = computed(() => [
-  { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true, filterable: false },
+  { name: "remsNumber", label: "Request ID", field: "remsNumber", align: "left", sortable: true, default: true },
   { name: "clientName", label: "Client", field: "clientName", align: "left", sortable: true, default: true, filterOptions: clientFilterOptions.value, filterMultiple: true },
   { name: "submitted", label: "COP State", field: "submitted", align: "left", sortable: true, default: true, filterOptions: submittedFilterOptions.value },
   // On by default now. It is where a row says "Waiting for pickup", which is the one thing an admin
@@ -331,9 +344,9 @@ const columns = computed(() => [
   // The cell renders the pickup badge when nobody holds it, so the field only has to feed sorting/export.
   { name: "assignedAdmin", label: "Assigned Admin", field: (r) => r.assignedAdmin?.name || "Waiting for pickup", align: "left", sortable: true, default: true, filterOptions: adminFilterOptions.value },
   { name: "cse", label: "CSE", field: (r) => r.cse?.name || "—", userId: (r) => r.cse?.id, align: "left", sortable: true, default: true, filterOptions: cseFilterOptions.value },
-  { name: "maconomySync", label: "Maconomy Customer", field: (r) => maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
+  { name: "maconomySync", label: "Maconomy Client", field: (r) => r.maconomyCustomerNumber || maconomySyncLabel(r.maconomySyncStatus), align: "left", sortable: true, default: true, filterable: false },
   // The engagement as a Maconomy job, once approved; Sync job now sits in the Actions column beside it.
-  { name: "maconomyJobSync", label: "Maconomy job", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
+  { name: "maconomyJobSync", label: "Maconomy Engagement", field: (r) => r.maconomyJobSync?.jobNumber || maconomyJobSyncLabel(r.maconomyJobSync?.status), align: "left", sortable: false, default: true, filterable: false },
   ...auditColumns({ dateRanges: true }),
   { name: "actions", label: "Actions", field: "actions", align: "left" }
 ]);
@@ -355,6 +368,7 @@ const listFilters = () => {
   const updated = rangeBounds("updatedOnUtc", fmt.zonedDayBoundaryUtc);
   return {
     search: search.value || undefined,
+    remsNumber: filters.remsNumber?.trim() || undefined,
     // A column filter's value is always a string; the API takes a bool.
     submitted: filters.submitted ? filters.submitted === "true" : undefined,
     requestStatus: filters.requestStatus || undefined,
@@ -400,6 +414,10 @@ const { rows, loading, totalRecords, search, filterOpen, pagination, load, onReq
 const {
   filters, filterableColumns, filterChips, removeFilter, clearFilters, rangeBounds
 } = useColumnFilters(columns, rows, { server: true });
+
+// How many messages and emails sit behind each row's icons: one read per page.
+const { sync: syncCounts, conversationCount, emailCount, conversationTip, emailTip } = useRemsRowCounts();
+watch(rows, (list) => syncCounts(list.map((r) => r.remsId)));
 useFilterMemory("rems-ems-review", { assignment, requestStatus: toRef(filters, "requestStatus") });
 const reload = debounce(() => { pagination.value.page = 1; load(); }, 300);
 watch([search, filters, assignment], reload, { deep: true });

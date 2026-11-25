@@ -127,6 +127,7 @@ public sealed class RemsEngagementController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         [FromQuery] DateTime? submittedFrom = null,
         [FromQuery] DateTime? submittedTo = null,
         [FromQuery] DateTime? createdFrom = null,
@@ -150,7 +151,7 @@ public sealed class RemsEngagementController : ControllerBase
             new RemsClientFormQuery(
                 search, submitted, requestStatus, me, slice, new SortRequest(sortBy, descending), page, limit,
                 assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
-                createdFrom, createdTo, updatedFrom, updatedTo),
+                createdFrom, createdTo, updatedFrom, updatedTo, RemsNumber: remsNumber),
             cancellationToken);
         var names = await _users.GetFullNamesAsync(
             items.SelectMany(i => new[] { i.AdminAssignedToId, i.CSEId, i.CreatedById, i.UpdatedById })
@@ -180,7 +181,8 @@ public sealed class RemsEngagementController : ControllerBase
             MaconomyJobSync: sync.Job,
             CopiedFromRemsNumber: i.CopiedFromRemsNumber,
             CanCopy: mayCopy,
-            IntakeReused: i.IntakeReused));
+            IntakeReused: i.IntakeReused,
+            MaconomyCustomerNumber: i.MaconomyCustomerNumber));
 
         return Ok(ApiResponseFactory.Paginated(rows, "REMS client forms retrieved.", page, limit, total));
     }
@@ -208,6 +210,7 @@ public sealed class RemsEngagementController : ControllerBase
         [FromQuery] Guid? cseUserId = null,
         // The Client column's dropdown — any of the chosen clients.
         [FromQuery] Guid[]? clientPersonIds = null,
+        [FromQuery] string? remsNumber = null,
         [FromQuery] DateTime? submittedFrom = null,
         [FromQuery] DateTime? submittedTo = null,
         [FromQuery] DateTime? createdFrom = null,
@@ -228,7 +231,7 @@ public sealed class RemsEngagementController : ControllerBase
             new RemsClientFormQuery(
                 search, submitted, requestStatus, me, slice, SortRequest.Default, Page: 1, Limit: 1,
                 assignedAdminUserId, cseUserId, clientPersonIds, submittedFrom, submittedTo,
-                createdFrom, createdTo, updatedFrom, updatedTo),
+                createdFrom, createdTo, updatedFrom, updatedTo, RemsNumber: remsNumber),
             cancellationToken);
         return Ok(ApiResponseFactory.Success(counts, "COP Review quick-filter counts retrieved."));
     }
@@ -1312,8 +1315,8 @@ public sealed class RemsEngagementController : ControllerBase
         {
             return StatusCode(StatusCodes.Status409Conflict, ApiResponseFactory.Error(
                 CodeCommissionReserved,
-                "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request.",
-                "A commission recipient cannot be the CSE, the Department Director or a Shareholder on this request."));
+                "A commission recipient cannot be the CSE, the Department Director or the Managing Shareholder on this request.",
+                "A commission recipient cannot be the CSE, the Department Director or the Managing Shareholder on this request."));
         }
 
         var existing = rems.CommissionSplits.Where(s => !s.Deleted).ToList();

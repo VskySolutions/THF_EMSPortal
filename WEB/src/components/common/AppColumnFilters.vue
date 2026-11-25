@@ -14,7 +14,7 @@
           :min-date="rangeOf(col).from"
           @update:model-value="setBound(col, 'to', $event)"
         />
-        <div v-if="invalidRange(col)" class="text-caption text-negative">
+        <div v-if="invalidRange(col)" class="text-caption text-validation">
           “{{ col.label }} From” is after “{{ col.label }} To” — nothing can match both.
         </div>
       </template>

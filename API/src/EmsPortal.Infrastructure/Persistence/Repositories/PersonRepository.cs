@@ -157,4 +157,8 @@ internal sealed class PersonRepository : IPersonRepository
     public void Update(Person person) => _dbContext.Persons.Update(person);
 
     public void Remove(Person person) => _dbContext.Persons.Remove(person);
+
+    public async Task<bool> IsClientPartyAsync(Guid personId, CancellationToken cancellationToken = default)
+        => await _dbContext.Clients.IgnoreQueryFilters().AnyAsync(c => c.PersonId == personId, cancellationToken)
+            || await _dbContext.ClientContacts.IgnoreQueryFilters().AnyAsync(c => c.PersonId == personId, cancellationToken);
 }

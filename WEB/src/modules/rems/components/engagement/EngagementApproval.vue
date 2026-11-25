@@ -5,12 +5,12 @@
         <!-- STATIC-APPROVAL-POLICY: the fixed rules read differently from the platform list. -->
         <template v-if="staticRouting">
           Who this engagement routes to, all at the same time: every commission recipient, the CSE, the
-          Department Director, everyone holding the Shareholder role, plus anyone
-          {{ readonly ? "the admin added" : "you add below" }}. The Department Director and the Shareholders
-          are skipped by the tax rules.<template v-if="!readonly"> Sending for approval locks the list.</template>
+          Department Director, the Managing Shareholder, plus anyone
+          {{ readonly ? "the admin added" : "you add below" }}. The Department Director and the Managing
+          Shareholder are skipped by the tax rules.<template v-if="!readonly"> Sending for approval locks the list.</template>
         </template>
         <template v-else>
-          Who this engagement routes to: the firm's shareholders, the Department Director and the CSE from
+          Who this engagement routes to: the Managing Shareholder, the Department Director and the CSE from
           the setup, and every commission recipient — all automatically, and none of them removable — plus
           anyone {{ readonly ? "the admin added" : "you add below" }}.<template v-if="!readonly"> Sending for approval locks the list.</template>
         </template>
@@ -47,7 +47,7 @@
         <app-select
           v-model="picked" user-cards :options="approverOptions" label="Add approvers" multiple use-input
           :loading="loadingOptions || savingPicks"
-          info="Lists every user in this tenant with the role they hold here: an engagement can need a signature from anyone. They are ADDED to the ones below — the shareholders, the Department Director, the CSE and the commission recipients — who approve regardless and cannot be removed."
+          info="Lists every user in this tenant with the role they hold here: an engagement can need a signature from anyone. They are ADDED to the ones below — the Managing Shareholder, the Department Director, the CSE and the commission recipients — who approve regardless and cannot be removed."
           @update:model-value="savePicks"
         />
       </div>
@@ -65,7 +65,7 @@
       </q-list>
       <div v-else class="text-grey-6 q-pa-sm">
         No approvers yet. The automatic ones come from the firm and from the engagement itself — give
-        somebody the Shareholder role, name a CSE, pick a department that has a director, or add
+        somebody the Managing Shareholder role, name a CSE, pick a department that has a director, or add
         commission recipients. You can also add approvers above.
       </div>
 

@@ -37,7 +37,7 @@ public sealed class RemsSettingsController : ControllerBase
         _codes = codes;
     }
 
-    /// <summary>The tenant's REMS settings: the managing shareholder and the department-director map (WO-114).</summary>
+    /// <summary>The tenant's REMS settings: the department-director map (WO-114).</summary>
     [HttpGet]
     [RequirePermission(Permissions.RemsSettingsManage)]
     [ProducesResponseType<ApiResponse<RemsSettingsView>>(StatusCodes.Status200OK)]

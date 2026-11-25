@@ -539,6 +539,75 @@ public sealed class UsersController : ControllerBase
         return Ok(ApiResponseFactory.Success(new { userId = user.Id, isActive = user.IsActive }, "Status updated."));
     }
 
+    /// <summary>
+    /// Soft-deletes the account and its person record. Restore and permanent delete are the Deleted
+    /// Records panel's.
+    /// </summary>
+    [HttpDelete("/api/admin/users/{id:guid}")]
+    [RequirePermission(Permissions.UsersDelete)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(id, cancellationToken);
+        if (user is null || !CanCallerSee(user))
+        {
+            return NotFound(ApiResponseFactory.NotFound("User not found."));
+        }
+
+        var name = user.Person?.FullName ?? user.DisplayName;
+        IActionResult Refuse(string reason) => Conflict(ApiResponseFactory.Error(
+            ApiErrorCodes.ValidationFailed, "User not deleted.", $"{name}: {reason}"));
+
+        if (user.Id == User.GetUserId())
+        {
+            return Refuse("you cannot delete your own account.");
+        }
+
+        if (!User.IsSuperAdmin())
+        {
+            if (user.TenantRoles.Any(r => r.Role == UserRole.SuperAdmin))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    ApiResponseFactory.Forbidden("Not permitted to manage this user."));
+            }
+
+            // The account is one row for every tenant it belongs to.
+            var tenantId = User.GetActiveTenantId();
+            if (user.TenantRoles.Any(r => r.TenantId != tenantId))
+            {
+                return Refuse("this user also belongs to another tenant, so only a Super Admin can delete them.");
+            }
+        }
+
+        // A deleted head would still be the department's director on COP requests.
+        if (User.GetActiveTenantId() is not null
+            && await _departments.GetForUserAsync(id, cancellationToken) is { IsHead: true })
+        {
+            return Refuse("this user heads a department. Choose another head first.");
+        }
+
+        // Flags rather than Remove: a tracked delete would cascade to the role assignments, and a restore
+        // has to bring the user back with them.
+        var now = DateTime.UtcNow;
+        user.Deleted = true;
+        user.DeletedOnUtc = now;
+        user.TokenVersion++;
+        _users.Update(user);
+        await _refreshTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
+
+        // The person goes with the account unless a client is that person.
+        if (user.Person is { } person && !await _persons.IsClientPartyAsync(person.Id, cancellationToken))
+        {
+            person.Deleted = true;
+            person.DeletedOnUtc = now;
+            _persons.Update(person);
+        }
+
+        await _audit.AddAsync(nameof(User), user.Id.ToString(), "Deleted", cancellationToken: cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Ok(ApiResponseFactory.Success(new { id }, "User deleted."));
+    }
+
     [HttpPost("/api/admin/users/{id:guid}/reset-password")]
     [RequirePermission(Permissions.UsersResetPassword)]
     [ProducesResponseType<ApiResponse<ResetPasswordResponse>>(StatusCodes.Status200OK)]

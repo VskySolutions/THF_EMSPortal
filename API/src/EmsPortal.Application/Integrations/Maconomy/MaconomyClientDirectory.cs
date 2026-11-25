@@ -332,7 +332,7 @@ public sealed class MaconomyClientDirectory : IMaconomyClientDirectory
             if (!whole)
             {
                 _logger.LogWarning(
-                    "Tenant {TenantId} has more Maconomy customers than Maconomy:PreloadMaxRows; the client search asks Maconomy instead.",
+                    "Tenant {TenantId} has more Maconomy clients than Maconomy:PreloadMaxRows; the client search asks Maconomy instead.",
                     tenantId);
             }
             var connection = await services.GetRequiredService<IMaconomyConnectionRepository>()

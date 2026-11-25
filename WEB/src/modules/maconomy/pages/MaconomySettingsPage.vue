@@ -334,7 +334,7 @@
         <q-card-section>
           <p class="text-body2 text-grey-8 q-mb-xs">
             When on, a request is posted to Maconomy as a job by itself once it is fully approved and its client
-            is a Maconomy customer: straight away for a client already there, or as soon as the customer sync has
+            is a Maconomy client: straight away for a client already there, or as soon as the customer sync has
             posted a brand-new one. The job is created from the template job for the request's Service Line, under
             the client's customer, with the job number left to Maconomy's series and written back onto the request.
             Sync job now — in the Approvals list, COP Review and the table below — is for a request that failed or
@@ -719,9 +719,9 @@ const syncNow = async (row) => {
     if (result?.status === "failed") {
       notify.error(`${row.remsNumber}: ${result.failureReason || "the sync failed."}`);
     } else if (result?.status === "linked") {
-      notify.success(`${row.remsNumber}: linked to the existing Maconomy customer ${result.customerNumber}.`);
+      notify.success(`${row.remsNumber}: linked to the existing Maconomy client ${result.customerNumber}.`);
     } else {
-      notify.success(`${row.remsNumber}: Maconomy customer ${result?.customerNumber} created.`);
+      notify.success(`${row.remsNumber}: Maconomy client ${result?.customerNumber} created.`);
     }
   } catch (err) {
     notify.error(getApiErrorMessage(err));

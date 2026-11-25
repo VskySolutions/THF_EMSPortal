@@ -86,6 +86,7 @@ import { useRoute, useRouter } from "vue-router";
 import { personApi, getApiErrorMessage } from "services/api";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { useTenantOptions } from "composables/useTenantOptions";
 import { nameRules } from "utils/personName";
 import AppDetailHeader from "components/common/AppDetailHeader.vue";
@@ -100,6 +101,7 @@ import AppPhoneInput from "components/common/AppPhoneInput.vue";
 const route = useRoute();
 const router = useRouter();
 const notify = useNotify();
+const { validatePhones } = usePhoneFields();
 const { has } = usePermissions();
 const { canChooseTenant, tenantOptions, loadingTenants, loadTenants } = useTenantOptions();
 const canWrite = computed(() => has(Permissions.PersonsWrite));
@@ -171,6 +173,10 @@ const load = async () => {
 
 const save = async () => {
   if (!(await formRef.value?.validate())) return;
+  if (!validatePhones()) {
+    notify.warning("Please correct the phone number.");
+    return;
+  }
   saving.value = true;
   try {
     await personApi.update(personId, { ...form, dateOfBirth: form.dateOfBirth || null });

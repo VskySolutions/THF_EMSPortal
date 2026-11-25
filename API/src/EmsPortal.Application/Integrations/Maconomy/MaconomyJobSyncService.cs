@@ -306,7 +306,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
             request.IsMaconomyJobBudgetSyncPending = request.FirstYearFeeEstimate.HasValue;
             _requests.Update(request);
             await WriteActivityAsync(
-                request, ActivityEventTypes.RemsMaconomyJobSynced, $"Created Maconomy job {created.Number} \"{created.Name}\"", actorId, cancellationToken);
+                request, ActivityEventTypes.RemsMaconomyJobSynced, $"Created Maconomy engagement {created.Number} \"{created.Name}\"", actorId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             // The signed client acceptance form and the purchase order go under the job, now that there is one.
             _documents.Enqueue(request.Id, request.TenantId);
@@ -344,7 +344,7 @@ public sealed class MaconomyJobSyncService : IMaconomyJobSyncService
                 await _writer.SetTableRowAsync(connection, line, cancellationToken);
                 await WriteActivityAsync(
                     request, ActivityEventTypes.RemsMaconomyJobSynced,
-                    $"Put the First-Year Fee Estimate on the budget of Maconomy job {number}", actorId, cancellationToken);
+                    $"Put the First-Year Fee Estimate on the budget of Maconomy engagement {number}", actorId, cancellationToken);
             }
             request.IsMaconomyJobBudgetSyncPending = false;
             request.MaconomyJobSyncStatus = RemsMaconomyJobSyncStatus.Synced;

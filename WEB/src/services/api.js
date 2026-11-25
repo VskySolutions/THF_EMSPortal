@@ -1,4 +1,5 @@
 import { http, http2 } from "boot/axios";
+import { noteApiMessage } from "services/apiRefusals";
 
 // Shared API access points. `api` → authenticated instance (Bearer token + tenant + correlation-id
 // headers). `anonApi` → anonymous instance (login, refresh).
@@ -33,13 +34,16 @@ export const ApiErrorCodes = Object.freeze({
 
 /** Extract a caller-safe message from an Axios error. */
 export function getApiErrorMessage (error, fallback = "Something went wrong. Please try again.") {
-  return (
+  const message = (
     error?.response?.data?.error?.details ||
     error?.response?.data?.message ||
     (typeof error?.response?.data === "string" ? error.response.data : null) ||
     error?.message ||
     fallback
   );
+  // Remembered as a refusal or a failure, so whoever shows it colours it right (services/apiRefusals).
+  noteApiMessage(message, error);
+  return message;
 }
 
 /** Extract the stable machine-readable error code, if present. */
@@ -118,6 +122,7 @@ export const userApi = {
   setStatus: (id, isActive) => api.put(`/api/admin/users/${id}/status`, { isActive }).then(unwrap),
   // Admin password reset (REQ-ADM-013) — returns a new temporary password.
   resetPassword: (id) => api.post(`/api/admin/users/${id}/reset-password`).then(unwrap),
+  remove: (id) => api.delete(`/api/admin/users/${id}`).then(envelope),
   // payload: { tenantId, roleIds[] } — reconciles the full set of roles the user holds in the tenant
   // (adds/removes to match; an empty set removes tenant access). WO-123 multi-role.
   assignTenantRole: (id, payload) =>
@@ -364,6 +369,29 @@ export const emailLogApi = {
   list: (params) => api.get("/api/admin/email-logs", { params }).then(envelope),
   // → { email, body }
   get: (id) => api.get(`/api/admin/email-logs/${id}`).then(unwrap)
+};
+
+// The errors the application logged for the tenant, read-only (logs.read).
+export const errorLogApi = {
+  // params: { page, limit, search, level, from, to }
+  list: (params) => api.get("/api/admin/logs", { params }).then(envelope),
+  // → { log, exception, properties: [{ name, value }] }
+  get: (id) => api.get(`/api/admin/logs/${id}`).then(unwrap)
+};
+
+// The background job queue: what it holds, retry and clean-up (jobs.manage).
+export const backgroundJobsApi = {
+  // params: { state, page, limit }; state is Enqueued | Scheduled | Processing | Succeeded | Failed | Deleted
+  list: (params) => api.get("/api/admin/jobs", { params }).then(envelope),
+  // → { queued, scheduled, processing, succeeded, failed, deleted }
+  counts: () => api.get("/api/admin/jobs/counts").then(unwrap),
+  retry: (id) => api.post(`/api/admin/jobs/${id}/retry`).then(unwrap),
+  remove: (id) => api.delete(`/api/admin/jobs/${id}`).then(unwrap),
+  // Both → { count }
+  retryFailed: () => api.post("/api/admin/jobs/retry-failed").then(unwrap),
+  clearQueue: () => api.post("/api/admin/jobs/clear-queue").then(unwrap),
+  recurring: () => api.get("/api/admin/jobs/recurring").then(unwrap),
+  runRecurring: (id) => api.post(`/api/admin/jobs/recurring/${id}/run`).then(unwrap)
 };
 
 // How an option list orders its items. Mirrors EmsPortal.Domain.Enums.OptionItemSortMode.
@@ -676,6 +704,10 @@ export const remsApi = {
   // The request's email history and whether THIS caller may chase the client from it: { canRemind,
   // remindBlockedReason, events: [{ id, eventType, recipientEmail, occurredOnUtc, detail, sentBy.
   emailLog: (remsId) => api.get(`/api/rems/requests/${remsId}/email-log`).then(unwrap),
+  // What is waiting on the caller in each COP list, for the menu: { myRequests, copReview, approvals }.
+  menuCounts: () => api.get("/api/rems/menu-counts").then(unwrap),
+  // The counts on a list's Conversation and Email log row actions: [{ remsId, conversation, emails }].
+  activityCounts: (ids) => api.post("/api/rems/requests/activity-counts", { ids }).then(unwrap),
 
   // ---- COP Review + submitted-form review (WO-114, WO-116) ----
   // The admins' shared queue (paginated envelope), NOT one admin's own list — every request whose
@@ -729,10 +761,10 @@ export const remsApi = {
   // Set the commission splits (≤3 recipients, each > 0 and ≤ 100). splits: [{ employeeId, percentage }].
   updateCommission: (id, splits) => api.put(`/api/rems/engagements/${id}/commission`, { splits }).then(unwrap),
   // The full approver list: { engagementId, engagementStatus, approvers:[{ user:{id,name}, role }],
-  // selectedApproverIds }. approvers = the automatic ones (the firm's shareholders.
+  // selectedApproverIds }. approvers = the automatic ones (the Managing Shareholder.
   approvers: (id) => api.get(`/api/rems/engagements/${id}/approvers`).then(unwrap),
   // STATIC-APPROVAL-POLICY: the fixed route as it resolves in this tenant —
-  // { staticRouting, shareholders:[{id,name}], taxExceptionCses:[{id,name}] }.
+  // { staticRouting, managingShareholders:[{id,name}], taxExceptionCses:[{id,name}] }.
   approvalPolicy: () => api.get("/api/rems/approval-policy").then(unwrap),
   // Users selectable as EXTRA approvers — every active user in the tenant, with the roles they hold there
   // for the picker label → [{ userId, name, email, roles: [] }].

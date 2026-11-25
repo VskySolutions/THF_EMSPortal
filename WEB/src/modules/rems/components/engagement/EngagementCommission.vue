@@ -12,7 +12,7 @@
       <app-select
         v-model="pick" user-cards :options="availableRecipients" label="Add recipient" class="col-12 col-sm"
         use-input :disable="splits.length >= MAX_RECIPIENTS" :hint="recipientHint"
-        info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded; the CSE, the Department Director and the Shareholders approve this request instead, so they are greyed out."
+        info="Lists users holding the &quot;CSE&quot; role, assigned on a user's page in Administration → Users. Recipients already added are excluded; the CSE, the Department Director and the Managing Shareholder approve this request instead, so they are greyed out."
         @update:model-value="addRecipient"
       />
       <!-- The cap said as a count, not only as a picker that stops responding. -->
@@ -68,7 +68,7 @@ const props = defineProps({
   engagement: { type: Object, required: true },
   // Selectable recipients — the holders of the "CSE" role, as [{ label, value }].
   recipientOptions: { type: Array, default: () => [] },
-  // STATIC-APPROVAL-POLICY: the CSE, Department Director and Shareholders on this request, who
+  // STATIC-APPROVAL-POLICY: the CSE, Department Director and Managing Shareholder on this request, who
   // approve at their own stage and so may not also be paid commission. [{ id, reason }], greyed out
   // with the reason rather than left out, so nobody wonders where they went.
   reservedRecipients: { type: Array, default: () => [] },
@@ -242,8 +242,11 @@ defineExpose({ saveCommission });
   background: #fff8e1;
   color: #8a5a00;
 }
+/* Over 100%, or a row that is not a percentage: a validation, so the warning colour, outlined to tell it
+   from the softer "not yet 100%" above. */
 .rems-commission__total--bad {
-  background: #ffebee;
-  color: #b71c1c;
+  background: var(--warning-tint);
+  color: var(--warning-ink);
+  box-shadow: inset 0 0 0 1px var(--q-warning);
 }
 </style>

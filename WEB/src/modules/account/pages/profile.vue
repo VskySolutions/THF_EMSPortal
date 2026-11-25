@@ -140,6 +140,7 @@ import { authApi, profileApi, mediaApi, getApiErrorMessage } from "services/api"
 import { humanizeKey } from "composables/usePermissionCategories";
 import { useAuthStore } from "stores/auth";
 import { useNotify } from "composables/useNotify";
+import { usePhoneFields } from "composables/usePhoneFields";
 import { usePermissions, Permissions } from "composables/usePermissions";
 import { nameRules } from "utils/personName";
 import AppDetailHeader from "components/common/AppDetailHeader.vue";
@@ -153,6 +154,7 @@ import ChangePasswordForm from "components/account/ChangePasswordForm.vue";
 
 const authStore = useAuthStore();
 const notify = useNotify();
+const { validatePhones } = usePhoneFields();
 const { has } = usePermissions();
 
 // Anyone who can raise a REMS request has work worth delegating; anyone who cannot, does not.
@@ -289,12 +291,16 @@ const onImageRemove = () => {
 
 // ---- Save ----
 const save = async () => {
+  if (!validatePhones()) {
+    notify.warning("Please correct the phone number.");
+    return;
+  }
   if (!addressRef.value?.validate()) {
-    notify.error("Please fix the highlighted fields.");
+    notify.warning("Please fix the highlighted fields.");
     return;
   }
 
-  // AppPhoneInput already normalises the mobile to E.164 and tracks its dial code.
+  // AppPhoneInput hands over the mobile formatted and tracks its dial code.
   const mobile = form.mobileNumber;
   const dialCode = form.phoneCountryCode || null;
 
